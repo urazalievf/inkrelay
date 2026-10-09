@@ -1,0 +1,25 @@
+name: CI
+
+# macOS runners bill at 10x on private repos, so CI runs on pull requests and on demand,
+# not on every push.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+      - name: Build
+        run: swift build -c release
+      - name: Test
+        run: swift test

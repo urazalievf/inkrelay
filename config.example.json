@@ -1,0 +1,33 @@
+{
+  "sources": [
+    {
+      "id": "viwoods",
+      "device": "Viwoods AiPaper",
+      "path": "~/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/Viwoods",
+      "fileTypes": ["pdf"]
+    }
+  ],
+  "destinations": [
+    {
+      "kind": "obsidian",
+      "id": "obsidian",
+      "vaultPath": "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault",
+      "folder": "Ink",
+      "copyOriginal": true,
+      "tags": ["ink"]
+    },
+    {
+      "kind": "appleNotes",
+      "id": "apple-notes",
+      "folder": "Ink",
+      "account": "iCloud"
+    }
+  ],
+  "recognition": {
+    "languages": ["en-US"],
+    "usesLanguageCorrection": true,
+    "renderScale": 2,
+    "maxPixelDimension": 3000
+  },
+  "rescanIntervalSeconds": 300
+}
