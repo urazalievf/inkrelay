@@ -83,6 +83,79 @@ final class ObsidianDestinationTests: XCTestCase {
         XCTAssertEqual(trash.trashed.map(\.lastPathComponent), ["Meeting notes.md", "Meeting notes.pdf"])
     }
 
+    private func syncTwice(edit: (String) -> String, second: InkNote? = nil) throws -> String {
+        let original = try exports.write("Paper/Meeting notes.pdf", "%PDF")
+        let destination = ObsidianDestination(config: .init(id: "vault", vaultPath: vault.url.path, copyOriginal: false))
+        let path = try destination.upsert(makeNote(originalURL: original), previous: nil)
+        let file = vault.url.appendingPathComponent(path)
+        try edit(try String(contentsOf: file, encoding: .utf8)).write(to: file, atomically: true, encoding: .utf8)
+        let next = second ?? makeNote(originalURL: original, pages: [RecognizedPage(number: 1, text: "Rewritten by the tablet")])
+        let again = try destination.upsert(next, previous: DestinationRecord(externalID: path, contentHash: "old", syncedAt: Date()))
+        return try vault.read(again)
+    }
+
+    func testEditsOutsideTheMarkersSurviveAResync() throws {
+        let markdown = try syncTwice { text in
+            text
+                .replacingOccurrences(of: MarkdownRenderer.startMarker, with: "My summary above.\n\n" + MarkdownRenderer.startMarker)
+                .replacingOccurrences(of: "First line", with: "edited inside the block")
+                + "\n## My follow-ups\n- call Sam\n"
+        }
+
+        XCTAssertTrue(markdown.contains("My summary above.\n\n" + MarkdownRenderer.startMarker))
+        XCTAssertTrue(markdown.contains("## My follow-ups\n- call Sam"))
+        XCTAssertTrue(markdown.contains("Rewritten by the tablet"))
+        XCTAssertFalse(markdown.contains("edited inside the block"), "the generated part is InkRelay's")
+        XCTAssertEqual(markdown.components(separatedBy: MarkdownRenderer.startMarker).count, 2, "one block, not two")
+    }
+
+    func testUserFrontmatterAndTagsSurviveWhileInkRelaysKeysUpdate() throws {
+        let markdown = try syncTwice { text in
+            text
+                .replacingOccurrences(of: "tags: [\"ink\"]", with: "tags: [\"ink\", \"project-x\"]\naliases:\n  - standup\nstatus: draft")
+                .replacingOccurrences(of: "pages: 1", with: "pages: 99")
+        }
+
+        XCTAssertTrue(markdown.contains("tags: [\"ink\", \"project-x\"]"))
+        XCTAssertTrue(markdown.contains("aliases:\n  - standup\nstatus: draft"))
+        XCTAssertTrue(markdown.contains("pages: 1\n"), "InkRelay's own keys are rewritten")
+        XCTAssertFalse(markdown.contains("pages: 99"))
+    }
+
+    func testNotesWrittenBeforeMarkersAreMigratedOnce() throws {
+        let markdown = try syncTwice { text in
+            // A 0.3.0 note: same frontmatter, no markers.
+            text.replacingOccurrences(of: MarkdownRenderer.startMarker + "\n", with: "").replacingOccurrences(of: "\n" + MarkdownRenderer.endMarker, with: "")
+        }
+
+        XCTAssertTrue(markdown.contains(MarkdownRenderer.startMarker))
+        XCTAssertTrue(markdown.contains(MarkdownRenderer.endMarker))
+        XCTAssertEqual(markdown.components(separatedBy: "# Meeting notes").count, 2, "the old body is replaced, not kept twice")
+        XCTAssertFalse(markdown.contains("First line"))
+    }
+
+    func testANoteThatIsntInkRelaysIsKeptBelowTheGeneratedPart() throws {
+        try FileManager.default.createDirectory(at: vault.url.appendingPathComponent("Ink/viwoods/Paper"), withIntermediateDirectories: true)
+        try "# My own meeting notes\nDon't lose me.\n".write(to: vault.url.appendingPathComponent("Ink/viwoods/Paper/Meeting notes.md"), atomically: true, encoding: .utf8)
+        let original = try exports.write("Paper/Meeting notes.pdf", "%PDF")
+        let destination = ObsidianDestination(config: .init(id: "vault", vaultPath: vault.url.path, copyOriginal: false))
+
+        let path = try destination.upsert(makeNote(originalURL: original), previous: nil)
+
+        let markdown = try vault.read(path)
+        XCTAssertTrue(markdown.contains("# My own meeting notes\nDon't lose me."))
+        XCTAssertTrue(markdown.contains(MarkdownRenderer.endMarker + "\n\n# My own meeting notes"))
+    }
+
+    func testARenameCarriesTheUsersTextToTheNewNote() throws {
+        let moved = try exports.write("Work/Standup.pdf", "%PDF")
+        let markdown = try syncTwice(edit: { $0 + "\nMy notes on this.\n" }, second: makeNote(title: "Standup", relativePath: "Work/Standup.pdf", originalURL: moved))
+
+        XCTAssertTrue(markdown.contains("# Standup"))
+        XCTAssertTrue(markdown.contains("My notes on this."))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent("Ink/viwoods/Paper/Meeting notes.md").path))
+    }
+
     func testMissingVaultFailsWithoutCreatingIt() {
         let missing = vault.url.appendingPathComponent("not-a-vault")
         let destination = ObsidianDestination(config: .init(id: "vault", vaultPath: missing.path))

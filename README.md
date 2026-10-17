@@ -156,8 +156,9 @@ Agent logs go to `~/Library/Logs/InkRelay/inkrelay.log`.
 - Each export becomes one note. Its title is the file name.
 - Changes are found by size and date first, then by content hash, so unchanged cloud files aren't downloaded again.
 - If one destination fails, only that destination is retried on the next pass.
-- Obsidian notes are regenerated when the export changes, so **edits you make to them in Obsidian are overwritten**. Edit in Apple Notes, or copy the text out.
-- Deleting an export doesn't delete its notes.
+- In Obsidian, InkRelay rewrites only the part between `%% inkrelay:start %%` and `%% inkrelay:end %%` and its own frontmatter keys (`source`, `device`, `original`, `pages`, `modified`, `synced`). Write anything you like above or below the markers, and add your own frontmatter keys or tags: they survive every re-sync. Notes from before 0.4.0 get the markers on their next change.
+- A renamed or moved export moves its notes instead of duplicating them. Files are read only once they've stopped changing for `settleSeconds` (default 5), so half-downloaded exports aren't relayed.
+- What happens when an export is deleted is up to you, per destination, with `onDelete` (for example `"onDelete": { "obsidian": "archive", "apple-notes": "delete" }`). `keep` is the default; `archive` moves Obsidian notes to `Ink/Archive/` and Apple Notes to an "Ink Archive" folder; `delete` uses the Trash, Recently Deleted or the Drive trash, so nothing is erased for good. A source folder that turns up empty never deletes anything, since that's usually an unmounted cloud drive.
 - State lives in `~/Library/Application Support/InkRelay/state.json`. Delete it to re-send everything.
 - The Viwoods cache keeps its own ledger in `.manifest.json`. Delete it to pull everything from the cloud again.
 
