@@ -210,6 +210,17 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 - If the command-line agent from `scripts/install-agent.sh` is running, the app waits and offers to stop it, so notes aren't synced twice.
 - The `inkrelay` command is inside the app at `InkRelay.app/Contents/Resources/inkrelay`.
 
+## iPhone and iPad
+
+For people without a Mac running all the time. The app in `iOS/` (open `iOS/InkRelayMobile.xcodeproj`, or `scripts/build-ios.sh --run` for the simulator) shares `InkRelayCore` with the Mac.
+
+- Choose the folder your tablet exports to, through the Files app, so iCloud Drive, Google Drive, Dropbox and OneDrive all work. Handwriting is read on the device with Vision; nothing is uploaded.
+- **Check for New Notes** reads what's new or changed since the last check.
+- Apple Notes has no API on iOS either, so the app hands notes to Shortcuts: **Get New Ink Notes** returns one text per note with the title on the first line; follow it with **Repeat with Each** and **Create Note**, and run it from an automation. **Recognize Handwriting** reads any PDF or image shared to it.
+- Notes already relayed from another iPhone or iPad on the same Apple ID are skipped through iCloud key-value storage, once the app is signed with your team and that capability.
+
+Signing for a device needs your Apple team in Xcode (Signing & Capabilities). The Mac and the phone don't share sync state yet, so use one or the other for the same folder.
+
 ## Run
 
 ```bash

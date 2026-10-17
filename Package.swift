@@ -6,6 +6,7 @@ let package = Package(
     name: "InkRelay",
     platforms: [
         .macOS(.v14),
+        .iOS(.v17),
     ],
     products: [
         .library(name: "InkRelayCore", targets: ["InkRelayCore"]),

@@ -178,6 +178,7 @@ public struct OSAScriptRunner: AppleScriptRunner {
     public init() {}
 
     public func run(_ source: String, arguments: [String]) throws -> String {
+        #if os(macOS)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", source] + arguments
@@ -194,5 +195,8 @@ public struct OSAScriptRunner: AppleScriptRunner {
             throw DestinationError.failed("apple-notes", message.isEmpty ? "osascript exited with \(process.terminationStatus)" : message)
         }
         return String(decoding: outData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        #else
+        throw DestinationError.unavailable("apple", "Apple Notes, Calendar and Reminders are driven from the Mac; on iPhone use the Shortcuts actions")
+        #endif
     }
 }

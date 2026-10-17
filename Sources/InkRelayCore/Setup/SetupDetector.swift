@@ -30,7 +30,7 @@ public struct SetupDetector {
     public let home: URL
     private let fileManager: FileManager
 
-    public init(home: URL = FileManager.default.homeDirectoryForCurrentUser, fileManager: FileManager = .default) {
+    public init(home: URL = InkRelayCore.home, fileManager: FileManager = .default) {
         self.home = home
         self.fileManager = fileManager
     }

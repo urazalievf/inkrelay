@@ -49,7 +49,9 @@ public final class RelayRunner {
     private let now: () -> Date
     private var config: RelayConfig?
     private var engine: RelayEngine?
+    #if os(macOS)
     private var watcher: FolderWatcher?
+    #endif
     private var timer: DispatchSourceTimer?
     private var reviewServer: ReviewServer?
     private var paused = false
@@ -110,9 +112,11 @@ public final class RelayRunner {
             return
         }
         config = loaded
+        #if os(macOS)
         let watcher = FolderWatcher(urls: loaded.sources.map(\.url)) { [weak self] in self?.queue.async { self?.sync(reason: "folder change") } }
         if !loaded.sources.isEmpty { watcher.start() }
         self.watcher = watcher
+        #endif
 
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + .seconds(loaded.rescanIntervalSeconds), repeating: .seconds(loaded.rescanIntervalSeconds))
@@ -131,8 +135,10 @@ public final class RelayRunner {
     }
 
     private func tearDown() {
+        #if os(macOS)
         watcher?.stop()
         watcher = nil
+        #endif
         timer?.cancel()
         timer = nil
         reviewServer?.stop()

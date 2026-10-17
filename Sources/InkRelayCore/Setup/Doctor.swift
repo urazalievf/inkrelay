@@ -37,7 +37,7 @@ public struct Doctor {
         runner: AppleScriptRunner = OSAScriptRunner(),
         command: @escaping (String, [String]) -> (Int32, String) = Doctor.run,
         fileManager: FileManager = .default,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        home: URL = InkRelayCore.home,
         secrets: SecretStore = KeychainStore()
     ) {
         self.config = config
@@ -180,6 +180,7 @@ public struct Doctor {
     }
 
     public static func run(_ tool: String, _ arguments: [String]) -> (Int32, String) {
+        #if os(macOS)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tool)
         process.arguments = arguments
@@ -190,6 +191,9 @@ public struct Doctor {
         let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
         return (process.terminationStatus, text)
+        #else
+        return (-1, "not available on this device")
+        #endif
     }
 }
 

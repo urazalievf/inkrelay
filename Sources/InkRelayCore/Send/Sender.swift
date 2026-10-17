@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(PDFKit)
 import PDFKit
+#endif
 
 /// Where `inkrelay send` delivers: a folder the tablet imports from, a Send-to-Kindle address, or Viwoods Cloud.
 public enum SendTargetConfig: Codable, Equatable {
@@ -44,6 +46,7 @@ public enum SendTargetConfig: Codable, Equatable {
     }
 }
 
+#if os(macOS)
 /// A file ready for the tablet.
 public struct OutgoingFile: Equatable {
     public var fileName: String
@@ -159,3 +162,4 @@ public struct Sender {
     end run
     """
 }
+#endif

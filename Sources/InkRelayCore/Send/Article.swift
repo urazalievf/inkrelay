@@ -16,6 +16,7 @@ public struct Article: Equatable {
     }
 }
 
+#if os(macOS)
 /// Finds the article in a page: the `<article>`, `<main>` or block with the most paragraph text,
 /// minus navigation, ads, scripts and forms. Pictures are downloaded and embedded.
 public enum ArticleExtractor {
@@ -178,6 +179,12 @@ public enum ArticleExtractor {
         return nil
     }
 
+    static func escape(_ text: String) -> String { XHTML.escape(text) }
+}
+#endif
+
+/// Escaping for text and attribute values in XHTML.
+enum XHTML {
     static func escape(_ text: String) -> String {
         text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
@@ -189,17 +196,17 @@ public enum EPUBWriter {
     public static func book(_ article: Article, savedAt: Date = Date()) -> Data {
         let identifier = "urn:uuid:" + UUID().uuidString
         let modified = ISO8601DateFormatter().string(from: savedAt).replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        let title = ArticleExtractor.escape(article.title)
-        let author = ArticleExtractor.escape(article.byline ?? article.sourceURL?.host ?? "InkRelay")
+        let title = XHTML.escape(article.title)
+        let author = XHTML.escape(article.byline ?? article.sourceURL?.host ?? "InkRelay")
         let saved = DateFormatter.localizedString(from: savedAt, dateStyle: .medium, timeStyle: .none)
-        let source = article.sourceURL.map { "<p class=\"source\">Saved from <a href=\"\(ArticleExtractor.escape($0.absoluteString))\">\(ArticleExtractor.escape($0.host ?? $0.absoluteString))</a> on \(saved).</p>" } ?? ""
+        let source = article.sourceURL.map { "<p class=\"source\">Saved from <a href=\"\(XHTML.escape($0.absoluteString))\">\(XHTML.escape($0.host ?? $0.absoluteString))</a> on \(saved).</p>" } ?? ""
 
         let chapter = """
         <?xml version="1.0" encoding="utf-8"?>
         <!DOCTYPE html>
         <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en">
         <head><meta charset="utf-8"/><title>\(title)</title><link rel="stylesheet" href="style.css"/></head>
-        <body><h1>\(title)</h1>\(article.byline.map { "<p class=\"byline\">\(ArticleExtractor.escape($0))</p>" } ?? "")\(source)
+        <body><h1>\(title)</h1>\(article.byline.map { "<p class=\"byline\">\(XHTML.escape($0))</p>" } ?? "")\(source)
         \(article.bodyXHTML)
         </body></html>
         """
