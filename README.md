@@ -28,20 +28,41 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.3.0 is a command-line tool and background agent for macOS. A menu bar app, more destinations and an iPhone app are planned. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.4.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
 
-| Piece | State |
+### Compatibility
+
+Any tablet reaches every destination: sources and destinations are independent, so the two tables multiply.
+
+| Tablet | How InkRelay reads it | State |
+|---|---|---|
+| Viwoods AiPaper, AiPaper Mini | Straight from Viwoods Cloud (notebooks, memos, Daily planner), or a PDF export folder | Cloud built against the live API's responses; a full pull on a real account still to run |
+| reMarkable | PDF export to Google Drive, Dropbox or OneDrive | Folder route works; reading reMarkable Cloud directly is planned (#23) |
+| Supernote | PDF export to a cloud drive | Folder route works; native `.note` files and Supernote Cloud are planned (#23) |
+| Boox | PDF or PNG export to a cloud drive | Folder route works |
+| Kindle Scribe | PDF shared to Google Drive or OneDrive | Folder route works; the email-export path is planned (#23) |
+| Any other tablet | PDF or PNG in any folder | Works |
+
+| Destination | What it gets | Sign-in | State |
+|---|---|---|---|
+| Obsidian | Markdown with your edits kept, the original PDF | none | Working, tested |
+| Apple Notes | Text with the original PDF attached | macOS Automation prompt | Built and tested with a simulated Notes; `inkrelay doctor --notes-roundtrip` runs it for real |
+| Apple Calendar | Planner pages and to-dos as all-day events; accepted suggested events | macOS Automation prompt | Built, scripts compile; not yet run against Calendar |
+| Apple Reminders | Written tasks and Daily to-dos, ticked off from the tablet | macOS Automation prompt | Built, scripts compile; not yet run against Reminders |
+| Google Docs, Google Calendar | A Doc per note; planner events | Your Google OAuth client | Tested against the API's shapes and a real loopback sign-in; not yet run on a real account |
+| OneNote, Outlook Calendar | A page per note with images; planner events | Your Microsoft app registration | Tested against Graph's shapes and the device-code flow; not yet run on a real account |
+| Notion | A page per note with images | Notion integration token | Tested against the API's shapes; not yet run on a real workspace |
+| Review stack | Read-later cards per page, to-do and suggested event | none | Working: used in a browser on a real sync |
+| Shortcuts on iPhone and iPad | Text per note for Create Note | none | Builds and runs in the simulator; not yet run on a device |
+
+| Also | State |
 |---|---|
-| Folder sources (any tablet that exports PDF or PNG) | Working, covered by tests |
-| Viwoods Cloud source (Paper, Meeting, Memo, Daily) | Built against the cloud's real responses and covered by tests; a full pull on a live account still to be run |
-| Apple Calendar destination (Daily planner) | Built and unit-tested with a fake AppleScript runner; not yet run against Calendar |
-| Google Calendar and Google Docs destinations | Built and tested against recorded API shapes; sign-in flow tested end to end on loopback; not yet run against a real Google account |
-| Outlook Calendar and OneNote destinations | Built and tested against recorded Graph shapes; device-code sign-in tested; not yet run against a real Microsoft account |
-| Review stack (read-later cards) | Working: page, server and actions checked in a browser on a local sync; covered by tests |
-| On-device recognition (Apple Vision) | Working on printed and handwriting-style text; real tablet exports still to be checked |
-| Obsidian destination | Working, covered by tests |
-| Apple Notes destination | Built and unit-tested with a fake AppleScript runner; not yet run against Notes |
-| Background agent (`scripts/install-agent.sh`) | Written, not yet run |
+| On-device recognition (Vision) with paragraph, list and column rebuilding | Working on printed and handwriting-style text; real tablet pages still to check (#3) |
+| AI transcription (Claude), opt-in per source | Tested against the API's request and response shapes; not yet run with a key |
+| Send to tablet (EPUB from links, PDF, Markdown) | Folder target run for real on a live article; Viwoods import and Kindle mail not yet run |
+| Menu bar app | Builds, launches and serves the review stack; not yet looked at in the menu bar |
+| Background agent (`scripts/install-agent.sh`) | Not yet run (#4); `inkrelay doctor` checks it |
+| Signed, notarized releases | Workflow written; needs the Developer ID secrets (see RELEASING.md) |
 
 ## Requirements
 

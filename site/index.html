@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InkRelay: your tablet's handwriting, in the apps you already use</title>
+<meta name="description" content="InkRelay files handwritten notes from any e-ink tablet into Apple Notes, Obsidian, OneNote, Notion and Google Docs, with tasks in Reminders and plans in your calendar.">
+<style>
+:root{--bg:#f2efe8;--card:#fffdf9;--ink:#1c1b19;--muted:#6d685f;--line:#e4dfd4;--accent:#2e5b4e;--accent-ink:#fff;--serif:ui-serif,"New York","Iowan Old Style",Georgia,serif;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a}}
+:root[data-theme="dark"]{--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+main{max-width:760px;margin:0 auto;padding:56px 16px 40px}
+.mark{font:600 1rem var(--serif);color:var(--muted);letter-spacing:.02em}
+h1{font:600 clamp(2rem,6vw,3.1rem)/1.1 var(--serif);margin:.4em 0 .35em;letter-spacing:-.01em}
+.lede{font-size:1.15rem;color:var(--muted);max-width:36em;margin:0 0 2rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:2rem 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
+.card h2{font:600 1.05rem/1.3 var(--serif);margin:0 0 .3rem}.card p{margin:0;color:var(--muted);font-size:.95rem}
+form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:2.4rem}
+form h2{font:600 1.35rem var(--serif);margin:0 0 .3rem}form p{margin:0 0 1rem;color:var(--muted)}
+label{display:block;font-size:.9rem;font-weight:600;margin:.8rem 0 .3rem}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:560px){.row{grid-template-columns:1fr}}
+button{margin-top:1.2rem;font:600 1rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:13px 20px;cursor:pointer;width:100%}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.small{font-size:.85rem;color:var(--muted);margin-top:.8rem}footer{color:var(--muted);font-size:.85rem;text-align:center;padding:24px 16px}
+</style>
+</head>
+<body>
+<main>
+  <div class="mark">InkRelay</div>
+  <h1>Your tablet's handwriting, in the apps you already use.</h1>
+  <p class="lede">E-ink tablets sync to their own cloud. InkRelay picks the notes up, reads the handwriting on your Mac, and files every notebook into Apple Notes, Obsidian, OneNote, Notion or Google Docs. Tasks you write become reminders; planner pages land in your calendar.</p>
+
+  <div class="grid">
+    <div class="card"><h2>Any tablet</h2><p>Viwoods, reMarkable, Supernote, Boox, Kindle Scribe, or anything that exports PDF.</p></div>
+    <div class="card"><h2>Read on your Mac</h2><p>Apple's on-device recognition by default. Optional AI transcription for messy pages, capped at a budget you set.</p></div>
+    <div class="card"><h2>Your edits stay</h2><p>Write around your notes in Obsidian; re-syncs only touch what InkRelay wrote.</p></div>
+    <div class="card"><h2>A read-later stack</h2><p>New pages and to-dos as cards to flip through, one at a time, when you have a minute.</p></div>
+    <div class="card"><h2>And back again</h2><p>Send articles and documents to the tablet as clean EPUB books.</p></div>
+    <div class="card"><h2>Mac, iPhone, iPad</h2><p>A quiet menu bar app, and Shortcuts actions on the go.</p></div>
+  </div>
+
+  <!-- Replace WAITLIST_ENDPOINT with a form service URL (Formspree, Tally, Buttondown...). The tablet and destination
+       fields are there to count sign-ups by tablet and destination (#19). -->
+  <form action="WAITLIST_ENDPOINT" method="POST">
+    <h2>Join the waitlist</h2>
+    <p>One email when it's ready. Nothing else.</p>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <div class="row">
+      <div>
+        <label for="tablet">Your tablet</label>
+        <select id="tablet" name="tablet" required>
+          <option value="">Choose…</option>
+          <option>Viwoods</option><option>reMarkable</option><option>Supernote</option><option>Boox</option><option>Kindle Scribe</option><option>Other</option>
+        </select>
+      </div>
+      <div>
+        <label for="destination">Where notes should go</label>
+        <select id="destination" name="destination" required>
+          <option value="">Choose…</option>
+          <option>Apple Notes</option><option>Obsidian</option><option>OneNote</option><option>Notion</option><option>Google Docs</option><option>Other</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit">Notify me</button>
+    <p class="small">Your email is used only for this. No tracking on this page.</p>
+  </form>
+</main>
+<footer>© 2026 InkRelay</footer>
+</body>
+</html>
