@@ -7,6 +7,8 @@ public struct ReviewCard: Codable, Equatable {
     public enum Kind: String, Codable {
         case page
         case todo
+        /// A dated line, offered as a calendar event.
+        case event
     }
 
     public enum Status: String, Codable {
@@ -35,6 +37,8 @@ public struct ReviewCard: Codable, Equatable {
     public var status: Status
     /// How many times it was marked done.
     public var reviews: Int
+    /// For event cards: what "Add to calendar" creates.
+    public var event: SuggestedEvent?
 }
 
 public struct ReviewState: Codable, Equatable {
@@ -57,6 +61,7 @@ struct CardDraft {
     var image: Data?
     /// To-dos ticked off on the tablet skip the stack.
     var finished: Bool = false
+    var event: SuggestedEvent?
 }
 
 /// The stack on disk: `stack.json` plus one JPEG per page card. Every change takes a file lock and
@@ -129,8 +134,34 @@ public final class ReviewStore {
                 state.cards[draft.id] = ReviewCard(
                     id: draft.id, kind: draft.kind, title: draft.title, subtitle: draft.subtitle, text: draft.text,
                     itemKey: itemKey, page: draft.page, contentHash: draft.contentHash, hasImage: draft.image != nil,
-                    arrivedAt: now, dueAt: now, status: draft.finished ? .done : .new, reviews: 0
+                    arrivedAt: now, dueAt: now, status: draft.finished ? .done : .new, reviews: 0, event: draft.event
                 )
+            }
+        }
+    }
+
+    /// After a rename: the item's cards take the new key and ids, keeping their status and history.
+    func moveItem(from oldKey: String, to newKey: String, id: (Int?) -> String) throws {
+        try mutate { state in
+            for (oldID, card) in state.cards where card.itemKey == oldKey {
+                var moved = card
+                moved.itemKey = newKey
+                moved.id = id(card.page)
+                state.cards[oldID] = nil
+                state.cards[moved.id] = moved
+                if FileManager.default.fileExists(atPath: imageURL(for: oldID).path) {
+                    try? FileManager.default.removeItem(at: imageURL(for: moved.id))
+                    try? FileManager.default.moveItem(at: imageURL(for: oldID), to: imageURL(for: moved.id))
+                }
+            }
+        }
+    }
+
+    func removeItem(_ itemKey: String) throws {
+        try mutate { state in
+            for (id, card) in state.cards where card.itemKey == itemKey {
+                state.cards[id] = nil
+                try? FileManager.default.removeItem(at: imageURL(for: id))
             }
         }
     }
@@ -222,6 +253,12 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
 
     public func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String {
         let itemKey = "\(note.sourceID)/\(note.relativePath)"
+        if let old = previous?.externalID, old.hasPrefix("review:"), old != "review:" + itemKey {
+            try store.removeItem(String(old.dropFirst("review:".count)) + "#events")
+            try store.moveItem(from: String(old.dropFirst("review:".count)), to: itemKey) { page in
+                ReviewStore.cardID("\(itemKey)#\(page ?? 1)")
+            }
+        }
         let images = renderImages(note.originalURL)
         let title = Self.title(for: note)
         let folder = (note.relativePath as NSString).deletingLastPathComponent
@@ -241,7 +278,33 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
             )
         }
         try store.ingest(itemKey: itemKey, drafts: drafts, now: now())
+
+        // Dated lines become suggested events; nothing reaches a calendar until "Add to calendar".
+        let plannerDate = PlannerEvent.plannerDate(of: note)
+        let events = note.pages.flatMap { TaskExtractor.events(in: $0.text, title: title, plannerDate: plannerDate) }
+        let eventDrafts = events.map { event -> CardDraft in
+            CardDraft(
+                id: ReviewStore.cardID("\(itemKey)#event#\(event.title)"),
+                kind: .event,
+                title: event.title,
+                subtitle: "Suggested event · " + Self.friendlyTime(event.start) + " · from " + title,
+                text: event.title,
+                page: nil,
+                contentHash: ReviewStore.hash(event.title + "|\(event.start.timeIntervalSince1970)", nil),
+                image: nil,
+                event: event
+            )
+        }
+        try store.ingest(itemKey: itemKey + "#events", drafts: eventDrafts, now: now())
         return "review:" + itemKey
+    }
+
+    static func friendlyTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEE, MMM d, h:mm a"
+        return formatter.string(from: date)
     }
 
     public func upsert(_ todo: DailyTodo, previous: String?) throws -> String {
@@ -261,6 +324,14 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
         )
         try store.ingest(itemKey: itemKey, drafts: [draft], now: now())
         return "review:" + itemKey
+    }
+
+    /// Archive or delete: either way the cards leave the stack.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy != .keep, record.externalID.hasPrefix("review:") else { return }
+        let itemKey = String(record.externalID.dropFirst("review:".count))
+        try store.removeItem(itemKey)
+        try store.removeItem(itemKey + "#events")
     }
 
     static func title(for note: InkNote) -> String {

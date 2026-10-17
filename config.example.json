@@ -22,6 +22,12 @@
     "clientId": "YOUR-APPLICATION-ID",
     "tenant": "common"
   },
+  "ai": {
+    "model": "claude-opus-5-5",
+    "effort": "medium",
+    "monthlyBudgetUSD": 5,
+    "serverFallback": true
+  },
   "destinations": [
     {
       "kind": "obsidian",
@@ -71,6 +77,39 @@
       "kind": "oneNote",
       "id": "onenote",
       "notebook": "Ink"
+    },
+    {
+      "kind": "appleReminders",
+      "id": "apple-reminders",
+      "list": "Ink · {device}"
+    },
+    {
+      "kind": "notion",
+      "id": "notion",
+      "parentPageId": "YOUR-NOTION-PAGE-ID",
+      "includeImages": true
+    }
+  ],
+  "onDelete": {
+    "obsidian": "archive",
+    "apple-notes": "keep",
+    "review": "delete"
+  },
+  "sendTargets": [
+    {
+      "kind": "viwoodsCloud",
+      "id": "viwoods",
+      "app": "learning"
+    },
+    {
+      "kind": "folder",
+      "id": "drive",
+      "path": "~/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/Viwoods/Import"
+    },
+    {
+      "kind": "kindle",
+      "id": "kindle",
+      "address": "you_123@kindle.com"
     }
   ],
   "recognition": {
@@ -79,5 +118,6 @@
     "renderScale": 2,
     "maxPixelDimension": 3000
   },
-  "rescanIntervalSeconds": 300
+  "rescanIntervalSeconds": 300,
+  "settleSeconds": 5
 }

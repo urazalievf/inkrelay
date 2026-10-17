@@ -44,6 +44,7 @@ enum ReviewPage {
     @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .paper img { filter: brightness(.94); } }
     .paper.todo { min-height: 220px; padding: 36px 28px; justify-content: flex-start; align-items: center; color: #1c1b19; }
     .todo-line { display: flex; gap: 14px; align-items: flex-start; font: 400 1.45rem/1.35 var(--serif); }
+    .event-mark { flex: none; font-size: 1.1em; line-height: 1.2; }
     .todo-box { flex: none; width: 1.1em; height: 1.1em; margin-top: .14em; border: 2px solid #1c1b19; border-radius: 5px; }
     .body { padding: 16px 20px 6px; }
     .meta { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .8125rem; flex-wrap: wrap; }
@@ -110,15 +111,18 @@ enum ReviewPage {
       const card = state.cards[state.index];
       const node = el('article', 'card' + (entering ? ' entering' : ''));
       node.setAttribute('aria-label', card.title);
-      const paper = el('div', 'paper' + (card.kind === 'todo' ? ' todo' : ''));
+      const paper = el('div', 'paper' + (card.kind !== 'page' ? ' todo' : ''));
       if (card.image) {
         const img = el('img'); img.src = card.image; img.alt = 'Page: ' + card.title; img.decoding = 'async'; paper.append(img);
       } else {
-        const line = el('div', 'todo-line'); line.append(el('span', 'todo-box'), el('span', null, card.text || card.title)); paper.append(line);
+        const line = el('div', 'todo-line');
+        line.append(card.kind === 'event' ? el('span', 'event-mark', '◷') : el('span', 'todo-box'), el('span', null, card.text || card.title));
+        paper.append(line);
       }
       const body = el('div', 'body');
       const meta = el('div', 'meta');
-      meta.append(el('span', 'badge', card.kind === 'todo' ? 'To-do' : (card.reviews ? 'Again' : 'New')), el('span', null, card.subtitle));
+      const badge = card.kind === 'todo' ? 'To-do' : card.kind === 'event' ? 'Event?' : (card.reviews ? 'Again' : 'New');
+      meta.append(el('span', 'badge', badge), el('span', null, card.subtitle));
       body.append(meta, el('h1', null, card.title));
       if (card.kind === 'page') {
         const text = el('p', 'text' + (state.expanded ? '' : ' clamped'), card.text || 'No text recognized on this page.');
@@ -130,9 +134,15 @@ enum ReviewPage {
         }
       }
       const actions = el('div', 'actions');
-      const later = el('button', 'act', 'Later'); later.onclick = () => act('later');
-      const done = el('button', 'act primary', 'Done'); done.onclick = () => act('done');
-      actions.append(later, done);
+      if (card.kind === 'event') {
+        const dismiss = el('button', 'act', 'Dismiss'); dismiss.onclick = () => act('done');
+        const add = el('button', 'act primary', 'Add to calendar'); add.onclick = () => act('accept');
+        actions.append(dismiss, add);
+      } else {
+        const later = el('button', 'act', 'Later'); later.onclick = () => act('later');
+        const done = el('button', 'act primary', 'Done'); done.onclick = () => act('done');
+        actions.append(later, done);
+      }
       node.append(paper, body, actions);
       swipe(node);
       main.append(node);
@@ -154,12 +164,13 @@ enum ReviewPage {
       if (node) node.classList.add(action === 'done' ? 'leaving-done' : 'leaving-later');
       try {
         const reply = await fetch(`/api/cards/${card.id}/${action}`, { method: 'POST', headers: { 'X-InkRelay': '1' } });
-        if (!reply.ok) throw new Error();
+        if (!reply.ok) { const why = await reply.json().catch(() => ({})); throw new Error(why.error || ''); }
         await new Promise((r) => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160));
         state.cards.splice(state.index, 1); state.due = Math.max(0, state.due - 1); state.done += 1; state.expanded = false;
         if (state.index >= state.cards.length) state.index = Math.max(0, state.cards.length - 1);
         if (action === 'later') toast('Back tomorrow');
-      } catch (e) { toast("Couldn't save that. Try again."); if (node) node.classList.remove('leaving-done', 'leaving-later'); state.busy = false; return; }
+        if (action === 'accept') toast('Added to your calendar');
+      } catch (e) { toast(e.message || "Couldn't save that. Try again."); if (node) node.classList.remove('leaving-done', 'leaving-later'); state.busy = false; return; }
       state.busy = false;
       render(true);
     }
@@ -186,7 +197,9 @@ enum ReviewPage {
     document.addEventListener('keydown', (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
-      if (key === 'd' || key === 'enter') { e.preventDefault(); act('done'); }
+      const current = state.cards[state.index];
+      if (key === 'a' && current && current.kind === 'event') { act('accept'); }
+      else if (key === 'd' || key === 'enter') { e.preventDefault(); act('done'); }
       else if (key === 'l') act('later');
       else if (key === 'arrowright' || key === 'j') move(1);
       else if (key === 'arrowleft' || key === 'k') move(-1);

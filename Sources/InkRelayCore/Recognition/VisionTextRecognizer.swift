@@ -20,12 +20,17 @@ public struct VisionTextRecognizer: TextRecognizer {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = config.usesLanguageCorrection
-        if !config.languages.isEmpty {
+        if config.languages.isEmpty {
+            request.automaticallyDetectsLanguage = true
+        } else {
             request.recognitionLanguages = config.languages
         }
         try VNImageRequestHandler(cgImage: image).perform([request])
-        let observations = request.results ?? []
-        return Self.readingOrder(observations).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+        let lines = (request.results ?? []).compactMap { observation -> TextLine? in
+            guard let text = observation.topCandidates(1).first?.string else { return nil }
+            return TextLine(text: text, box: observation.boundingBox)
+        }
+        return LayoutBuilder.text(from: lines)
     }
 
     /// Top to bottom, then left to right. Vision's coordinates put the origin at the bottom left.

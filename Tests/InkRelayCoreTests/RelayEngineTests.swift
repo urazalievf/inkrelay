@@ -21,14 +21,20 @@ final class RelayEngineTests: XCTestCase {
         support.remove()
     }
 
-    private func makeEngine() throws -> RelayEngine {
+    private func makeEngine(settle: Int = 0, onDelete: [String: RemovalPolicy] = [:], now: Date = Date()) throws -> RelayEngine {
         let config = RelayConfig(
             sources: [SourceConfig(id: "viwoods", device: "Viwoods AiPaper", path: exports.url.path)],
-            destinations: [.appleNotes(.init(id: "unused"))]
+            destinations: [.appleNotes(.init(id: "vault")), .appleNotes(.init(id: "notes"))],
+            onDelete: onDelete,
+            settleSeconds: settle
         )
         // A fresh StateStore each time, so state has to survive a round trip through disk.
         let store = try StateStore(url: support.url.appendingPathComponent("state.json"))
-        return RelayEngine(config: config, store: store, recognizer: recognizer, destinations: [vault, notes])
+        return RelayEngine(config: config, store: store, recognizer: recognizer, destinations: [vault, notes], now: { now })
+    }
+
+    private func trackedKeys() throws -> [String] {
+        try StateStore(url: support.url.appendingPathComponent("state.json")).keys(forSource: "viwoods")
     }
 
     func testFirstPassSendsEveryExportToEveryDestination() throws {
@@ -101,6 +107,96 @@ final class RelayEngineTests: XCTestCase {
         XCTAssertEqual(notes.upserts.count, 1)
     }
 
+    func testHalfWrittenFilesWaitUntilTheySettle() throws {
+        let file = try exports.write("One.pdf", "one")
+        let written = try FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as! Date
+
+        let early = try makeEngine(settle: 5, now: written.addingTimeInterval(2)).syncOnce()
+        XCTAssertEqual(early.deferred, 1)
+        XCTAssertTrue(vault.upserts.isEmpty)
+        XCTAssertTrue(early.summary.contains("1 still being written"))
+
+        let settled = try makeEngine(settle: 5, now: written.addingTimeInterval(6)).syncOnce()
+        XCTAssertEqual(settled.synced, 1)
+    }
+
+    func testEmptyFilesWaitToo() throws {
+        try exports.write("Empty.pdf", "")
+        XCTAssertEqual(try makeEngine(settle: 5, now: Date().addingTimeInterval(3600)).syncOnce().deferred, 1)
+    }
+
+    func testRenamedExportMovesTheNoteInsteadOfDuplicatingIt() throws {
+        let file = try exports.write("One.pdf", "same ink")
+        _ = try makeEngine().syncOnce()
+        try FileManager.default.createDirectory(at: exports.url.appendingPathComponent("Work"), withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: file, to: exports.url.appendingPathComponent("Work/Renamed.pdf"))
+
+        let report = try makeEngine().syncOnce()
+
+        XCTAssertEqual(report.renamed, 1)
+        XCTAssertEqual(report.synced, 1)
+        XCTAssertEqual(vault.upserts.count, 2)
+        XCTAssertEqual(vault.upserts.last?.previous?.externalID, "vault:One.pdf", "the old note's handle, so it moves")
+        XCTAssertEqual(vault.upserts.last?.note.title, "Renamed")
+        XCTAssertEqual(notes.upserts.last?.previous?.externalID, "notes:One.pdf")
+        XCTAssertEqual(try trackedKeys(), ["viwoods/Work/Renamed.pdf"])
+        XCTAssertEqual(vault.removals.count, 0)
+    }
+
+    func testDeletedExportFollowsEachDestinationsPolicyAfterAGracePeriod() throws {
+        try exports.write("Keep.pdf", "stays")
+        let gone = try exports.write("Gone.pdf", "goes")
+        let start = Date()
+        _ = try makeEngine(onDelete: ["vault": .delete], now: start).syncOnce()
+        try FileManager.default.removeItem(at: gone)
+
+        let first = try makeEngine(onDelete: ["vault": .delete], now: start.addingTimeInterval(10)).syncOnce()
+        XCTAssertEqual(first.removed, 0, "a file missing for seconds may just be re-downloading")
+        XCTAssertTrue(vault.removals.isEmpty)
+
+        let later = try makeEngine(onDelete: ["vault": .delete], now: start.addingTimeInterval(120)).syncOnce()
+        XCTAssertEqual(later.removed, 1)
+        XCTAssertEqual(vault.removals.map(\.export.relativePath), ["Gone.pdf"])
+        XCTAssertEqual(vault.removals.first?.policy, .delete)
+        XCTAssertTrue(notes.removals.isEmpty, "notes has no policy, so it keeps the note")
+        XCTAssertEqual(try trackedKeys(), ["viwoods/Gone.pdf", "viwoods/Keep.pdf"], "kept by notes, so the record stays")
+
+        _ = try makeEngine(onDelete: ["vault": .delete], now: start.addingTimeInterval(300)).syncOnce()
+        XCTAssertEqual(vault.removals.count, 1, "removed once, not on every pass")
+    }
+
+    func testAnEmptyFolderNeverRemovesAnything() throws {
+        let only = try exports.write("Only.pdf", "x")
+        let start = Date()
+        _ = try makeEngine(onDelete: ["vault": .delete, "notes": .delete], now: start).syncOnce()
+        try FileManager.default.removeItem(at: only)
+
+        let report = try makeEngine(onDelete: ["vault": .delete, "notes": .delete], now: start.addingTimeInterval(3600)).syncOnce()
+
+        XCTAssertEqual(report.removed, 0)
+        XCTAssertEqual(report.warnings.count, 1)
+        XCTAssertTrue(vault.removals.isEmpty)
+    }
+
+    func testAnExportThatComesBackIsNoLongerMissing() throws {
+        try exports.write("Keep.pdf", "stays")
+        let file = try exports.write("Back.pdf", "back")
+        let saved = try Data(contentsOf: file)
+        let start = Date()
+        _ = try makeEngine(onDelete: ["vault": .delete], now: start).syncOnce()
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        try FileManager.default.removeItem(at: file)
+        _ = try makeEngine(onDelete: ["vault": .delete], now: start.addingTimeInterval(10)).syncOnce()
+
+        try saved.write(to: file)
+        try FileManager.default.setAttributes([.modificationDate: attributes[.modificationDate]!], ofItemAtPath: file.path)
+        _ = try makeEngine(onDelete: ["vault": .delete], now: start.addingTimeInterval(20)).syncOnce()
+        _ = try makeEngine(onDelete: ["vault": .delete], now: start.addingTimeInterval(500)).syncOnce()
+
+        XCTAssertTrue(vault.removals.isEmpty)
+        XCTAssertNil(try StateStore(url: support.url.appendingPathComponent("state.json")).record(for: "viwoods/Back.pdf")?.missingSince)
+    }
+
     func testMissingSourceFolderIsReportedWithoutStoppingOtherSources() throws {
         try exports.write("One.pdf", "one")
         let config = RelayConfig(
@@ -108,7 +204,8 @@ final class RelayEngineTests: XCTestCase {
                 SourceConfig(id: "gone", device: "Boox", path: exports.url.appendingPathComponent("missing").path),
                 SourceConfig(id: "viwoods", device: "Viwoods AiPaper", path: exports.url.path),
             ],
-            destinations: [.appleNotes(.init(id: "unused"))]
+            destinations: [.appleNotes(.init(id: "unused"))],
+            settleSeconds: 0
         )
         let engine = RelayEngine(
             config: config,

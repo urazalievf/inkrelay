@@ -5,6 +5,9 @@ let usage = """
 inkrelay \(InkRelayCore.version): relay handwritten notes from e-ink tablets into Apple Notes and Obsidian
 
 Usage:
+  inkrelay setup                    Set up step by step: tablet, folders, vault, Apple apps
+  inkrelay doctor [--notes-roundtrip] [--no-apps]
+                                    Check folders, permissions, sign-ins and the background agent
   inkrelay init [--config PATH]     Write an example config to edit
   inkrelay sync [--config PATH]     Sync once and exit
   inkrelay watch [--config PATH]    Sync now, then whenever a source folder changes
@@ -13,6 +16,10 @@ Usage:
   inkrelay viwoods pull             Pull Viwoods Cloud into the local cache without syncing
   inkrelay google login             Sign in to Google for the googleCalendar and googleDocs destinations
   inkrelay microsoft login          Sign in to Microsoft for the outlookCalendar and oneNote destinations
+  inkrelay notion login             Save a Notion integration token in the Keychain
+  inkrelay ai login                 Save an Anthropic API key for AI transcription
+  inkrelay ai status                This month's AI transcription spend
+  inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -74,6 +81,7 @@ func loadConfig() -> RelayConfig {
 
 func printReport(_ report: SyncReport) {
     log(report.summary)
+    for warning in report.warnings { log("  ! \(warning)") }
     for failure in report.failures {
         let destination = failure.destinationID.map { " → \($0)" } ?? ""
         log("  ✗ \(failure.item)\(destination): \(failure.message)")
@@ -81,6 +89,110 @@ func printReport(_ report: SyncReport) {
 }
 
 switch command {
+case "setup":
+    func ask(_ question: String, default answer: String = "") -> String {
+        print(question + (answer.isEmpty ? " " : " [\(answer)] "), terminator: "")
+        let reply = readLine(strippingNewline: true)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return reply.isEmpty ? answer : reply
+    }
+    func yes(_ question: String, default answer: Bool) -> Bool {
+        ask(question + (answer ? " (Y/n)" : " (y/N)")).lowercased().first.map { $0 == "y" } ?? answer
+    }
+    func pick(_ title: String, _ options: [String], allowOther: String? = nil, allowNone: String? = nil) -> Int? {
+        print("\n" + title)
+        for (index, option) in options.enumerated() { print("  \(index + 1). \(option)") }
+        if let allowOther { print("  \(options.count + 1). \(allowOther)") }
+        if let allowNone { print("  0. \(allowNone)") }
+        while true {
+            let reply = ask(">", default: options.isEmpty ? (allowOther != nil ? String(options.count + 1) : "0") : "1")
+            if let number = Int(reply), (allowNone != nil && number == 0) || (1...(options.count + (allowOther == nil ? 0 : 1))).contains(number) {
+                return number == 0 ? nil : number - 1
+            }
+            print("Type a number from the list.")
+        }
+    }
+
+    print("InkRelay setup. Press Return to take the suggestion in [brackets].")
+    if FileManager.default.fileExists(atPath: configURL.path), !yes("A config already exists at \(configURL.path). Replace it? The old one is kept as config.json.bak.", default: false) {
+        exit(0)
+    }
+    let detector = SetupDetector()
+    let presets = TabletPreset.all
+    let tablet = presets[pick("Which tablet?", presets.map(\.name)) ?? 0]
+    var choices = SetupChoices(tablet: tablet)
+    if tablet.hasCloudSource {
+        choices.useViwoodsCloud = yes("\nPull notebooks and the Daily planner straight from Viwoods Cloud? (Turn on Viwoods Cloud on the tablet.)", default: true)
+    }
+    if !choices.useViwoodsCloud || yes("Also watch an export folder?", default: false) {
+        print("\n" + tablet.exportHint)
+        let clouds = detector.cloudFolders()
+        let labels = clouds.map { "\($0.provider)\($0.account.isEmpty ? "" : " (\($0.account))"): \(detector.tilde($0.url))" }
+        if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud ? "No export folder" : nil) {
+            if chosen < clouds.count {
+                let base = detector.tilde(clouds[chosen].url)
+                choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: base + "/" + tablet.name.split(separator: " ").first!)
+            } else {
+                choices.exportFolder = ask("Folder path:")
+            }
+        }
+    }
+    let vaults = detector.obsidianVaults()
+    if let chosen = pick("Obsidian vault to file notes into?", vaults.map(detector.tilde), allowOther: "Another folder", allowNone: "No Obsidian") {
+        choices.obsidianVault = chosen < vaults.count ? detector.tilde(vaults[chosen]) : ask("Vault path:")
+    }
+    if yes("\nFile notes into Apple Notes?", default: true) {
+        var account: String? = nil
+        if yes("List your Notes accounts to pick one? (macOS asks once to let InkRelay control Notes.)", default: false),
+           let accounts = try? SetupDetector.notesAccounts(), let chosen = pick("Which Notes account?", accounts) {
+            account = accounts[chosen]
+        }
+        choices.appleNotesAccount = .some(account)
+    }
+    choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource)
+    choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
+    choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
+
+    do {
+        let config = try choices.config()
+        if FileManager.default.fileExists(atPath: configURL.path) {
+            let backup = configURL.deletingLastPathComponent().appendingPathComponent("config.json.bak")
+            try? FileManager.default.removeItem(at: backup)
+            try FileManager.default.moveItem(at: configURL, to: backup)
+        }
+        try ConfigStore.save(config, to: configURL)
+        print("\nWrote \(configURL.path).")
+        if choices.useViwoodsCloud { print("Next: run `inkrelay viwoods login` so InkRelay can read Viwoods Cloud.") }
+        print("Google, Microsoft, Notion and AI transcription need an account of your own first; the README explains each.")
+        if (!choices.useViwoodsCloud || FileManager.default.fileExists(atPath: tokenURL.path)) && yes("\nRun the first sync now?", default: true) {
+            let report = try RelayEngine.live(config: config, stateURL: stateURL).syncOnce()
+            printReport(report)
+        }
+        print("When it looks right, run scripts/install-agent.sh to keep syncing in the background, and `inkrelay doctor` to check everything.")
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "doctor":
+    let config = loadConfig()
+    let includeApps = !arguments.contains("--no-apps")
+    if includeApps, config.destinations.contains(where: { if case .appleNotes = $0 { return true }; if case .appleCalendar = $0 { return true }; if case .appleReminders = $0 { return true }; return false }) {
+        print("Checking Apple apps; macOS may ask once to let inkrelay control them.\n")
+    }
+    var checks = [DoctorCheck(.ok, "Config", configURL.path)] + Doctor(config: config, supportDirectory: supportDirectory).checks(includeApps: includeApps)
+    if arguments.contains("--notes-roundtrip") {
+        let account = config.destinations.compactMap { destination -> String?? in
+            if case .appleNotes(let notes) = destination { return .some(notes.account) }
+            return nil
+        }.first ?? nil
+        checks += NotesRoundTrip(account: account).run()
+    }
+    for check in checks {
+        print("\(check.status.rawValue) \(check.title)" + (check.detail.isEmpty ? "" : ": \(check.detail)"))
+    }
+    let problems = checks.filter { $0.status == .problem }.count
+    print(problems == 0 ? "\nAll good." : "\n\(problems) thing(s) to fix.")
+    exit(problems == 0 ? 0 : 1)
+
 case "init":
     if FileManager.default.fileExists(atPath: configURL.path) {
         print("A config already exists at \(configURL.path). Edit it, or delete it to start over.")
@@ -124,7 +236,9 @@ case "watch":
     let (triggers, continuation) = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
     var reviewServer: ReviewServer?
     if let stack = reviewStackConfig(config) {
-        let server = ReviewServer(store: ReviewStore(directory: DestinationContext(config: config, supportDirectory: supportDirectory).reviewDirectory), config: stack)
+        let context = DestinationContext(config: config, supportDirectory: supportDirectory)
+        let calendars = DestinationFactory.eventWriters(in: DestinationFactory.make(config.destinations, context: context))
+        let server = ReviewServer(store: ReviewStore(directory: context.reviewDirectory), config: stack, calendars: calendars)
         do {
             log("Review stack at \(try server.start())")
             reviewServer = server
@@ -146,9 +260,16 @@ case "watch":
 
     log("Watching \(config.allSources.count) source(s). Press Ctrl-C to stop.")
     continuation.yield("startup")
+    let logFile = ProcessInfo.processInfo.environment["INKRELAY_LOG"].map { URL(fileURLWithPath: $0) }
     for await reason in triggers {
+        if let logFile, LogTrimmer.trim(logFile) { log("Trimmed the log to its newest lines.") }
         log("Syncing (\(reason))…")
-        printReport(engine.syncOnce())
+        let report = engine.syncOnce()
+        printReport(report)
+        if report.deferred > 0 {
+            // Some files were still being written; look again once they've had time to settle.
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(config.settleSeconds + 1)) { continuation.yield("settled files") }
+        }
     }
     withExtendedLifetime((watcher, reviewServer)) {}
 
@@ -255,6 +376,87 @@ case "microsoft":
         fail(error.localizedDescription)
     }
 
+case "notion":
+    guard arguments.first == "login" else { fail("Usage: inkrelay notion login") }
+    print("""
+    Create an internal integration at https://www.notion.so/profile/integrations with "Insert content" and
+    "Update content" capabilities, then share the parent page or database with it (••• → Connections).
+    Paste the integration secret here; it's kept in your login Keychain, not in the config.
+
+    """)
+    print("Integration secret: ", terminator: "")
+    guard let token = readLine(strippingNewline: true)?.trimmingCharacters(in: .whitespaces), !token.isEmpty else { fail("No token entered.") }
+    let keychain = KeychainStore()
+    do {
+        try keychain.setSecret(token, for: NotionDestination.keychainAccount)
+        let name = try NotionDestination(config: .init(id: "check", parentPageId: "-"), secrets: keychain).whoAmI()
+        print("Saved. Connected as \(name).")
+    } catch {
+        try? keychain.deleteSecret(for: NotionDestination.keychainAccount)
+        fail(error.localizedDescription)
+    }
+
+case "ai":
+    let config = loadConfig()
+    let ai = config.ai ?? AITranscriptionConfig()
+    let claudeSources = config.allSources.filter { $0.recognizer == .claude }.map(\.id)
+    switch arguments.first ?? "" {
+    case "login":
+        print("""
+        AI transcription sends each page image of the sources that opt in ("recognizer": "claude") to Anthropic's API,
+        which returns the text. Nothing else leaves the Mac, and Vision stays the default for every other source.
+        Model: \(ai.model), effort \(ai.effort), spending capped at $\(String(format: "%.2f", ai.monthlyBudgetUSD)) a month.
+        Sources opted in: \(claudeSources.isEmpty ? "none yet" : claudeSources.joined(separator: ", ")).
+
+        Create a key at https://platform.claude.com/settings/keys and paste it here. It's kept in your login Keychain.
+
+        """)
+        print("API key: ", terminator: "")
+        guard let key = readLine(strippingNewline: true)?.trimmingCharacters(in: .whitespaces), !key.isEmpty else { fail("No key entered.") }
+        var check = URLRequest(url: URL(string: "https://api.anthropic.com/v1/models")!)
+        check.setValue(key, forHTTPHeaderField: "x-api-key")
+        check.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        do {
+            let (_, response) = try URLSessionTransport().send(check)
+            guard response.statusCode == 200 else { fail("Anthropic didn't accept the key (HTTP \(response.statusCode)).") }
+            try KeychainStore().setSecret(key, for: ClaudeTextRecognizer.keychainAccount)
+            print("Saved.")
+        } catch {
+            fail(error.localizedDescription)
+        }
+    case "status":
+        let recognizer = ClaudeTextRecognizer(config: ai, supportDirectory: supportDirectory, fallback: VisionTextRecognizer())
+        let (spent, pages) = recognizer.spentThisMonth()
+        print("AI transcription: \(ai.model), effort \(ai.effort)")
+        print("This month: $\(String(format: "%.2f", spent)) of $\(String(format: "%.2f", ai.monthlyBudgetUSD)) for \(pages) page(s)")
+        print("Key: " + (recognizer.apiKey() == nil ? "missing; run `inkrelay ai login`" : "saved"))
+        print("Sources using it: " + (claudeSources.isEmpty ? "none" : claudeSources.joined(separator: ", ")))
+    default:
+        fail("Usage: inkrelay ai login | status")
+    }
+
+case "send":
+    let config = loadConfig()
+    guard let input = arguments.first(where: { !$0.hasPrefix("--") }) else { fail("Usage: inkrelay send LINK|FILE [--to TARGET] [--title TITLE]") }
+    func option(_ name: String) -> String? {
+        guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return nil }
+        return arguments[index + 1]
+    }
+    guard !config.sendTargets.isEmpty else {
+        fail("Add a \"sendTargets\" list to \(configURL.path), for example a folder your tablet imports from:\n  \"sendTargets\": [{ \"kind\": \"folder\", \"id\": \"drive\", \"path\": \"~/Library/CloudStorage/…/Viwoods/Import\" }]")
+    }
+    let wanted = option("--to")
+    guard let target = wanted.map({ id in config.sendTargets.first { $0.id == id } }) ?? config.sendTargets.first else {
+        fail("No send target with id \"\(wanted ?? "")\". Known: \(config.sendTargets.map(\.id).joined(separator: ", ")).")
+    }
+    let sender = Sender(viwoods: { ViwoodsClient(credentials: FileCredentialStore(url: tokenURL)) })
+    do {
+        let file = try sender.prepare(input, title: option("--title"))
+        print(try sender.deliver(file, to: target))
+    } catch {
+        fail(error.localizedDescription)
+    }
+
 case "review":
     let config = loadConfig()
     guard let stack = reviewStackConfig(config) else {
@@ -295,7 +497,8 @@ case "review":
         }
 
     case "open", "serve":
-        let server = ReviewServer(store: store, config: stack)
+        let calendars = DestinationFactory.eventWriters(in: DestinationFactory.make(config.destinations, context: DestinationContext(config: config, supportDirectory: supportDirectory)))
+        let server = ReviewServer(store: store, config: stack, calendars: calendars)
         let url: URL
         do {
             url = try server.start()

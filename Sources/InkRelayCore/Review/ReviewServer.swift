@@ -10,11 +10,14 @@ public final class ReviewServer {
     public let store: ReviewStore
     public let config: DestinationConfig.ReviewStackConfig
     private let now: () -> Date
+    private let calendars: [TimedEventWriter]
     private var server: LocalHTTPServer?
 
-    public init(store: ReviewStore, config: DestinationConfig.ReviewStackConfig, now: @escaping () -> Date = Date.init) {
+    /// `calendars` receive suggested events the user accepts.
+    public init(store: ReviewStore, config: DestinationConfig.ReviewStackConfig, calendars: [TimedEventWriter] = [], now: @escaping () -> Date = Date.init) {
         self.store = store
         self.config = config
+        self.calendars = calendars
         self.now = now
     }
 
@@ -56,6 +59,13 @@ public final class ReviewServer {
                 switch parts[3] {
                 case "done": card = try store.markDone(parts[2], now: now(), resurfaceDays: config.resurfaceDays)
                 case "later": card = try store.snooze(parts[2], now: now())
+                case "accept":
+                    guard let event = try store.load().cards[parts[2]]?.event else { return .json(["ok": false, "error": "Not an event."], status: 404) }
+                    guard !calendars.isEmpty else {
+                        return .json(["ok": false, "error": "No calendar is set up. Add an appleCalendar, googleCalendar or outlookCalendar destination."], status: 409)
+                    }
+                    for calendar in calendars { _ = try calendar.addEvent(event) }
+                    card = try store.markDone(parts[2], now: now(), resurfaceDays: [])
                 default: return .text("Not found", status: 404)
                 }
                 guard let card else { return .json(["ok": false, "error": "No such card."], status: 404) }
@@ -76,6 +86,7 @@ public final class ReviewServer {
             "date": formatter.string(from: now()),
             "due": due,
             "limit": config.dailyLimit,
+            "calendars": calendars.map(\.id),
             "cards": cards.map { card -> [String: Any] in
                 [
                     "id": card.id,

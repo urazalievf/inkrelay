@@ -1,0 +1,93 @@
+name: Release
+
+# Builds, signs, notarizes and publishes InkRelay.app when a version tag is pushed (v0.4.0, v1.2.3.1).
+# Needs these repository secrets (Settings → Secrets and variables → Actions); see RELEASING.md:
+#   DEVELOPER_ID_P12_BASE64     Developer ID Application certificate and key, exported as .p12, base64
+#   DEVELOPER_ID_P12_PASSWORD   the .p12's password
+#   DEVELOPER_ID_NAME           e.g. "Developer ID Application: Your Name (TEAMID)"
+#   NOTARY_KEY_P8_BASE64        App Store Connect API key (.p8), base64
+#   NOTARY_KEY_ID               its key id
+#   NOTARY_ISSUER_ID            its issuer id
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, notarize, publish
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+      DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+      DEVELOPER_ID_NAME: ${{ secrets.DEVELOPER_ID_NAME }}
+      NOTARY_KEY_P8_BASE64: ${{ secrets.NOTARY_KEY_P8_BASE64 }}
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version matches the tag
+        id: version
+        run: echo "version=$(scripts/check-version.sh "$GITHUB_REF_NAME")" >> "$GITHUB_OUTPUT"
+
+      - name: Signing secrets are present
+        run: |
+          missing=()
+          for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD DEVELOPER_ID_NAME NOTARY_KEY_P8_BASE64 NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing repository secrets: ${missing[*]}. See RELEASING.md. Nothing unsigned is published."
+            exit 1
+          fi
+
+      - name: Test
+        run: swift test
+
+      - name: Import the Developer ID certificate
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          PASSWORD="$(uuidgen)"
+          echo "$DEVELOPER_ID_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/developer-id.p12"
+
+      - name: Build and sign the app (universal, hardened runtime)
+        run: UNIVERSAL=1 SIGN_IDENTITY="$DEVELOPER_ID_NAME" scripts/build-app.sh
+
+      - name: Notarize and staple
+        run: |
+          echo "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k --keepParent build/InkRelay.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+          xcrun stapler staple build/InkRelay.app
+          spctl --assess --type execute --verbose build/InkRelay.app
+          rm "$RUNNER_TEMP/notary.p8"
+
+      - name: Package
+        run: ditto -c -k --keepParent build/InkRelay.app "InkRelay-${{ steps.version.outputs.version }}.zip"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "InkRelay-${{ steps.version.outputs.version }}.zip" \
+            --title "InkRelay ${{ steps.version.outputs.version }}" --generate-notes --verify-tag
+
+      - name: Remove the signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true

@@ -21,12 +21,15 @@ public struct FileRecord: Codable, Equatable {
     public var contentHash: String
     /// Keyed by destination id.
     public var destinations: [String: DestinationRecord]
+    /// When the export was first found missing from its folder. Nil while it's there.
+    public var missingSince: Date?
 
-    public init(size: Int64, modified: Date, contentHash: String, destinations: [String: DestinationRecord] = [:]) {
+    public init(size: Int64, modified: Date, contentHash: String, destinations: [String: DestinationRecord] = [:], missingSince: Date? = nil) {
         self.size = size
         self.modified = modified
         self.contentHash = contentHash
         self.destinations = destinations
+        self.missingSince = missingSince
     }
 
     /// True when size and modification date still match, so the file can be skipped without reading it.
@@ -71,6 +74,16 @@ public final class StateStore {
     public func set(_ record: FileRecord, for key: String) throws {
         state.files[key] = record
         try save()
+    }
+
+    public func remove(_ key: String) throws {
+        state.files[key] = nil
+        try save()
+    }
+
+    /// Every tracked export of one source.
+    public func keys(forSource sourceID: String) -> [String] {
+        state.files.keys.filter { $0.hasPrefix(sourceID + "/") }.sorted()
     }
 
     func save() throws {

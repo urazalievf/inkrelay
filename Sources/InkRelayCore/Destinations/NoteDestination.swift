@@ -6,7 +6,16 @@ public protocol NoteDestination {
 
     /// Creates the note, or updates it in place when `previous` says it was sent before.
     /// Returns the destination's handle for the note, stored for the next update.
+    /// After a rename `previous` belongs to the old path, so the note should move rather than be duplicated.
     func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String
+
+    /// The export behind `record` was deleted. Never called with `.keep`.
+    func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws
+}
+
+extension NoteDestination {
+    /// Destinations that can't remove anything keep the note.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {}
 }
 
 /// What destinations need beyond their own config: where tokens live, how to reach the network, how to run AppleScript.
@@ -17,6 +26,7 @@ public struct DestinationContext {
     public var google: GoogleAccountConfig?
     public var microsoft: MicrosoftAccountConfig?
     public var now: () -> Date
+    public var secrets: SecretStore
 
     public init(
         supportDirectory: URL = InkRelayCore.supportDirectory,
@@ -24,6 +34,7 @@ public struct DestinationContext {
         scriptRunner: AppleScriptRunner = OSAScriptRunner(),
         google: GoogleAccountConfig? = nil,
         microsoft: MicrosoftAccountConfig? = nil,
+        secrets: SecretStore = KeychainStore(),
         now: @escaping () -> Date = Date.init
     ) {
         self.supportDirectory = supportDirectory
@@ -31,6 +42,7 @@ public struct DestinationContext {
         self.scriptRunner = scriptRunner
         self.google = google
         self.microsoft = microsoft
+        self.secrets = secrets
         self.now = now
     }
 
@@ -80,8 +92,17 @@ public enum DestinationFactory {
                 return OneNoteDestination(config: oneNote, account: microsoft())
             case .reviewStack(let stack):
                 return ReviewStackDestination(config: stack, store: ReviewStore(directory: context.reviewDirectory), now: context.now)
+            case .notion(let notion):
+                return NotionDestination(config: notion, secrets: context.secrets, transport: context.transport)
+            case .appleReminders(let reminders):
+                return AppleRemindersDestination(config: reminders, runner: context.scriptRunner)
             }
         }
+    }
+
+    /// Calendars that can take a confirmed event with a time.
+    public static func eventWriters(in destinations: [NoteDestination]) -> [TimedEventWriter] {
+        destinations.compactMap { $0 as? TimedEventWriter }
     }
 
     /// The destinations that also take planner to-dos.

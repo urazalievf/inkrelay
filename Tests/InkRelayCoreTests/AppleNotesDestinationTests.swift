@@ -42,6 +42,52 @@ final class AppleNotesDestinationTests: XCTestCase {
         XCTAssertEqual(runner.calls[1].arguments[1], "", "no account configured means the default account")
     }
 
+    func testAttachesTheOriginalPDF() throws {
+        let runner = FakeScriptRunner()
+        runner.results = ["x-coredata://note/p1"]
+        let destination = AppleNotesDestination(config: .init(id: "notes"), runner: runner)
+
+        _ = try destination.upsert(makeNote(originalURL: URL(fileURLWithPath: "/tmp/Meeting notes.pdf")), previous: nil)
+
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(runner.calls[0].arguments[3], "/tmp/Meeting notes.pdf")
+        XCTAssertTrue(AppleNotesDestination.createScript.contains("on attach(noteID, attachmentPath)"))
+    }
+
+    func testFallsBackToALinkWhenNotesWontAttach() throws {
+        let runner = FakeScriptRunner()
+        runner.results = ["x-coredata://note/p1\nnot attached", "x-coredata://note/p1"]
+        let destination = AppleNotesDestination(config: .init(id: "notes"), runner: runner)
+
+        let id = try destination.upsert(makeNote(originalURL: URL(fileURLWithPath: "/tmp/Meeting notes.pdf")), previous: nil)
+
+        XCTAssertEqual(id, "x-coredata://note/p1", "the outcome line isn't part of the id")
+        XCTAssertEqual(runner.calls.map(\.source), [AppleNotesDestination.createScript, AppleNotesDestination.updateScript])
+        XCTAssertTrue(runner.calls[1].arguments[1].contains("<a href=\"file:///tmp/Meeting%20notes.pdf\">Open the original Meeting notes.pdf</a>"))
+        XCTAssertEqual(runner.calls[1].arguments[2], "", "no second attempt")
+    }
+
+    func testAttachingCanBeTurnedOff() throws {
+        let runner = FakeScriptRunner()
+        runner.results = ["x-coredata://note/p1"]
+        _ = try AppleNotesDestination(config: .init(id: "notes", attachOriginal: false), runner: runner).upsert(makeNote(), previous: nil)
+        XCTAssertEqual(runner.calls[0].arguments[3], "")
+    }
+
+    func testDeleteAndArchiveUseTheirScripts() throws {
+        let runner = FakeScriptRunner()
+        let destination = AppleNotesDestination(config: .init(id: "notes", folder: "Ink"), runner: runner)
+        let record = DestinationRecord(externalID: "x-coredata://note/p1", contentHash: "h", syncedAt: Date())
+        let export = RemovedExport(sourceID: "s", relativePath: "a.pdf")
+
+        try destination.remove(record, export: export, policy: .delete)
+        try destination.remove(record, export: export, policy: .archive)
+        try destination.remove(record, export: export, policy: .keep)
+
+        XCTAssertEqual(runner.calls.map(\.source), [AppleNotesDestination.deleteScript, AppleNotesDestination.archiveScript])
+        XCTAssertEqual(runner.calls[1].arguments, ["x-coredata://note/p1", "Ink Archive"])
+    }
+
     func testEmptyIdFromNotesIsAnError() {
         let runner = FakeScriptRunner()
         let destination = AppleNotesDestination(config: .init(id: "notes"), runner: runner)

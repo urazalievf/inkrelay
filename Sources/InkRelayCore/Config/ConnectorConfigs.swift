@@ -124,6 +124,59 @@ extension DestinationConfig {
         }
     }
 
+    /// Each note as a Notion page, under `parentPageId` or as a row of `databaseId` (one of the two).
+    /// The integration token is kept in the Keychain by `inkrelay notion login`.
+    public struct NotionConfig: Codable, Equatable {
+        public var id: String
+        public var parentPageId: String?
+        public var databaseId: String?
+        /// Upload the page images as well as the text.
+        public var includeImages: Bool
+
+        public init(id: String, parentPageId: String? = nil, databaseId: String? = nil, includeImages: Bool = true) {
+            self.id = id
+            self.parentPageId = parentPageId
+            self.databaseId = databaseId
+            self.includeImages = includeImages
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, parentPageId, databaseId, includeImages }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            parentPageId = try container.decodeIfPresent(String.self, forKey: .parentPageId)
+            databaseId = try container.decodeIfPresent(String.self, forKey: .databaseId)
+            includeImages = try container.decodeIfPresent(Bool.self, forKey: .includeImages) ?? true
+        }
+
+        func validate() throws {
+            guard (parentPageId == nil) != (databaseId == nil) else {
+                throw ConfigError.invalid("Notion destination \"\(id)\" needs exactly one of parentPageId or databaseId.")
+            }
+        }
+    }
+
+    /// Tasks written on pages, and Viwoods Daily to-dos, as Apple Reminders.
+    public struct AppleRemindersConfig: Codable, Equatable {
+        public var id: String
+        /// List name; `{device}` and `{source}` are filled in, so each tablet can have its own list.
+        public var list: String
+
+        public init(id: String, list: String = "Ink") {
+            self.id = id
+            self.list = list
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, list }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            list = try container.decodeIfPresent(String.self, forKey: .list) ?? "Ink"
+        }
+    }
+
     var needsGoogle: Bool {
         switch self {
         case .googleCalendar, .googleDocs: return true

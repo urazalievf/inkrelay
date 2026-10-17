@@ -37,6 +37,27 @@ public enum ViwoodsApp: Int, CaseIterable {
     }
 }
 
+/// Where sent files land: Learning (the reader) or Paper (notebooks you can write on). Values are app types.
+public enum ViwoodsImportTarget: Int, Codable {
+    case paper = 1
+    case learning = 3
+
+    var folderType: String { self == .paper ? "paper" : "learning" }
+
+    public init(from decoder: Decoder) throws {
+        switch try decoder.singleValueContainer().decode(String.self).lowercased() {
+        case "paper": self = .paper
+        case "learning": self = .learning
+        default: throw ConfigError.invalid("viwoodsCloud send targets take \"app\": \"learning\" or \"paper\".")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(folderType)
+    }
+}
+
 /// One page of `resourceSync/getPage`: the files and folders inside one cloud folder.
 public struct ViwoodsResourcePage: Decodable, Equatable {
     public var count: Int

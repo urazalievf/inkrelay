@@ -38,10 +38,15 @@ public struct RecognizedPage: Equatable {
     /// 1-based, as people count pages.
     public var number: Int
     public var text: String
+    /// From AI transcription only: a title in the writer's words, and topic tags.
+    public var suggestedTitle: String?
+    public var tags: [String]
 
-    public init(number: Int, text: String) {
+    public init(number: Int, text: String, suggestedTitle: String? = nil, tags: [String] = []) {
         self.number = number
         self.text = text
+        self.suggestedTitle = suggestedTitle
+        self.tags = tags
     }
 }
 

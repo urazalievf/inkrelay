@@ -15,6 +15,14 @@ public struct RelayConfig: Codable, Equatable {
     public var google: GoogleAccountConfig?
     /// App registration for the Microsoft destinations.
     public var microsoft: MicrosoftAccountConfig?
+    /// What each destination does when an export is deleted from its folder, by destination id. Missing means keep.
+    public var onDelete: [String: RemovalPolicy]
+    /// A file must sit unchanged this long before it's read, so half-downloaded exports aren't relayed.
+    public var settleSeconds: Int
+    /// AI transcription settings for sources with `"recognizer": "claude"`. Defaults apply when missing.
+    public var ai: AITranscriptionConfig?
+    /// Where `inkrelay send` delivers articles and documents. The first is the default.
+    public var sendTargets: [SendTargetConfig]
 
     public init(
         sources: [SourceConfig],
@@ -23,7 +31,11 @@ public struct RelayConfig: Codable, Equatable {
         rescanIntervalSeconds: Int = 300,
         viwoodsCloud: ViwoodsCloudConfig? = nil,
         google: GoogleAccountConfig? = nil,
-        microsoft: MicrosoftAccountConfig? = nil
+        microsoft: MicrosoftAccountConfig? = nil,
+        onDelete: [String: RemovalPolicy] = [:],
+        settleSeconds: Int = 5,
+        ai: AITranscriptionConfig? = nil,
+        sendTargets: [SendTargetConfig] = []
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -32,10 +44,14 @@ public struct RelayConfig: Codable, Equatable {
         self.viwoodsCloud = viwoodsCloud
         self.google = google
         self.microsoft = microsoft
+        self.onDelete = onDelete
+        self.settleSeconds = settleSeconds
+        self.ai = ai
+        self.sendTargets = sendTargets
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -52,6 +68,10 @@ public struct RelayConfig: Codable, Equatable {
         viwoodsCloud = try container.decodeIfPresent(ViwoodsCloudConfig.self, forKey: .viwoodsCloud)
         google = try container.decodeIfPresent(GoogleAccountConfig.self, forKey: .google)
         microsoft = try container.decodeIfPresent(MicrosoftAccountConfig.self, forKey: .microsoft)
+        onDelete = try container.decodeIfPresent([String: RemovalPolicy].self, forKey: .onDelete) ?? [:]
+        settleSeconds = try container.decodeIfPresent(Int.self, forKey: .settleSeconds) ?? 5
+        ai = try container.decodeIfPresent(AITranscriptionConfig.self, forKey: .ai)
+        sendTargets = try container.decodeIfPresent([SendTargetConfig].self, forKey: .sendTargets) ?? []
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
@@ -71,6 +91,18 @@ public struct RelayConfig: Codable, Equatable {
         }
         if stacks.count > 1 { throw ConfigError.invalid("Only one reviewStack destination is supported.") }
         try stacks.first?.validate()
+        for destination in destinations {
+            if case .notion(let notion) = destination { try notion.validate() }
+        }
+        let destinationIDs = Set(destinations.map(\.id))
+        if let unknown = onDelete.keys.sorted().first(where: { !destinationIDs.contains($0) }) {
+            throw ConfigError.invalid("onDelete names \"\(unknown)\", which isn't a destination id.")
+        }
+        guard (0...600).contains(settleSeconds) else { throw ConfigError.invalid("settleSeconds must be between 0 and 600.") }
+        try ai?.validate()
+        if let duplicate = sendTargets.map(\.id).firstDuplicate() {
+            throw ConfigError.invalid("Two send targets share the id \"\(duplicate)\".")
+        }
         for (kind, ids) in [("source", allSources.map(\.id)), ("destination", destinations.map(\.id))] {
             if let duplicate = ids.firstDuplicate() {
                 throw ConfigError.invalid("Two \(kind)s share the id \"\(duplicate)\". Ids must be unique.")
@@ -91,15 +123,20 @@ public struct SourceConfig: Codable, Equatable {
     public var path: String
     /// Lowercased extensions to pick up. PDF covers most tablets; Boox can also export PNG.
     public var fileTypes: [String]
+    /// Wait for files to settle before reading. Off for InkRelay's own cloud cache, which it writes atomically.
+    public var waitsForSettle = true
+    /// `vision` (default, on the Mac) or `claude` (page images are sent to Anthropic; see the `ai` section).
+    public var recognizer: RecognizerKind
 
-    public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"]) {
+    public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"], recognizer: RecognizerKind = .vision) {
         self.id = id
         self.device = device
         self.path = path
         self.fileTypes = fileTypes
+        self.recognizer = recognizer
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes }
+    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -107,9 +144,24 @@ public struct SourceConfig: Codable, Equatable {
         device = try container.decodeIfPresent(String.self, forKey: .device) ?? id
         path = try container.decode(String.self, forKey: .path)
         fileTypes = try container.decodeIfPresent([String].self, forKey: .fileTypes) ?? ["pdf"]
+        recognizer = try container.decodeIfPresent(RecognizerKind.self, forKey: .recognizer) ?? .vision
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(device, forKey: .device)
+        try container.encode(path, forKey: .path)
+        try container.encode(fileTypes, forKey: .fileTypes)
+        if recognizer != .vision { try container.encode(recognizer, forKey: .recognizer) }
     }
 
     public var url: URL { URL(fileURLWithPath: PathExpansion.expand(path), isDirectory: true) }
+}
+
+public enum RecognizerKind: String, Codable, Equatable {
+    case vision
+    case claude
 }
 
 /// Where recognized notes are written. The `kind` field picks the case in JSON.
@@ -122,6 +174,8 @@ public enum DestinationConfig: Codable, Equatable {
     case outlookCalendar(OutlookCalendarConfig)
     case oneNote(OneNoteConfig)
     case reviewStack(ReviewStackConfig)
+    case notion(NotionConfig)
+    case appleReminders(AppleRemindersConfig)
 
     public struct ObsidianConfig: Codable, Equatable {
         public var id: String
@@ -160,20 +214,24 @@ public enum DestinationConfig: Codable, Equatable {
         public var folder: String
         /// Notes account name such as "iCloud". Empty or missing uses the default account.
         public var account: String?
+        /// Attach the original PDF so the handwriting sits next to the text.
+        public var attachOriginal: Bool
 
-        public init(id: String, folder: String = "Ink", account: String? = nil) {
+        public init(id: String, folder: String = "Ink", account: String? = nil, attachOriginal: Bool = true) {
             self.id = id
             self.folder = folder
             self.account = account
+            self.attachOriginal = attachOriginal
         }
 
-        private enum CodingKeys: String, CodingKey { case id, folder, account }
+        private enum CodingKeys: String, CodingKey { case id, folder, account, attachOriginal }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decode(String.self, forKey: .id)
             folder = try container.decodeIfPresent(String.self, forKey: .folder) ?? "Ink"
             account = try container.decodeIfPresent(String.self, forKey: .account)
+            attachOriginal = try container.decodeIfPresent(Bool.self, forKey: .attachOriginal) ?? true
         }
     }
 
@@ -212,6 +270,8 @@ public enum DestinationConfig: Codable, Equatable {
         case .outlookCalendar(let config): return config.id
         case .oneNote(let config): return config.id
         case .reviewStack(let config): return config.id
+        case .notion(let config): return config.id
+        case .appleReminders(let config): return config.id
         }
     }
 
@@ -225,6 +285,8 @@ public enum DestinationConfig: Codable, Equatable {
         case .outlookCalendar: return "outlookCalendar"
         case .oneNote: return "oneNote"
         case .reviewStack: return "reviewStack"
+        case .notion: return "notion"
+        case .appleReminders: return "appleReminders"
         }
     }
 
@@ -241,6 +303,8 @@ public enum DestinationConfig: Codable, Equatable {
         case "outlookCalendar": self = .outlookCalendar(try OutlookCalendarConfig(from: decoder))
         case "oneNote": self = .oneNote(try OneNoteConfig(from: decoder))
         case "reviewStack": self = .reviewStack(try ReviewStackConfig(from: decoder))
+        case "notion": self = .notion(try NotionConfig(from: decoder))
+        case "appleReminders": self = .appleReminders(try AppleRemindersConfig(from: decoder))
         default:
             throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use one of: \(Self.kinds.joined(separator: ", ")).")
         }
@@ -258,10 +322,12 @@ public enum DestinationConfig: Codable, Equatable {
         case .outlookCalendar(let config): try config.encode(to: encoder)
         case .oneNote(let config): try config.encode(to: encoder)
         case .reviewStack(let config): try config.encode(to: encoder)
+        case .notion(let config): try config.encode(to: encoder)
+        case .appleReminders(let config): try config.encode(to: encoder)
         }
     }
 
-    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack"]
+    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack", "notion", "appleReminders"]
 }
 
 public struct RecognitionConfig: Codable, Equatable {

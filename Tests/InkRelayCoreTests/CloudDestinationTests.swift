@@ -109,8 +109,25 @@ final class CloudDestinationTests: XCTestCase {
         XCTAssertEqual(id, "doc-1")
         let patch = try XCTUnwrap(transport.requests(to: "upload/drive/v3/files/doc-1").first)
         XCTAssertEqual(patch.request.httpMethod, "PATCH")
-        XCTAssertEqual(patch.request.url?.query, "uploadType=media")
-        XCTAssertEqual(patch.request.value(forHTTPHeaderField: "Content-Type"), "text/html; charset=utf-8")
+        XCTAssertEqual(patch.request.url?.query, "uploadType=multipart")
+        XCTAssertTrue(bodyText(patch).contains("{\"name\":\"Meeting notes\"}"), "renames follow the export")
+    }
+
+    func testRemovalTrashesDocsAndDeletesEventsAndPages() throws {
+        transport.reply("drive/v3/files/doc-1", ["id": "doc-1"])
+        let docs = GoogleDocsDestination(config: .init(id: "docs"), account: try signedInGoogle(transport, in: folder))
+        try docs.remove(DestinationRecord(externalID: "doc-1", contentHash: "h", syncedAt: Date()), export: RemovedExport(sourceID: "s", relativePath: "a.pdf"), policy: .delete)
+        XCTAssertEqual(transport.requests(to: "drive/v3/files/doc-1").first?.body["trashed"] as? Bool, true)
+
+        try docs.remove(DestinationRecord(externalID: "doc-2", contentHash: "h", syncedAt: Date()), export: RemovedExport(sourceID: "s", relativePath: "b.pdf"), policy: .archive)
+        XCTAssertTrue(transport.requests(to: "drive/v3/files/doc-2").isEmpty, "Drive has no archive, so archive keeps the Doc")
+
+        transport.reply("v1.0/me/events/ev-1", status: 204)
+        let outlook = OutlookCalendarDestination(config: .init(id: "o"), account: try signedInMicrosoft(transport, in: folder))
+        try outlook.remove(DestinationRecord(externalID: "ev-1", contentHash: "h", syncedAt: Date()), export: RemovedExport(sourceID: "s", relativePath: "Daily/2026-01-13.pdf"), policy: .delete)
+        XCTAssertEqual(transport.requests(to: "v1.0/me/events/ev-1").first?.request.httpMethod, "DELETE")
+        try outlook.remove(DestinationRecord(externalID: PlannerEvent.skipped, contentHash: "h", syncedAt: Date()), export: RemovedExport(sourceID: "s", relativePath: "x.pdf"), policy: .delete)
+        XCTAssertEqual(transport.sent.count, 2, "skipped notes never had an event")
     }
 
     // MARK: Outlook

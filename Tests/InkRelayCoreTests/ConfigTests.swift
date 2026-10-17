@@ -96,7 +96,7 @@ final class ConfigTests: XCTestCase {
     func testRejectsUnknownDestinationKind() {
         let json = #"{ "sources": [], "destinations": [{ "kind": "evernote", "id": "e" }] }"#
         XCTAssertThrowsError(try JSONDecoder().decode(RelayConfig.self, from: Data(json.utf8))) { error in
-            XCTAssertEqual(error as? ConfigError, .invalid("Unknown destination kind \"evernote\". Use one of: obsidian, appleNotes, appleCalendar, googleCalendar, googleDocs, outlookCalendar, oneNote, reviewStack."))
+            XCTAssertEqual(error as? ConfigError, .invalid("Unknown destination kind \"evernote\". Use one of: obsidian, appleNotes, appleCalendar, googleCalendar, googleDocs, outlookCalendar, oneNote, reviewStack, notion, appleReminders."))
         }
     }
 
