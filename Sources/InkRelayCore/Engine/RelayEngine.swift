@@ -76,7 +76,28 @@ public final class RelayEngine {
         stateURL.deletingLastPathComponent().appendingPathComponent("viwoods-token.json")
     }
 
+    /// The recognized text of every relayed note, for search.
+    public var archive: NoteArchive { NoteArchive(directory: store.url.deletingLastPathComponent().appendingPathComponent("archive", isDirectory: true)) }
+    private lazy var notes = archive
+
     public func syncOnce() -> SyncReport {
+        // One pass at a time across processes (watch, the menu bar app, the MCP server), each starting from
+        // the state the last one saved, so none overwrites another's records.
+        let lock = store.url.deletingLastPathComponent().appendingPathComponent(".sync.lock")
+        try? FileManager.default.createDirectory(at: lock.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let descriptor = open(lock.path, O_CREAT | O_RDWR, 0o600)
+        if descriptor >= 0 { flock(descriptor, LOCK_EX) }
+        defer {
+            if descriptor >= 0 {
+                flock(descriptor, LOCK_UN)
+                close(descriptor)
+            }
+        }
+        try? store.reload()
+        return pass()
+    }
+
+    private func pass() -> SyncReport {
         var report = SyncReport()
         if let puller {
             let pull = puller.pull()
@@ -126,7 +147,10 @@ public final class RelayEngine {
         let item = "\(source.id)/\(file.relativePath)"
         var previous = store.record(for: key)
 
-        if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty {
+        // Notes synced before the archive existed get archived once, read with Vision so it costs nothing.
+        let needsArchive = previous.map { notes.entry(forKey: key)?.contentHash != $0.contentHash } ?? false
+        if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty,
+           !needsArchive || source.recognizer == .claude {
             if known.missingSince != nil { try? store.set(FileRecord(size: known.size, modified: known.modified, contentHash: known.contentHash, destinations: known.destinations), for: key) }
             report.unchanged += 1
             return
@@ -161,6 +185,14 @@ public final class RelayEngine {
             guard !targets.isEmpty else {
                 // Touched but not changed: remember the new date so the next pass skips the read.
                 try store.set(record, for: key)
+                if notes.entry(forKey: key)?.contentHash != hash, source.recognizer != .claude {
+                    let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
+                    try notes.upsert(InkNote(
+                        title: file.url.deletingPathExtension().lastPathComponent, sourceID: source.id, device: source.device,
+                        originalURL: readable, relativePath: file.relativePath, modified: file.modified, contentHash: hash,
+                        pages: try recognizer.recognize(fileAt: readable)
+                    ), key: key, at: now())
+                }
                 report.unchanged += 1
                 return
             }
@@ -178,6 +210,7 @@ public final class RelayEngine {
                 pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
             )
 
+            try? notes.upsert(note, key: key, at: now())
             var deliveredAll = true
             var filedInNotes = false
             for destination in targets {
@@ -209,6 +242,7 @@ public final class RelayEngine {
             if let renamedFrom {
                 try store.remove(renamedFrom)
                 ExportConverter.discard(key: renamedFrom, cache: convertedDirectory)
+                notes.remove(key: renamedFrom)
                 report.renamed += 1
             }
             if deliveredAll { report.synced += 1 }
@@ -253,6 +287,7 @@ public final class RelayEngine {
             if record.destinations.isEmpty {
                 try store.remove(key)
                 ExportConverter.discard(key: key, cache: convertedDirectory)
+                notes.remove(key: key)
             } else {
                 try store.set(record, for: key)
             }

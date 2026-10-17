@@ -67,6 +67,12 @@ public final class StateStore {
         }
     }
 
+    /// Re-reads the file, so a pass starts from what other InkRelay processes last wrote.
+    public func reload() throws {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        state = try JSONDecoder().decode(SyncState.self, from: Data(contentsOf: url))
+    }
+
     public func record(for key: String) -> FileRecord? {
         state.files[key]
     }

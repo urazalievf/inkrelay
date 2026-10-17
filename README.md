@@ -256,6 +256,41 @@ For people without a Mac running all the time. The app in `iOS/` (open `iOS/InkR
 
 The project signs with the team set in `iOS/project.yml`; run it on a device from Xcode, which creates the provisioning profile the first time. The shared ledger is a plain file, so it needs no iCloud entitlement.
 
+## Use with AI assistants (MCP)
+
+`inkrelay mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude and other AI assistants can work with your handwritten notes: "what did I write about the bank last week?", "list my open tasks", "go through today's review stack with me", "send this article to my tablet".
+
+InkRelay keeps the recognized text of every note it relays in `archive/` next to the config (notes synced before 0.5.0 are read once more with Vision on the next sync to fill it). The server reads that archive and InkRelay's state; it runs on your Mac and talks to the assistant over stdio, so nothing goes anywhere the assistant doesn't take it.
+
+| Tool | What it does |
+|---|---|
+| `inkrelay_status` | Sources, destinations, last sync, searchable notes, review cards due |
+| `inkrelay_list_notes` | Notes newest first, with a preview; paged |
+| `inkrelay_search_notes` | Notes containing every word of a query (case and accents ignored), with the matching page and a snippet |
+| `inkrelay_get_note` | One note's full text page by page, its tasks, where it was delivered and the original file |
+| `inkrelay_list_tasks` | Tasks written on pages, open, done or all, with due dates |
+| `inkrelay_review_stack` / `inkrelay_review_card` | Today's read-later cards; mark done, later, or accept a suggested event into your calendars |
+| `inkrelay_sync_now` | Runs one sync pass (waits for one the app or agent is running) |
+| `inkrelay_send_to_tablet` | Sends a link or a file to the tablet through a send target |
+
+**Claude Desktop**: Settings → Developer → Edit Config, then add (use the path where your `inkrelay` is; inside the app it's `InkRelay.app/Contents/Resources/inkrelay`):
+
+```json
+{
+  "mcpServers": {
+    "inkrelay": { "command": "/Applications/InkRelay.app/Contents/Resources/inkrelay", "args": ["mcp"] }
+  }
+}
+```
+
+**Claude Code**:
+
+```bash
+claude mcp add inkrelay -- /Applications/InkRelay.app/Contents/Resources/inkrelay mcp
+```
+
+Add `--config PATH` after `mcp` to use another config. Sync passes from the server, the menu bar app, `watch` and `sync` take turns through a lock, each starting from the state the last one saved.
+
 ## Run
 
 ```bash

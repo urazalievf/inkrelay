@@ -21,6 +21,7 @@ Usage:
   inkrelay ai status                This month's AI transcription spend
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
   inkrelay convert NOTE PDF          Turn a Supernote .note notebook into a PDF
+  inkrelay mcp                      Serve InkRelay to AI assistants over MCP (stdio)
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -463,6 +464,12 @@ case "send":
     } catch {
         fail(error.localizedDescription)
     }
+
+case "mcp":
+    // stdout carries only MCP messages from here on; anything else goes to stderr.
+    setvbuf(stdout, nil, _IONBF, 0)
+    FileHandle.standardError.write(Data("InkRelay MCP server \(InkRelayCore.version), config \(configURL.path)\n".utf8))
+    MCPServer(configURL: configURL).run()
 
 case "convert":
     guard arguments.count >= 2 else { fail("Usage: inkrelay convert NOTEBOOK.note OUTPUT.pdf") }
