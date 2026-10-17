@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared constants for InkRelay.
 public enum InkRelayCore {
-    public static let version = "0.1.0"
+    public static let version = "0.2.0"
 
     /// `~/Library/Application Support/InkRelay`, where the config and sync state live.
     public static var supportDirectory: URL {

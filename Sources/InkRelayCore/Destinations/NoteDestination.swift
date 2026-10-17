@@ -17,8 +17,15 @@ public enum DestinationFactory {
                 return ObsidianDestination(config: obsidian)
             case .appleNotes(let notes):
                 return AppleNotesDestination(config: notes, runner: scriptRunner)
+            case .appleCalendar(let calendar):
+                return AppleCalendarDestination(config: calendar, runner: scriptRunner)
             }
         }
+    }
+
+    /// The destinations that also take planner to-dos.
+    public static func plans(in destinations: [NoteDestination]) -> [PlanDestination] {
+        destinations.compactMap { $0 as? PlanDestination }
     }
 }
 

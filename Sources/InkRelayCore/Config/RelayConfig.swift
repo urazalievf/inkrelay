@@ -7,22 +7,32 @@ public struct RelayConfig: Codable, Equatable {
     public var recognition: RecognitionConfig
     /// Full rescan interval for `inkrelay watch`, on top of file-system events.
     /// Cloud folders don't always report remote changes, so this is the safety net.
+    /// Viwoods Cloud is polled on the same interval.
     public var rescanIntervalSeconds: Int
+    /// Pull notebooks and the planner straight from Viwoods Cloud, without a Drive export.
+    public var viwoodsCloud: ViwoodsCloudConfig?
 
     public init(
         sources: [SourceConfig],
         destinations: [DestinationConfig],
         recognition: RecognitionConfig = RecognitionConfig(),
-        rescanIntervalSeconds: Int = 300
+        rescanIntervalSeconds: Int = 300,
+        viwoodsCloud: ViwoodsCloudConfig? = nil
     ) {
         self.sources = sources
         self.destinations = destinations
         self.recognition = recognition
         self.rescanIntervalSeconds = rescanIntervalSeconds
+        self.viwoodsCloud = viwoodsCloud
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud
+    }
+
+    /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
+    public var allSources: [SourceConfig] {
+        sources + (viwoodsCloud.map { [$0.source] } ?? [])
     }
 
     public init(from decoder: Decoder) throws {
@@ -31,13 +41,15 @@ public struct RelayConfig: Codable, Equatable {
         destinations = try container.decode([DestinationConfig].self, forKey: .destinations)
         recognition = try container.decodeIfPresent(RecognitionConfig.self, forKey: .recognition) ?? RecognitionConfig()
         rescanIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .rescanIntervalSeconds) ?? 300
+        viwoodsCloud = try container.decodeIfPresent(ViwoodsCloudConfig.self, forKey: .viwoodsCloud)
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
     public func validate() throws {
-        guard !sources.isEmpty else { throw ConfigError.invalid("Add at least one source folder.") }
+        guard !allSources.isEmpty else { throw ConfigError.invalid("Add at least one source folder, or a viwoodsCloud section.") }
         guard !destinations.isEmpty else { throw ConfigError.invalid("Add at least one destination.") }
-        for (kind, ids) in [("source", sources.map(\.id)), ("destination", destinations.map(\.id))] {
+        try viwoodsCloud?.validate()
+        for (kind, ids) in [("source", allSources.map(\.id)), ("destination", destinations.map(\.id))] {
             if let duplicate = ids.firstDuplicate() {
                 throw ConfigError.invalid("Two \(kind)s share the id \"\(duplicate)\". Ids must be unique.")
             }
@@ -82,6 +94,7 @@ public struct SourceConfig: Codable, Equatable {
 public enum DestinationConfig: Codable, Equatable {
     case obsidian(ObsidianConfig)
     case appleNotes(AppleNotesConfig)
+    case appleCalendar(AppleCalendarConfig)
 
     public struct ObsidianConfig: Codable, Equatable {
         public var id: String
@@ -137,10 +150,36 @@ public enum DestinationConfig: Codable, Equatable {
         }
     }
 
+    /// Apple Calendar takes only the Viwoods Daily planner: handwritten day pages and typed to-dos,
+    /// as all-day events. Other notebooks are skipped.
+    public struct AppleCalendarConfig: Codable, Equatable {
+        public var id: String
+        /// Calendar to file into. Created on first use if missing.
+        public var calendar: String
+        /// Event title for a day page, followed by the first recognized line.
+        public var pageTitle: String
+
+        public init(id: String, calendar: String = "Viwoods", pageTitle: String = "Daily plan") {
+            self.id = id
+            self.calendar = calendar
+            self.pageTitle = pageTitle
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, calendar, pageTitle }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            calendar = try container.decodeIfPresent(String.self, forKey: .calendar) ?? "Viwoods"
+            pageTitle = try container.decodeIfPresent(String.self, forKey: .pageTitle) ?? "Daily plan"
+        }
+    }
+
     public var id: String {
         switch self {
         case .obsidian(let config): return config.id
         case .appleNotes(let config): return config.id
+        case .appleCalendar(let config): return config.id
         }
     }
 
@@ -148,6 +187,7 @@ public enum DestinationConfig: Codable, Equatable {
         switch self {
         case .obsidian: return "obsidian"
         case .appleNotes: return "appleNotes"
+        case .appleCalendar: return "appleCalendar"
         }
     }
 
@@ -158,8 +198,9 @@ public enum DestinationConfig: Codable, Equatable {
         switch kind {
         case "obsidian": self = .obsidian(try ObsidianConfig(from: decoder))
         case "appleNotes": self = .appleNotes(try AppleNotesConfig(from: decoder))
+        case "appleCalendar": self = .appleCalendar(try AppleCalendarConfig(from: decoder))
         default:
-            throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use \"obsidian\" or \"appleNotes\".")
+            throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use \"obsidian\", \"appleNotes\" or \"appleCalendar\".")
         }
     }
 
@@ -169,6 +210,7 @@ public enum DestinationConfig: Codable, Equatable {
         switch self {
         case .obsidian(let config): try config.encode(to: encoder)
         case .appleNotes(let config): try config.encode(to: encoder)
+        case .appleCalendar(let config): try config.encode(to: encoder)
         }
     }
 }

@@ -24,6 +24,27 @@ final class ConfigTests: XCTestCase {
         ])
     }
 
+    func testDecodesViwoodsCloudAndAppleCalendar() throws {
+        let json = """
+        {
+          "sources": [],
+          "destinations": [{ "kind": "appleCalendar", "id": "cal", "calendar": "Plans" }],
+          "viwoodsCloud": { "apps": ["paper"], "daily": true, "dailyMonths": 3, "cachePath": "~/Ink/viwoods" }
+        }
+        """
+        let config = try JSONDecoder().decode(RelayConfig.self, from: Data(json.utf8))
+
+        XCTAssertEqual(config.destinations, [.appleCalendar(.init(id: "cal", calendar: "Plans"))])
+        XCTAssertEqual(config.viwoodsCloud?.apps, ["paper"])
+        XCTAssertEqual(config.allSources.map(\.id), ["viwoods-cloud"], "the cloud cache is a source of its own")
+        XCTAssertTrue(config.allSources[0].url.path.hasSuffix("/Ink/viwoods"))
+        XCTAssertNoThrow(try config.validate(), "no folder sources needed when the cloud is configured")
+
+        var clash = config
+        clash.sources = [SourceConfig(id: "viwoods-cloud", device: "x", path: "/x")]
+        XCTAssertThrowsError(try clash.validate())
+    }
+
     func testExpandsTildeInPaths() throws {
         let source = SourceConfig(id: "s", device: "d", path: "~/Exports")
         XCTAssertEqual(source.url.path, FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Exports").path)
@@ -32,7 +53,7 @@ final class ConfigTests: XCTestCase {
     func testRejectsUnknownDestinationKind() {
         let json = #"{ "sources": [], "destinations": [{ "kind": "evernote", "id": "e" }] }"#
         XCTAssertThrowsError(try JSONDecoder().decode(RelayConfig.self, from: Data(json.utf8))) { error in
-            XCTAssertEqual(error as? ConfigError, .invalid("Unknown destination kind \"evernote\". Use \"obsidian\" or \"appleNotes\"."))
+            XCTAssertEqual(error as? ConfigError, .invalid("Unknown destination kind \"evernote\". Use \"obsidian\", \"appleNotes\" or \"appleCalendar\"."))
         }
     }
 

@@ -4,25 +4,32 @@ Handwritten notes from any e-ink tablet, delivered into the notes apps you alrea
 
 E-ink tablets (Viwoods, Supernote, Boox, Kindle Scribe, reMarkable) each sync to their own cloud, or to Google Drive, Dropbox and OneDrive. None of them reach Apple Notes, and each one reaches Obsidian through a different plugin, if at all. InkRelay watches the folder your tablet exports to, reads the handwriting on your Mac, and files each notebook into Apple Notes and Obsidian. When you add a page on the tablet, the same note updates.
 
+For the Viwoods AiPaper it goes one step further: with Viwoods Cloud turned on (firmware 3.15 or later), InkRelay pulls every notebook, memo and the Daily planner straight from the cloud. No export step on the tablet, no Drive app on the Mac. Planner pages and to-dos also land in Apple Calendar.
+
 ```
 tablet ──export──▶ Google Drive / Dropbox / OneDrive / iCloud Drive folder on your Mac
                                 │
-                     inkrelay watch (FSEvents + periodic rescan)
+Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo and planner day)
+                                │
+                     inkrelay watch (FSEvents + periodic rescan + cloud poll)
                                 │
                   Vision handwriting recognition, on device
                                 │
-               ┌────────────────┴────────────────┐
-          Apple Notes                       Obsidian vault
-     (folder "Ink", via AppleScript)   (Markdown + original PDF)
+          ┌─────────────────────┼─────────────────────┐
+     Apple Notes            Obsidian vault        Apple Calendar
+ (folder "Ink",         (Markdown + original     (Daily planner only:
+  via AppleScript)              PDF)              all-day events)
 ```
 
 ## Status
 
-Version 0.1.0 is a command-line tool and background agent for macOS. A menu bar app, more destinations and an iPhone app are planned. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.2.0 is a command-line tool and background agent for macOS. A menu bar app, more destinations and an iPhone app are planned. See the [issues](../../issues) and [milestones](../../milestones).
 
 | Piece | State |
 |---|---|
 | Folder sources (any tablet that exports PDF or PNG) | Working, covered by tests |
+| Viwoods Cloud source (Paper, Meeting, Memo, Daily) | Built against the cloud's real responses and covered by tests; a full pull on a live account still to be run |
+| Apple Calendar destination (Daily planner) | Built and unit-tested with a fake AppleScript runner; not yet run against Calendar |
 | On-device recognition (Apple Vision) | Working on printed and handwriting-style text; real tablet exports still to be checked |
 | Obsidian destination | Working, covered by tests |
 | Apple Notes destination | Built and unit-tested with a fake AppleScript runner; not yet run against Notes |
@@ -52,6 +59,31 @@ Tips:
 - In the cloud app, mark the export folder **Available offline**. Otherwise every new export downloads on first read.
 - Set the tablet to export **PDF**, not its own notebook format.
 
+## Viwoods Cloud
+
+Viwoods publishes no API. InkRelay talks to the same endpoints the web portal at cloud.viwoods.com uses and signs requests the same way, so a portal update can break it. Turn on Viwoods Cloud on the tablet first (Settings → Viwoods Cloud; the Paper, Meeting, Memo and Daily apps each have their own sync switch).
+
+Signing in on the web needs a slider captcha, so InkRelay never asks for your password. Instead it uses the token the portal already holds:
+
+```bash
+.build/release/inkrelay viwoods login   # prints where to copy the token from, then asks for it
+```
+
+The token is kept in `viwoods-token.json` next to the config, readable only by you, and refreshed automatically afterwards. Then add a `viwoodsCloud` section to the config (see the example) and sync as usual. `inkrelay viwoods pull` fetches the cloud into the cache without syncing, for a first look.
+
+What arrives:
+
+- **Paper and Meeting notebooks** become one PDF each, in the folders you use on the tablet, under `<cache>/Paper/…` and `<cache>/Meeting/…`. The PDF holds the rendered page images the cloud stores, so it looks exactly like the tablet. Password-protected notebooks are skipped and reported.
+- **Memos** become `<cache>/Memo/<name>.pdf`.
+- **Daily planner**: each day with handwritten Tasks or Notes pages becomes `<cache>/Daily/<yyyy-MM-dd>.pdf`, which Obsidian and Notes receive like any notebook. Typed to-dos go straight to Apple Calendar.
+- The cache is `~/Library/Application Support/InkRelay/viwoods` unless `cachePath` says otherwise, and it is a source of its own: notes land under `Ink/viwoods-cloud/…` in Obsidian.
+
+The cloud is checked on every sync and, under `watch`, every `rescanIntervalSeconds`. Only changed notebooks are downloaded.
+
+## Apple Calendar
+
+The `appleCalendar` destination takes only the Daily planner. A handwritten day page becomes an all-day event titled `Daily plan: <first recognized line>` with the full recognized text in the notes. Each typed to-do becomes an all-day event of its own, `☐ …` or `☑ …` by its state, with its priority in the notes. Events are updated in place when the page or to-do changes; one deleted in Calendar is recreated on the next change. The calendar named in the config is created if missing. macOS asks once to let `inkrelay` control Calendar.
+
 ## Run
 
 ```bash
@@ -72,10 +104,12 @@ Agent logs go to `~/Library/Logs/InkRelay/inkrelay.log`.
 - Obsidian notes are regenerated when the export changes, so **edits you make to them in Obsidian are overwritten**. Edit in Apple Notes, or copy the text out.
 - Deleting an export doesn't delete its notes.
 - State lives in `~/Library/Application Support/InkRelay/state.json`. Delete it to re-send everything.
+- The Viwoods cache keeps its own ledger in `.manifest.json`. Delete it to pull everything from the cloud again.
 
 ## Permissions
 
-- **Apple Notes**: macOS asks once to let `inkrelay` (or Terminal, when run there) control Notes. Manage it later in System Settings → Privacy & Security → Automation.
+- **Apple Notes and Calendar**: macOS asks once to let `inkrelay` (or Terminal, when run there) control Notes and Calendar. Manage it later in System Settings → Privacy & Security → Automation.
+- **Viwoods Cloud**: the token file is created with owner-only permissions. Delete it to sign out.
 - **Files**: cloud folders under `~/Library/CloudStorage` may prompt for access the first time.
 
 ## Development

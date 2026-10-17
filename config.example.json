@@ -7,6 +7,13 @@
       "fileTypes": ["pdf"]
     }
   ],
+  "viwoodsCloud": {
+    "id": "viwoods-cloud",
+    "device": "Viwoods AiPaper",
+    "apps": ["paper", "meeting", "memo"],
+    "daily": true,
+    "dailyMonths": 12
+  },
   "destinations": [
     {
       "kind": "obsidian",
@@ -21,6 +28,12 @@
       "id": "apple-notes",
       "folder": "Ink",
       "account": "iCloud"
+    },
+    {
+      "kind": "appleCalendar",
+      "id": "apple-calendar",
+      "calendar": "Viwoods",
+      "pageTitle": "Daily plan"
     }
   ],
   "recognition": {
