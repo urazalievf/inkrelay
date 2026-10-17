@@ -32,4 +32,3 @@ xcuserdata/
 # InkRelay local runs
 config.json
 state.json
-/build/
