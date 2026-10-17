@@ -31,9 +31,58 @@ final class BarModel: ObservableObject {
         agentRunning = Self.isAgentLoaded()
         // Two engines writing the same state would duplicate notes, so the app waits while the agent runs.
         if !agentRunning { runner.start() }
+        // First run with Viwoods Cloud configured: ask for the sign-in straight away, no menu hunting.
+        if needsViwoodsSignIn {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.showViwoodsSignIn() }
+        }
     }
 
     var isPaused: Bool { snapshot.status == .paused }
+
+    var viwoodsTokenURL: URL { RelayEngine.tokenURL(besideState: runner.stateURL) }
+
+    /// The config pulls Viwoods Cloud but there's no working sign-in yet.
+    var needsViwoodsSignIn: Bool {
+        guard (try? ConfigStore.load(from: runner.configURL))?.viwoodsCloud != nil else { return false }
+        return !FileManager.default.fileExists(atPath: viwoodsTokenURL.path)
+            || snapshot.problems.contains { $0.contains("inkrelay viwoods login") }
+    }
+
+    private var signInWindow: NSWindow?
+
+    /// Opens Viwoods' sign-in page in a window of its own; it closes itself once signed in.
+    func showViwoodsSignIn() {
+        if let signInWindow {
+            signInWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let window = NSWindow(
+            contentViewController: NSHostingController(rootView: ViwoodsSignInView(model: self) { [weak self] in
+                self?.signInWindow?.close()
+                self?.signInWindow = nil
+            })
+        )
+        window.title = "Sign In to Viwoods"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        signInWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Checks the token against Viwoods Cloud, saves it, and syncs. Returns a message when it didn't work.
+    func saveViwoodsToken(_ token: String) -> String? {
+        do {
+            _ = try ViwoodsClient(credentials: FileCredentialStore(url: viwoodsTokenURL)).login(token: token)
+            runner.syncNow()
+            objectWillChange.send()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
 
     var symbol: String {
         switch snapshot.status {

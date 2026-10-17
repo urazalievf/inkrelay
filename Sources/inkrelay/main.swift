@@ -6,7 +6,7 @@ inkrelay \(InkRelayCore.version): relay handwritten notes from e-ink tablets int
 
 Usage:
   inkrelay setup                    Set up step by step: tablet, folders, vault, Apple apps
-  inkrelay doctor [--notes-roundtrip] [--no-apps]
+  inkrelay doctor [--notes-roundtrip [--notes-account NAME]] [--no-apps]
                                     Check folders, permissions, sign-ins and the background agent
   inkrelay init [--config PATH]     Write an example config to edit
   inkrelay sync [--config PATH]     Sync once and exit
@@ -188,11 +188,12 @@ case "doctor":
     }
     var checks = [DoctorCheck(.ok, "Config", configURL.path)] + Doctor(config: config, supportDirectory: supportDirectory).checks(includeApps: includeApps)
     if arguments.contains("--notes-roundtrip") {
-        let account = config.destinations.compactMap { destination -> String?? in
+        let configured = config.destinations.compactMap { destination -> String?? in
             if case .appleNotes(let notes) = destination { return .some(notes.account) }
             return nil
         }.first ?? nil
-        checks += NotesRoundTrip(account: account).run()
+        let named = arguments.firstIndex(of: "--notes-account").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
+        checks += NotesRoundTrip(account: named ?? configured).run()
     }
     for check in checks {
         print("\(check.status.rawValue) \(check.title)" + (check.detail.isEmpty ? "" : ": \(check.detail)"))
@@ -303,7 +304,9 @@ case "viwoods":
     case "login":
         let store = FileCredentialStore(url: tokenURL)
         print("""
-        InkRelay signs in to Viwoods Cloud with the access token the web portal already holds, because the portal's
+        Easiest: open the InkRelay menu bar app and choose Sign In to Viwoods; it signs in on Viwoods' own page.
+
+        Here, InkRelay signs in with the access token the web portal already holds, because the portal's
         sign-in form needs a slider captcha. To copy it:
           1. Open https://cloud.viwoods.com in Chrome or Safari and sign in.
           2. Open the developer tools (Option-Command-I), then Application (Chrome) or Storage (Safari) → Local Storage.

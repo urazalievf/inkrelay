@@ -62,7 +62,11 @@ public struct AppleNotesDestination: NoteDestination {
         tell application "Notes"
             if not (exists note id noteID) then return
             set theNote to note id noteID
-            set theAccount to account of container of theNote
+            -- Notes only answers `container` through an explicit get; folders can nest, so walk up to the account.
+            set theAccount to (get container of theNote)
+            repeat while (class of theAccount) is folder
+                set theAccount to (get container of theAccount)
+            end repeat
             if not (exists folder folderName of theAccount) then
                 make new folder at theAccount with properties {name:folderName}
             end if
@@ -107,7 +111,7 @@ public struct AppleNotesDestination: NoteDestination {
         tell application "Notes"
             if not (exists note id noteID) then return ""
             try
-                if name of container of note id noteID is "Recently Deleted" then return ""
+                if (get name of (get container of note id noteID)) is "Recently Deleted" then return ""
             end try
             set body of note id noteID to noteBody
         end tell

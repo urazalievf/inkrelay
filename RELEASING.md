@@ -15,13 +15,24 @@ Versions only move forward. The version lives in `InkRelayCore.version`; bump it
 
 The app shows `MAJOR.MINOR.PATCH` as its version. Its build number has to keep rising across all versions, so it packs all four numbers: `MAJOR*1000000 + MINOR*10000 + PATCH*100 + FIX` (`1.3.0.1` → `1030001`). `scripts/build-app.sh` computes both.
 
-## One-time setup: repository secrets
+## One-time setup
 
-Needs an Apple Developer Program membership.
+Needs an Apple Developer Program membership. One App Store Connect API key covers everything:
 
-1. **Developer ID Application certificate.** This Mac has only an "Apple Development" certificate, which can't sign apps for distribution outside the App Store. In Xcode → Settings → Accounts, select the team (DT9JP293AM) → Manage Certificates → + → **Developer ID Application**. Only the team's Account Holder can create one. Then in Keychain Access → My Certificates, right-click "Developer ID Application: …" → Export, as a `.p12` with a password. Check it with `security find-identity -v -p codesigning`.
-2. **App Store Connect API key** for notarization: App Store Connect → Users and Access → Integrations → App Store Connect API → generate a key with the Developer role. Download the `.p8` and note the key id and issuer id.
-3. Add the secrets (Settings → Secrets and variables → Actions), or with `gh`:
+1. App Store Connect → Users and Access → Integrations → [App Store Connect API](https://appstoreconnect.apple.com/access/integrations/api) → Team Keys → **+**, with the **Admin** role (Developer is enough if a Developer ID Application certificate already exists). Download the `.p8`, and copy the Issuer ID shown above the list.
+2. Run:
+
+```bash
+swift scripts/setup-releases.swift ~/Downloads/AuthKey_XXXXXXXXXX.p8 <issuer-id> --tag
+```
+
+The script checks the key, uses the "Developer ID Application" certificate in your keychain or creates one through the API (a fresh key pair, imported into the login keychain), exports it with a random password (macOS asks you to allow the export), stores the six repository secrets with `gh secret set`, and with `--tag` tags the current version and pushes the tag. Nothing is printed or written to the repository. `--dry-run` only checks the key.
+
+If Apple won't create the certificate through the API (only the Account Holder can make Developer ID certificates), make it in Xcode → Settings → Accounts → team DT9JP293AM → Manage Certificates → + → **Developer ID Application**, and run the script again.
+
+### By hand
+
+The workflow reads these secrets (Settings → Secrets and variables → Actions):
 
 ```bash
 gh secret set DEVELOPER_ID_P12_BASE64 < <(base64 -i developer-id.p12)
@@ -37,12 +48,12 @@ None of these ever go in the repository. If any is missing the workflow stops be
 ## Cutting a release
 
 ```bash
-scripts/check-version.sh v0.4.0   # the tag must match InkRelayCore.version
-git tag v0.4.0
-git push origin v0.4.0
+scripts/check-version.sh v0.6.0   # the tag must match InkRelayCore.version
+git tag v0.6.0
+git push origin v0.6.0
 ```
 
-The workflow tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release with `InkRelay-0.4.0.zip` and generated notes.
+The workflow tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release with `InkRelay-0.6.0.zip` and generated notes.
 
 ## Local builds
 

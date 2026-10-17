@@ -85,7 +85,7 @@ public final class ViwoodsCloudPuller {
             }
             do {
                 let notebook = try client.notebook(app, uuid: item.resourceId)
-                try writePDF(from: notebook.pageImageURLs(), to: relativePath)
+                try writePDF(from: notebook.pageImageURLs(), to: relativePath, modified: item.lastModifiedTime)
                 remember(item.resourceId, modified: item.lastModifiedTime, at: relativePath)
                 report.updated += 1
             } catch {
@@ -109,7 +109,7 @@ public final class ViwoodsCloudPuller {
             }
             do {
                 let memo = try client.memo(uuid: item.resourceId)
-                try writePDF(from: memo.pageImageURLs(), to: relativePath)
+                try writePDF(from: memo.pageImageURLs(), to: relativePath, modified: item.lastModifiedTime)
                 remember(item.resourceId, modified: item.lastModifiedTime, at: relativePath)
                 report.updated += 1
             } catch {
@@ -153,7 +153,7 @@ public final class ViwoodsCloudPuller {
                 .sorted { ($0.type, $0.pageOrder ?? 0) < ($1.type, $1.pageOrder ?? 0) }
                 .compactMap { $0.url.flatMap(URL.init(string:)) }
             if !urls.isEmpty {
-                try writePDF(from: urls, to: relativePath)
+                try writePDF(from: urls, to: relativePath, modified: modified)
             }
             for todo in todos where todo.isDelete != 1 {
                 deliver(DailyTodo(todo, date: date), into: &report)
@@ -193,10 +193,16 @@ public final class ViwoodsCloudPuller {
 
     // MARK: Files and manifest
 
-    private func writePDF(from urls: [URL], to relativePath: String) throws {
+    /// `modified` is the cloud's time in milliseconds. The PDF carries it, so notes are dated when they were
+    /// written on the tablet rather than when they were pulled.
+    private func writePDF(from urls: [URL], to relativePath: String, modified: Int64?) throws {
         guard !urls.isEmpty else { throw PDFComposerError.noPages }
         let images = try urls.map(client.download)
-        try PDFComposer.write(pageImages: images, to: config.cacheURL.appendingPathComponent(relativePath))
+        let url = config.cacheURL.appendingPathComponent(relativePath)
+        try PDFComposer.write(pageImages: images, to: url)
+        if let modified, modified > 0 {
+            try? fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: Double(modified) / 1000)], ofItemAtPath: url.path)
+        }
     }
 
     private func isCurrent(_ resourceID: String, modified: Int64?, at relativePath: String) -> Bool {

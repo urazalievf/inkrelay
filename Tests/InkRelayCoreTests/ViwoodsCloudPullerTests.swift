@@ -108,6 +108,14 @@ final class ViwoodsCloudPullerTests: XCTestCase {
         XCTAssertNil(plans.upserts.first?.previous)
         XCTAssertEqual(report.plansDelivered, 1)
         XCTAssertFalse(transport.sent.contains { $0.request.url?.absoluteString == "https://cdn.test/gone.png" })
+
+        // Dated by the cloud's milliseconds, not the pull: the notebook 100, the memo 50, the day its newest item 310.
+        func modified(_ relativePath: String) throws -> TimeInterval? {
+            try (FileManager.default.attributesOfItem(atPath: cache.url.appendingPathComponent(relativePath).path)[.modificationDate] as? Date)?.timeIntervalSince1970
+        }
+        XCTAssertEqual(try XCTUnwrap(modified("Paper/Work- Q4/ll.pdf")), 0.1, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(modified("Memo/Memo 1.pdf")), 0.05, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(modified("Daily/2026-01-13.pdf")), 0.31, accuracy: 0.001)
     }
 
     func testSecondPullDownloadsNothingWhenNothingChanged() throws {
