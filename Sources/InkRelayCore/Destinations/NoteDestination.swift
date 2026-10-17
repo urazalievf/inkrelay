@@ -94,8 +94,15 @@ public enum DestinationFactory {
                 return ReviewStackDestination(config: stack, store: ReviewStore(directory: context.reviewDirectory), now: context.now)
             case .notion(let notion):
                 return NotionDestination(config: notion, secrets: context.secrets, transport: context.transport)
+            case .appleReminders(let reminders):
+                return AppleRemindersDestination(config: reminders, runner: context.scriptRunner)
             }
         }
+    }
+
+    /// Calendars that can take a confirmed event with a time.
+    public static func eventWriters(in destinations: [NoteDestination]) -> [TimedEventWriter] {
+        destinations.compactMap { $0 as? TimedEventWriter }
     }
 
     /// The destinations that also take planner to-dos.

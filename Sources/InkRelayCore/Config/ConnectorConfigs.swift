@@ -157,6 +157,26 @@ extension DestinationConfig {
         }
     }
 
+    /// Tasks written on pages, and Viwoods Daily to-dos, as Apple Reminders.
+    public struct AppleRemindersConfig: Codable, Equatable {
+        public var id: String
+        /// List name; `{device}` and `{source}` are filled in, so each tablet can have its own list.
+        public var list: String
+
+        public init(id: String, list: String = "Ink") {
+            self.id = id
+            self.list = list
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, list }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            list = try container.decodeIfPresent(String.self, forKey: .list) ?? "Ink"
+        }
+    }
+
     var needsGoogle: Bool {
         switch self {
         case .googleCalendar, .googleDocs: return true

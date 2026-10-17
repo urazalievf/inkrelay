@@ -37,6 +37,10 @@ public final class OutlookCalendarDestination: NoteDestination, PlanDestination,
         _ = try account.client.call("DELETE", MicrosoftAccount.url("me/events/\(pathSegment(record.externalID))"), allowing: [404])
     }
 
+    func insertTimed(_ body: [String: Any]) throws -> String {
+        try insert(body, retryingWithNewCalendar: true)
+    }
+
     private func insert(_ body: [String: Any], retryingWithNewCalendar: Bool) throws -> String {
         let calendar = try calendarID()
         let (status, object) = try account.client.call("POST", MicrosoftAccount.url("me/calendars/\(pathSegment(calendar))/events"), json: body, allowing: [404])

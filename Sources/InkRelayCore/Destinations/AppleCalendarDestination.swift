@@ -8,6 +8,7 @@ import Foundation
 public struct AppleCalendarDestination: NoteDestination, PlanDestination, PlannerEventWriter {
     public var config: DestinationConfig.AppleCalendarConfig
     private let runner: AppleScriptRunner
+    var scriptRunner: AppleScriptRunner { runner }
 
     public init(config: DestinationConfig.AppleCalendarConfig, runner: AppleScriptRunner = OSAScriptRunner()) {
         self.config = config

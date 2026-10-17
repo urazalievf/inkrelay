@@ -167,6 +167,7 @@ public enum DestinationConfig: Codable, Equatable {
     case oneNote(OneNoteConfig)
     case reviewStack(ReviewStackConfig)
     case notion(NotionConfig)
+    case appleReminders(AppleRemindersConfig)
 
     public struct ObsidianConfig: Codable, Equatable {
         public var id: String
@@ -262,6 +263,7 @@ public enum DestinationConfig: Codable, Equatable {
         case .oneNote(let config): return config.id
         case .reviewStack(let config): return config.id
         case .notion(let config): return config.id
+        case .appleReminders(let config): return config.id
         }
     }
 
@@ -276,6 +278,7 @@ public enum DestinationConfig: Codable, Equatable {
         case .oneNote: return "oneNote"
         case .reviewStack: return "reviewStack"
         case .notion: return "notion"
+        case .appleReminders: return "appleReminders"
         }
     }
 
@@ -293,6 +296,7 @@ public enum DestinationConfig: Codable, Equatable {
         case "oneNote": self = .oneNote(try OneNoteConfig(from: decoder))
         case "reviewStack": self = .reviewStack(try ReviewStackConfig(from: decoder))
         case "notion": self = .notion(try NotionConfig(from: decoder))
+        case "appleReminders": self = .appleReminders(try AppleRemindersConfig(from: decoder))
         default:
             throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use one of: \(Self.kinds.joined(separator: ", ")).")
         }
@@ -311,10 +315,11 @@ public enum DestinationConfig: Codable, Equatable {
         case .oneNote(let config): try config.encode(to: encoder)
         case .reviewStack(let config): try config.encode(to: encoder)
         case .notion(let config): try config.encode(to: encoder)
+        case .appleReminders(let config): try config.encode(to: encoder)
         }
     }
 
-    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack", "notion"]
+    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack", "notion", "appleReminders"]
 }
 
 public struct RecognitionConfig: Codable, Equatable {

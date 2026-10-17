@@ -128,7 +128,9 @@ case "watch":
     let (triggers, continuation) = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
     var reviewServer: ReviewServer?
     if let stack = reviewStackConfig(config) {
-        let server = ReviewServer(store: ReviewStore(directory: DestinationContext(config: config, supportDirectory: supportDirectory).reviewDirectory), config: stack)
+        let context = DestinationContext(config: config, supportDirectory: supportDirectory)
+        let calendars = DestinationFactory.eventWriters(in: DestinationFactory.make(config.destinations, context: context))
+        let server = ReviewServer(store: ReviewStore(directory: context.reviewDirectory), config: stack, calendars: calendars)
         do {
             log("Review stack at \(try server.start())")
             reviewServer = server
@@ -363,7 +365,8 @@ case "review":
         }
 
     case "open", "serve":
-        let server = ReviewServer(store: store, config: stack)
+        let calendars = DestinationFactory.eventWriters(in: DestinationFactory.make(config.destinations, context: DestinationContext(config: config, supportDirectory: supportDirectory)))
+        let server = ReviewServer(store: store, config: stack, calendars: calendars)
         let url: URL
         do {
             url = try server.start()

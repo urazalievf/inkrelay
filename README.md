@@ -105,6 +105,12 @@ Add a `reviewStack` destination and every page InkRelay relays becomes a card. W
 
 The page listens on 127.0.0.1 only, refuses requests whose Host isn't local, and actions need a custom header, so other websites can't read or change your stack. Cards and their images live in `review/` next to the config.
 
+## Tasks, reminders and suggested events
+
+Write tasks on the tablet the way you already do (`☐ Call the bank`, `[ ] book flights`, `TODO: renew passport`) and an `appleReminders` destination turns each into a reminder in the list named by `list` (default `Ink`; `{device}` and `{source}` are filled in, such as `"Ink · {device}"`). A date in the task, such as "by April 15" or "March 3 at 3pm", becomes the due date; on a planner page a bare time ("call Sam 4:30pm") belongs to that page's day. Tick the box on the tablet (`☑`, `[x]`) and the reminder is completed on the next sync. Re-syncs never duplicate, and edits you make in Reminders stay. Viwoods Daily to-dos go to Reminders too, due on their day.
+
+Lines that name a date and a time but aren't tasks ("Dentist March 3 at 3pm") show up in the review stack as **suggested events**. Nothing is created until you press **Add to calendar** (or `A`), which adds it to every calendar destination you have: Apple, Google or Outlook. **Dismiss** drops it.
+
 ## Google: Calendar and Docs
 
 `googleCalendar` puts planner pages and to-dos into a calendar InkRelay creates (default name `Viwoods`). `googleDocs` turns each note into a Google Doc with the recognized text in a Drive folder InkRelay creates (default `Ink`). InkRelay asks only for the `calendar.app.created` and `drive.file` permissions, so it can see the calendar and files it made and nothing else in your account.

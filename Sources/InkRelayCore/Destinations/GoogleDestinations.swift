@@ -42,6 +42,10 @@ public final class GoogleCalendarDestination: NoteDestination, PlanDestination, 
         _ = try account.client.call("DELETE", url, allowing: [404, 410])
     }
 
+    func insertTimed(_ body: [String: Any]) throws -> String {
+        try insert(body, retryingWithNewCalendar: true)
+    }
+
     private func insert(_ body: [String: Any], retryingWithNewCalendar: Bool) throws -> String {
         let calendar = try calendarID()
         let url = Self.api.appendingPathComponent("calendars/\(pathSegment(calendar))/events")
