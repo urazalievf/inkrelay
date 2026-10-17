@@ -23,13 +23,16 @@ public struct FileRecord: Codable, Equatable {
     public var destinations: [String: DestinationRecord]
     /// When the export was first found missing from its folder. Nil while it's there.
     public var missingSince: Date?
+    /// Every page was empty, so nothing was filed. It stays that way until the export changes.
+    public var blank: Bool?
 
-    public init(size: Int64, modified: Date, contentHash: String, destinations: [String: DestinationRecord] = [:], missingSince: Date? = nil) {
+    public init(size: Int64, modified: Date, contentHash: String, destinations: [String: DestinationRecord] = [:], missingSince: Date? = nil, blank: Bool? = nil) {
         self.size = size
         self.modified = modified
         self.contentHash = contentHash
         self.destinations = destinations
         self.missingSince = missingSince
+        self.blank = blank
     }
 
     /// True when size and modification date still match, so the file can be skipped without reading it.

@@ -21,7 +21,7 @@ final class AppleCalendarDestinationTests: XCTestCase {
         XCTAssertEqual(runner.calls.count, 1)
         XCTAssertEqual(runner.calls[0].source, AppleCalendarDestination.createScript)
         XCTAssertEqual(runner.calls[0].arguments[0], "Viwoods")
-        XCTAssertEqual(runner.calls[0].arguments[1], "Daily plan: Gym at 7")
+        XCTAssertEqual(runner.calls[0].arguments[1], "Daily plan", "misread first lines made poor titles, so the text goes in the notes")
         XCTAssertTrue(runner.calls[0].arguments[2].hasPrefix("Gym at 7\nCall Sam"))
         XCTAssertEqual(runner.calls[0].arguments[3], "2026-01-13")
     }
@@ -72,7 +72,13 @@ final class AppleCalendarDestinationTests: XCTestCase {
     func testLongFirstLinesAreShortenedInTheTitle() {
         let long = String(repeating: "x", count: 100)
         XCTAssertEqual(PlannerEvent.firstLine(of: long).count, 80)
-        XCTAssertEqual(PlannerEvent.summary(prefix: "Daily plan", text: ""), "Daily plan")
+    }
+
+    func testAnAITranscriptionTitleNamesTheDay() {
+        let note = makeNote(title: "2026-01-13", relativePath: "Daily/2026-01-13.pdf", pages: [
+            RecognizedPage(number: 1, text: "Gym at 7", suggestedTitle: "Gym and errands"),
+        ])
+        XCTAssertEqual(PlannerEvent.dayPage(note, title: "Daily plan")?.summary, "Daily plan: Gym and errands")
     }
 
     func testAllDayEventsEndTheNextDay() {

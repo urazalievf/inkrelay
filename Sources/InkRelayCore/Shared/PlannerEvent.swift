@@ -22,8 +22,11 @@ public struct PlannerEvent: Equatable {
         guard let date = plannerDate(of: note) else { return nil }
         let text = note.pages.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }.joined(separator: "\n\n")
+        // Handwriting's first line is too often misread to title an event ("ter те" for a to-do list), and
+        // Vision rates those misreadings as confidently as good lines. AI transcription's title is reliable.
+        let suggested = note.pages.compactMap(\.suggestedTitle).first { !$0.isEmpty }
         return PlannerEvent(
-            summary: summary(prefix: title, text: text),
+            summary: suggested.map { "\(title): \(firstLine(of: $0))" } ?? title,
             description: (text.isEmpty ? "No text recognized." : text) + "\n\nFrom \(note.device). Synced by InkRelay.",
             date: date
         )
@@ -46,11 +49,6 @@ public struct PlannerEvent: Equatable {
         let parts = note.relativePath.split(separator: "/")
         guard parts.count >= 2, parts[parts.count - 2] == "Daily" else { return nil }
         return ViwoodsDate.normalize(note.title)
-    }
-
-    static func summary(prefix: String, text: String) -> String {
-        let line = firstLine(of: text)
-        return line.isEmpty ? prefix : "\(prefix): \(line)"
     }
 
     static func firstLine(of text: String, limit: Int = 80) -> String {

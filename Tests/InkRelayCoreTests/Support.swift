@@ -43,10 +43,12 @@ final class TrashRecorder: FileManager {
 final class FakeRecognizer: TextRecognizer {
     var calls: [URL] = []
     var text = "hello from the tablet"
+    /// Answers with an empty page instead.
+    var blank = false
 
     func recognize(fileAt url: URL) throws -> [RecognizedPage] {
         calls.append(url)
-        return [RecognizedPage(number: 1, text: text)]
+        return [RecognizedPage(number: 1, text: blank ? "" : text, isBlank: blank)]
     }
 }
 

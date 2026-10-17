@@ -41,7 +41,7 @@ struct SetupView: View {
                 Toggle("Apple Calendar (planner pages and to-dos)", isOn: $appleCalendar)
                 Toggle("Apple Reminders (tasks you write)", isOn: $appleReminders)
                 Toggle("Review stack (read later)", isOn: $reviewStack)
-                if appleNotes, SharedLedger.iCloudDriveFolder != nil {
+                if appleNotes || reviewStack, SharedLedger.iCloudDriveFolder != nil {
                     Toggle("Share with InkRelay on iPhone and iPad (iCloud Drive)", isOn: $shareWithPhone)
                 }
             }

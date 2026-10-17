@@ -171,12 +171,16 @@ public final class ReviewStore {
     /// Today's stack: everything due, newest arrivals first, a notebook's pages in order, at most `limit`.
     public func stack(now: Date, limit: Int) throws -> (cards: [ReviewCard], due: Int) {
         let due = try load().cards.values.filter { $0.status != .done && $0.dueAt <= now }
-        let ordered = due.sorted { a, b in
+        return (Array(Self.ordered(due).prefix(max(limit, 0))), due.count)
+    }
+
+    /// Newest arrivals first, a notebook's pages in order.
+    static func ordered<S: Sequence>(_ cards: S) -> [ReviewCard] where S.Element == ReviewCard {
+        cards.sorted { a, b in
             if a.arrivedAt != b.arrivedAt { return a.arrivedAt > b.arrivedAt }
             if a.itemKey != b.itemKey { return a.itemKey < b.itemKey }
             return (a.page ?? 0) < (b.page ?? 0)
         }
-        return (Array(ordered.prefix(max(limit, 0))), due.count)
     }
 
     /// Done: out of the stack, or scheduled to come back when `resurfaceDays` says so.
@@ -262,7 +266,7 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
         let images = renderImages(note.originalURL)
         let title = Self.title(for: note)
         let folder = (note.relativePath as NSString).deletingLastPathComponent
-        let drafts = note.pages.map { page -> CardDraft in
+        let drafts = note.pages.filter { !$0.isBlank }.map { page -> CardDraft in
             let image = page.number <= images.count ? images[page.number - 1] : nil
             var subtitle = note.pages.count > 1 ? "Page \(page.number) of \(note.pages.count)" : "1 page"
             if !folder.isEmpty { subtitle += " · " + folder }

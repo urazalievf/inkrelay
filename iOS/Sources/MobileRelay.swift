@@ -52,6 +52,12 @@ final class MobileRelay {
     }
 
     private func resolve(_ key: String) -> URL? {
+        #if DEBUG
+        // Lets a simulator run point at a folder on the Mac instead of iCloud Drive.
+        if key == ledgerBookmarkKey, let path = ProcessInfo.processInfo.environment["INKRELAY_SHARED_FOLDER"] {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+        #endif
         guard let data = defaults.data(forKey: key) else { return nil }
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale) else { return nil }
@@ -98,6 +104,18 @@ final class MobileRelay {
         return notes.sorted { $0.modified > $1.modified }
     }
 
+    // MARK: Review
+
+    /// The Mac's review stack, read from the shared folder. Each call opens the folder for as long as it runs.
+    func withReviewStack<T>(_ body: (PhoneReviewStack) throws -> T) throws -> T {
+        guard let folder = resolve(ledgerBookmarkKey) else { throw MobileError.noSharedFolder }
+        let accessing = folder.startAccessingSecurityScopedResource()
+        defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
+        // Named by this install, so each iPhone and iPad writes a file of its own.
+        let device = UIDevice.current.identifierForVendor?.uuidString ?? "phone"
+        return try body(PhoneReviewStack(base: folder, device: device))
+    }
+
     /// Reads any PDF or image, for the "Recognize Handwriting" action.
     func recognize(_ data: Data, fileName: String) throws -> String {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -113,10 +131,12 @@ final class MobileRelay {
 
 enum MobileError: Error, LocalizedError {
     case noFolder
+    case noSharedFolder
 
     var errorDescription: String? {
         switch self {
         case .noFolder: return "Open InkRelay and choose the folder your tablet exports to."
+        case .noSharedFolder: return "Choose the InkRelay folder in iCloud Drive, the one your Mac shares."
         }
     }
 }

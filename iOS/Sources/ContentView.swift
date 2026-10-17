@@ -2,6 +2,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    var body: some View {
+        TabView {
+            ReviewView()
+                .tabItem { Label("Review", systemImage: "rectangle.stack") }
+            NotesView()
+                .tabItem { Label("Notes", systemImage: "doc.text") }
+        }
+    }
+}
+
+struct NotesView: View {
     private enum Picking { case exports, ledger }
 
     @State private var folderName = MobileRelay.shared.folderName
@@ -38,7 +49,7 @@ struct ContentView: View {
                         }
                     }
                 } footer: {
-                    Text("Pick the InkRelay folder in iCloud Drive, the same one the Mac uses, so a note filed by one isn't filed again by the other.")
+                    Text("Pick the InkRelay folder in iCloud Drive, the same one the Mac uses. It brings the Mac's review stack here, and a note filed by one isn't filed again by the other.")
                 }
 
                 Section {
@@ -101,7 +112,7 @@ struct ContentView: View {
                         if picking == .ledger {
                             try MobileRelay.shared.setLedgerFolder(url)
                             ledgerName = MobileRelay.shared.ledgerFolderName
-                            message = "Notes filed by the Mac won't be filed again here."
+                            message = "The review stack and notes filed by the Mac now come through this folder."
                         } else {
                             try MobileRelay.shared.setFolder(url)
                             folderName = MobileRelay.shared.folderName

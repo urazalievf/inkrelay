@@ -57,6 +57,11 @@ final class SetupAndDoctorTests: XCTestCase {
         XCTAssertEqual(config.destinations.map(\.kind), ["obsidian", "appleNotes", "appleCalendar", "appleReminders", "reviewStack"])
         XCTAssertEqual(SetupChoices(tablet: TabletPreset.all[3], exportFolder: "~/x").tablet.fileTypes, ["pdf", "png"])
         XCTAssertThrowsError(try SetupChoices(tablet: TabletPreset.all[1], reviewStack: false).config(), "nothing to read from and nowhere to write")
+
+        let shared = try SetupChoices(tablet: viwoods, useViwoodsCloud: true, shareWithPhone: true).config()
+        guard case .reviewStack(let stack) = shared.destinations.last else { return XCTFail("no review stack") }
+        XCTAssertTrue(stack.shareWithPhone, "sharing with a phone shares the review stack, even without Apple Notes")
+        XCTAssertNil(shared.sharedLedger)
     }
 
     // MARK: Doctor

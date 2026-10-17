@@ -99,15 +99,21 @@ extension DestinationConfig {
         public var dailyLimit: Int
         /// Bring a card back this many days after each "Done", in order. Empty means done is done.
         public var resurfaceDays: [Int]
+        /// Review the stack in InkRelay on iPhone and iPad too, through iCloud Drive.
+        public var shareWithPhone: Bool
+        /// The folder to share through; defaults to the shared ledger's folder, then iCloud Drive/InkRelay.
+        public var shareFolder: String?
 
-        public init(id: String, port: Int = 7788, dailyLimit: Int = 25, resurfaceDays: [Int] = []) {
+        public init(id: String, port: Int = 7788, dailyLimit: Int = 25, resurfaceDays: [Int] = [], shareWithPhone: Bool = false, shareFolder: String? = nil) {
             self.id = id
             self.port = port
             self.dailyLimit = dailyLimit
             self.resurfaceDays = resurfaceDays
+            self.shareWithPhone = shareWithPhone
+            self.shareFolder = shareFolder
         }
 
-        private enum CodingKeys: String, CodingKey { case id, port, dailyLimit, resurfaceDays }
+        private enum CodingKeys: String, CodingKey { case id, port, dailyLimit, resurfaceDays, shareWithPhone, shareFolder }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -115,6 +121,15 @@ extension DestinationConfig {
             port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 7788
             dailyLimit = try container.decodeIfPresent(Int.self, forKey: .dailyLimit) ?? 25
             resurfaceDays = try container.decodeIfPresent([Int].self, forKey: .resurfaceDays) ?? []
+            shareWithPhone = try container.decodeIfPresent(Bool.self, forKey: .shareWithPhone) ?? false
+            shareFolder = try container.decodeIfPresent(String.self, forKey: .shareFolder)
+        }
+
+        /// Where the stack is shared with phones, when it is.
+        public func shareBase(ledger: SharedLedgerConfig?) -> URL? {
+            guard shareWithPhone else { return nil }
+            if let shareFolder { return URL(fileURLWithPath: PathExpansion.expand(shareFolder), isDirectory: true) }
+            return ledger?.folderURL ?? SharedLedger.iCloudDriveFolder
         }
 
         func validate() throws {

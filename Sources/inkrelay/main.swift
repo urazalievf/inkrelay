@@ -157,7 +157,7 @@ case "setup":
     choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
     choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
     if choices.appleNotesAccount != nil, SharedLedger.iCloudDriveFolder != nil {
-        choices.shareWithPhone = yes("Also use InkRelay on an iPhone or iPad? Share what's filed in Notes through iCloud Drive so it isn't filed twice.", default: false)
+        choices.shareWithPhone = yes("Also use InkRelay on an iPhone or iPad? Your review stack (and what's filed in Notes) is shared through iCloud Drive.", default: false)
     }
 
     do {

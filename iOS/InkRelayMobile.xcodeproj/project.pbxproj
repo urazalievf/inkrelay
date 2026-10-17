@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		16FF579437B0796109570776 /* InkRelayMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E4855C1ADB6EF7C94C2B81 /* InkRelayMobileApp.swift */; };
 		649A107311E1A670E01FD374 /* MobileRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07B905EBD5B17C99291ADAE7 /* MobileRelay.swift */; };
+		6F2F95C823F7CB85889ED9E4 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47BDA7751090B58819C81CE7 /* ReviewView.swift */; };
 		92DDDD701874EDB76BB459E2 /* InkRelayCore in Frameworks */ = {isa = PBXBuildFile; productRef = 16C4769572FE3554BD8B2EE6 /* InkRelayCore */; };
 		A6ACD03113B8E3ECAC5216FA /* Intents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 267AE6AEB46C9401B0990168 /* Intents.swift */; };
 		D54D941B391D7868EAB0A03B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BE75578A0C8C6309D9DF6B9 /* ContentView.swift */; };
@@ -19,6 +20,7 @@
 		0BE75578A0C8C6309D9DF6B9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		228EECB929D14C04758A9D72 /* inkrelay */ = {isa = PBXFileReference; lastKnownFileType = folder; name = inkrelay; path = ..; sourceTree = SOURCE_ROOT; };
 		267AE6AEB46C9401B0990168 /* Intents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intents.swift; sourceTree = "<group>"; };
+		47BDA7751090B58819C81CE7 /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewView.swift; sourceTree = "<group>"; };
 		BC4D0D1751F1C4BD8C0DDE17 /* InkRelayMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = InkRelayMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E8E4855C1ADB6EF7C94C2B81 /* InkRelayMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InkRelayMobileApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -42,6 +44,7 @@
 				E8E4855C1ADB6EF7C94C2B81 /* InkRelayMobileApp.swift */,
 				267AE6AEB46C9401B0990168 /* Intents.swift */,
 				07B905EBD5B17C99291ADAE7 /* MobileRelay.swift */,
+				47BDA7751090B58819C81CE7 /* ReviewView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -139,6 +142,7 @@
 				16FF579437B0796109570776 /* InkRelayMobileApp.swift in Sources */,
 				A6ACD03113B8E3ECAC5216FA /* Intents.swift in Sources */,
 				649A107311E1A670E01FD374 /* MobileRelay.swift in Sources */,
+				6F2F95C823F7CB85889ED9E4 /* ReviewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,7 +168,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.urazalievf.InkRelay.mobile;
 				PRODUCT_NAME = InkRelay;
 				SDKROOT = iphoneos;
@@ -255,7 +259,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.5.0;
+				MARKETING_VERSION = 0.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.urazalievf.InkRelay.mobile;
 				PRODUCT_NAME = InkRelay;
 				SDKROOT = iphoneos;

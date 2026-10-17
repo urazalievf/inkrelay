@@ -54,7 +54,8 @@
       "id": "review",
       "port": 7788,
       "dailyLimit": 25,
-      "resurfaceDays": [3, 14, 60]
+      "resurfaceDays": [3, 14, 60],
+      "shareWithPhone": false
     },
     {
       "kind": "googleCalendar",

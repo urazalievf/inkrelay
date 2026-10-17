@@ -38,7 +38,7 @@ final class CloudDestinationTests: XCTestCase {
         XCTAssertEqual([first, second], ["evt-1", "evt-2"])
         XCTAssertEqual(transport.requests(to: "calendar/v3/calendars").count, 1)
         let events = transport.requests(to: "calendar/v3/calendars/cal-1@group.calendar.google.com/events")
-        XCTAssertEqual(events[0].body["summary"] as? String, "Daily plan: Gym at 7")
+        XCTAssertEqual(events[0].body["summary"] as? String, "Daily plan")
         XCTAssertEqual((events[0].body["start"] as? [String: Any])?["date"] as? String, "2026-01-13")
         XCTAssertEqual((events[0].body["end"] as? [String: Any])?["date"] as? String, "2026-01-14")
         XCTAssertEqual((events[1].body["end"] as? [String: Any])?["date"] as? String, "2026-02-01")
@@ -147,7 +147,7 @@ final class CloudDestinationTests: XCTestCase {
 
         XCTAssertEqual(id, "ev-1")
         let event = try XCTUnwrap(transport.requests(to: "v1.0/me/calendars/vw-1/events").first).body
-        XCTAssertEqual(event["subject"] as? String, "Daily plan: Gym at 7")
+        XCTAssertEqual(event["subject"] as? String, "Daily plan")
         XCTAssertEqual(event["isAllDay"] as? Bool, true)
         XCTAssertEqual(event["start"] as? [String: String], ["dateTime": "2026-01-13T00:00:00", "timeZone": "America/Chicago"])
         XCTAssertEqual(event["end"] as? [String: String], ["dateTime": "2026-01-14T00:00:00", "timeZone": "America/Chicago"])

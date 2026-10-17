@@ -16,6 +16,7 @@ public final class RelayEngine {
     /// What other devices filed into Apple Notes.
     private let ledger: SharedLedger?
     private let kindle: KindleMailPuller?
+    private let reviewShare: ReviewPublisher?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -28,6 +29,7 @@ public final class RelayEngine {
         aiRecognizer: TextRecognizer? = nil,
         ledger: SharedLedger? = nil,
         kindle: KindleMailPuller? = nil,
+        reviewShare: ReviewPublisher? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -39,6 +41,7 @@ public final class RelayEngine {
         self.aiRecognizer = aiRecognizer
         self.ledger = ledger
         self.kindle = kindle
+        self.reviewShare = reviewShare
         self.fileManager = fileManager
         self.now = now
     }
@@ -67,8 +70,18 @@ public final class RelayEngine {
             puller: puller,
             aiRecognizer: ai,
             ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
-            kindle: config.kindleMail.map { KindleMailPuller(config: $0) }
+            kindle: config.kindleMail.map { KindleMailPuller(config: $0) },
+            reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent())
         )
+    }
+
+    static func reviewPublisher(config: RelayConfig, destinations: [NoteDestination], supportDirectory: URL) -> ReviewPublisher? {
+        for case .reviewStack(let stack) in config.destinations {
+            guard let base = stack.shareBase(ledger: config.sharedLedger) else { return nil }
+            let directory = DestinationContext(config: config, supportDirectory: supportDirectory).reviewDirectory
+            return ReviewPublisher(store: ReviewStore(directory: directory), base: base, config: stack, calendars: DestinationFactory.eventWriters(in: destinations))
+        }
+        return nil
     }
 
     /// The Viwoods token sits next to the state file, so separate configs never share a login.
@@ -139,6 +152,11 @@ public final class RelayEngine {
                 }
             }
         }
+        // Last, so phones see this pass's cards and the Mac applies what they decided since the previous one.
+        if let reviewShare {
+            let shared = reviewShare.sync()
+            report.warnings += shared.failures
+        }
         return report
     }
 
@@ -146,6 +164,17 @@ public final class RelayEngine {
         let key = SyncState.key(sourceID: source.id, relativePath: file.relativePath)
         let item = "\(source.id)/\(file.relativePath)"
         var previous = store.record(for: key)
+
+        // An empty notebook stays out of every destination until someone writes in it.
+        if let known = previous, known.blank == true, known.looksUnchanged(file) {
+            if known.missingSince != nil {
+                var back = known
+                back.missingSince = nil
+                try? store.set(back, for: key)
+            }
+            report.unchanged += 1
+            return
+        }
 
         // Notes synced before the archive existed get archived once, read with Vision so it costs nothing.
         let needsArchive = previous.map { notes.entry(forKey: key)?.contentHash != $0.contentHash } ?? false
@@ -209,6 +238,13 @@ public final class RelayEngine {
                 contentHash: hash,
                 pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
             )
+
+            if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {
+                record.blank = true
+                try store.set(record, for: key)
+                report.blank += 1
+                return
+            }
 
             try? notes.upsert(note, key: key, at: now())
             var deliveredAll = true
@@ -321,6 +357,8 @@ public struct SyncReport: Equatable {
     public var removed = 0
     /// Versions another device had already filed into Apple Notes.
     public var filedElsewhere = 0
+    /// Exports with nothing written in them yet, left out of every destination.
+    public var blank = 0
     /// Things worth knowing that aren't failures.
     public var warnings: [String] = []
     /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
@@ -333,6 +371,7 @@ public struct SyncReport: Equatable {
         if renamed > 0 { text += ", \(renamed) renamed" }
         if removed > 0 { text += ", \(removed) removed" }
         if filedElsewhere > 0 { text += ", \(filedElsewhere) already in Notes from another device" }
+        if blank > 0 { text += ", \(blank) blank" }
         if deferred > 0 { text += ", \(deferred) still being written" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         if let pull { text = pull.summary + "; " + text }

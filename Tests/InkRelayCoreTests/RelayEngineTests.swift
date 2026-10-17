@@ -77,6 +77,39 @@ final class RelayEngineTests: XCTestCase {
         XCTAssertEqual(vault.upserts.last?.previous?.externalID, "vault:One.pdf")
     }
 
+    func testBlankExportsWaitForInk() throws {
+        let file = try exports.write("Memo/Memo 1.pdf", "empty")
+        recognizer.blank = true
+
+        let first = try makeEngine().syncOnce()
+        XCTAssertEqual(first.blank, 1)
+        XCTAssertTrue(first.summary.contains("1 blank"))
+        XCTAssertEqual(vault.upserts.count + notes.upserts.count, 0)
+
+        let second = try makeEngine().syncOnce()
+        XCTAssertEqual(second.unchanged, 1)
+        XCTAssertEqual(recognizer.calls.count, 1, "a blank export isn't read again until it changes")
+
+        recognizer.blank = false
+        try Data("now with ink".utf8).write(to: file)
+        let third = try makeEngine().syncOnce()
+        XCTAssertEqual(third.synced, 1)
+        XCTAssertEqual(vault.upserts.count, 1)
+        XCTAssertNil(vault.upserts.first?.previous)
+    }
+
+    func testAFiledNoteThatIsErasedIsStillUpdated() throws {
+        let file = try exports.write("One.pdf", "one")
+        _ = try makeEngine().syncOnce()
+
+        recognizer.blank = true
+        try Data("erased".utf8).write(to: file)
+        let report = try makeEngine().syncOnce()
+
+        XCTAssertEqual(report.blank, 0)
+        XCTAssertEqual(vault.upserts.count, 2, "the note already exists, so it follows the page instead of going stale")
+    }
+
     func testTouchedButIdenticalExportIsNotResent() throws {
         let file = try exports.write("One.pdf", "one")
         _ = try makeEngine().syncOnce()
