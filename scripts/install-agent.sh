@@ -51,6 +51,11 @@ cat > "$PLIST" <<PLIST
     <integer>60</integer>
     <key>ProcessType</key>
     <string>Background</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>INKRELAY_LOG</key>
+        <string>$LOG_DIR/inkrelay.log</string>
+    </dict>
     <key>StandardOutPath</key>
     <string>$LOG_DIR/inkrelay.log</string>
     <key>StandardErrorPath</key>

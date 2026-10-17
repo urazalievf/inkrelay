@@ -5,6 +5,9 @@ let usage = """
 inkrelay \(InkRelayCore.version): relay handwritten notes from e-ink tablets into Apple Notes and Obsidian
 
 Usage:
+  inkrelay setup                    Set up step by step: tablet, folders, vault, Apple apps
+  inkrelay doctor [--notes-roundtrip] [--no-apps]
+                                    Check folders, permissions, sign-ins and the background agent
   inkrelay init [--config PATH]     Write an example config to edit
   inkrelay sync [--config PATH]     Sync once and exit
   inkrelay watch [--config PATH]    Sync now, then whenever a source folder changes
@@ -86,6 +89,110 @@ func printReport(_ report: SyncReport) {
 }
 
 switch command {
+case "setup":
+    func ask(_ question: String, default answer: String = "") -> String {
+        print(question + (answer.isEmpty ? " " : " [\(answer)] "), terminator: "")
+        let reply = readLine(strippingNewline: true)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return reply.isEmpty ? answer : reply
+    }
+    func yes(_ question: String, default answer: Bool) -> Bool {
+        ask(question + (answer ? " (Y/n)" : " (y/N)")).lowercased().first.map { $0 == "y" } ?? answer
+    }
+    func pick(_ title: String, _ options: [String], allowOther: String? = nil, allowNone: String? = nil) -> Int? {
+        print("\n" + title)
+        for (index, option) in options.enumerated() { print("  \(index + 1). \(option)") }
+        if let allowOther { print("  \(options.count + 1). \(allowOther)") }
+        if let allowNone { print("  0. \(allowNone)") }
+        while true {
+            let reply = ask(">", default: options.isEmpty ? (allowOther != nil ? String(options.count + 1) : "0") : "1")
+            if let number = Int(reply), (allowNone != nil && number == 0) || (1...(options.count + (allowOther == nil ? 0 : 1))).contains(number) {
+                return number == 0 ? nil : number - 1
+            }
+            print("Type a number from the list.")
+        }
+    }
+
+    print("InkRelay setup. Press Return to take the suggestion in [brackets].")
+    if FileManager.default.fileExists(atPath: configURL.path), !yes("A config already exists at \(configURL.path). Replace it? The old one is kept as config.json.bak.", default: false) {
+        exit(0)
+    }
+    let detector = SetupDetector()
+    let presets = TabletPreset.all
+    let tablet = presets[pick("Which tablet?", presets.map(\.name)) ?? 0]
+    var choices = SetupChoices(tablet: tablet)
+    if tablet.hasCloudSource {
+        choices.useViwoodsCloud = yes("\nPull notebooks and the Daily planner straight from Viwoods Cloud? (Turn on Viwoods Cloud on the tablet.)", default: true)
+    }
+    if !choices.useViwoodsCloud || yes("Also watch an export folder?", default: false) {
+        print("\n" + tablet.exportHint)
+        let clouds = detector.cloudFolders()
+        let labels = clouds.map { "\($0.provider)\($0.account.isEmpty ? "" : " (\($0.account))"): \(detector.tilde($0.url))" }
+        if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud ? "No export folder" : nil) {
+            if chosen < clouds.count {
+                let base = detector.tilde(clouds[chosen].url)
+                choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: base + "/" + tablet.name.split(separator: " ").first!)
+            } else {
+                choices.exportFolder = ask("Folder path:")
+            }
+        }
+    }
+    let vaults = detector.obsidianVaults()
+    if let chosen = pick("Obsidian vault to file notes into?", vaults.map(detector.tilde), allowOther: "Another folder", allowNone: "No Obsidian") {
+        choices.obsidianVault = chosen < vaults.count ? detector.tilde(vaults[chosen]) : ask("Vault path:")
+    }
+    if yes("\nFile notes into Apple Notes?", default: true) {
+        var account: String? = nil
+        if yes("List your Notes accounts to pick one? (macOS asks once to let InkRelay control Notes.)", default: false),
+           let accounts = try? SetupDetector.notesAccounts(), let chosen = pick("Which Notes account?", accounts) {
+            account = accounts[chosen]
+        }
+        choices.appleNotesAccount = .some(account)
+    }
+    choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource)
+    choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
+    choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
+
+    do {
+        let config = try choices.config()
+        if FileManager.default.fileExists(atPath: configURL.path) {
+            let backup = configURL.deletingLastPathComponent().appendingPathComponent("config.json.bak")
+            try? FileManager.default.removeItem(at: backup)
+            try FileManager.default.moveItem(at: configURL, to: backup)
+        }
+        try ConfigStore.save(config, to: configURL)
+        print("\nWrote \(configURL.path).")
+        if choices.useViwoodsCloud { print("Next: run `inkrelay viwoods login` so InkRelay can read Viwoods Cloud.") }
+        print("Google, Microsoft, Notion and AI transcription need an account of your own first; the README explains each.")
+        if (!choices.useViwoodsCloud || FileManager.default.fileExists(atPath: tokenURL.path)) && yes("\nRun the first sync now?", default: true) {
+            let report = try RelayEngine.live(config: config, stateURL: stateURL).syncOnce()
+            printReport(report)
+        }
+        print("When it looks right, run scripts/install-agent.sh to keep syncing in the background, and `inkrelay doctor` to check everything.")
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "doctor":
+    let config = loadConfig()
+    let includeApps = !arguments.contains("--no-apps")
+    if includeApps, config.destinations.contains(where: { if case .appleNotes = $0 { return true }; if case .appleCalendar = $0 { return true }; if case .appleReminders = $0 { return true }; return false }) {
+        print("Checking Apple apps; macOS may ask once to let inkrelay control them.\n")
+    }
+    var checks = [DoctorCheck(.ok, "Config", configURL.path)] + Doctor(config: config, supportDirectory: supportDirectory).checks(includeApps: includeApps)
+    if arguments.contains("--notes-roundtrip") {
+        let account = config.destinations.compactMap { destination -> String?? in
+            if case .appleNotes(let notes) = destination { return .some(notes.account) }
+            return nil
+        }.first ?? nil
+        checks += NotesRoundTrip(account: account).run()
+    }
+    for check in checks {
+        print("\(check.status.rawValue) \(check.title)" + (check.detail.isEmpty ? "" : ": \(check.detail)"))
+    }
+    let problems = checks.filter { $0.status == .problem }.count
+    print(problems == 0 ? "\nAll good." : "\n\(problems) thing(s) to fix.")
+    exit(problems == 0 ? 0 : 1)
+
 case "init":
     if FileManager.default.fileExists(atPath: configURL.path) {
         print("A config already exists at \(configURL.path). Edit it, or delete it to start over.")
@@ -153,7 +260,9 @@ case "watch":
 
     log("Watching \(config.allSources.count) source(s). Press Ctrl-C to stop.")
     continuation.yield("startup")
+    let logFile = ProcessInfo.processInfo.environment["INKRELAY_LOG"].map { URL(fileURLWithPath: $0) }
     for await reason in triggers {
+        if let logFile, LogTrimmer.trim(logFile) { log("Trimmed the log to its newest lines.") }
         log("Syncing (\(reason))…")
         let report = engine.syncOnce()
         printReport(report)

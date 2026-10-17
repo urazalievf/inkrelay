@@ -53,10 +53,13 @@ Version 0.3.0 is a command-line tool and background agent for macOS. A menu bar 
 
 ```bash
 swift build -c release
-.build/release/inkrelay init      # writes ~/Library/Application Support/InkRelay/config.json
+.build/release/inkrelay setup     # asks about your tablet, finds your cloud folders and Obsidian vaults, writes the config
+.build/release/inkrelay doctor    # checks folders, permissions, sign-ins and the background agent
 ```
 
-Edit the config (full example in [config.example.json](config.example.json)):
+`setup` finds the folders under `~/Library/CloudStorage` (Google Drive, Dropbox, OneDrive, Box) and iCloud Drive, reads Obsidian's own list of vaults, and can list your Notes accounts, then runs a first sync. Nobody has to type JSON. `doctor` prints one line per check with what to fix; `doctor --notes-roundtrip` also creates, updates and deletes a test note in a folder called "InkRelay Test" to check Apple Notes end to end (the test notes end up in Recently Deleted), and `--no-apps` skips the Apple app checks that make macOS ask for permission.
+
+To write the config by hand instead, `inkrelay init` writes an example to `~/Library/Application Support/InkRelay/config.json` (full example in [config.example.json](config.example.json)):
 
 - **sources**: one entry per tablet. `path` is the folder the tablet exports to. `fileTypes` defaults to `["pdf"]`; add `"png"` for tablets that export images.
 - **destinations**: `obsidian` needs `vaultPath`. `appleNotes` takes an optional `folder` (default `Ink`) and `account` (default: your default Notes account). Remove what you don't use.
@@ -207,7 +210,7 @@ scripts/install-agent.sh          # run `watch` in the background at login
 scripts/install-agent.sh --uninstall
 ```
 
-Agent logs go to `~/Library/Logs/InkRelay/inkrelay.log`.
+Agent logs go to `~/Library/Logs/InkRelay/inkrelay.log`, trimmed to the newest 512 KB whenever they pass 5 MB.
 
 ## How syncing behaves
 
