@@ -10,6 +10,7 @@ public final class RelayEngine {
     private let store: StateStore
     private let recognizer: TextRecognizer
     private let destinations: [NoteDestination]
+    private let puller: ViwoodsCloudPuller?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -18,6 +19,7 @@ public final class RelayEngine {
         store: StateStore,
         recognizer: TextRecognizer,
         destinations: [NoteDestination],
+        puller: ViwoodsCloudPuller? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -25,23 +27,44 @@ public final class RelayEngine {
         self.store = store
         self.recognizer = recognizer
         self.destinations = destinations
+        self.puller = puller
         self.fileManager = fileManager
         self.now = now
     }
 
-    /// The production wiring: Vision for recognition and the destinations named in the config.
+    /// The production wiring: Vision for recognition, the destinations named in the config,
+    /// and the Viwoods Cloud puller when the config has a `viwoodsCloud` section.
     public static func live(config: RelayConfig, stateURL: URL = InkRelayCore.defaultStateURL) throws -> RelayEngine {
-        RelayEngine(
+        let destinations = DestinationFactory.make(config.destinations)
+        var puller: ViwoodsCloudPuller?
+        if let cloud = config.viwoodsCloud {
+            let client = ViwoodsClient(credentials: FileCredentialStore(url: Self.tokenURL(besideState: stateURL)))
+            puller = try ViwoodsCloudPuller(config: cloud, client: client, plans: DestinationFactory.plans(in: destinations))
+        }
+        return RelayEngine(
             config: config,
             store: try StateStore(url: stateURL),
             recognizer: VisionTextRecognizer(config: config.recognition),
-            destinations: DestinationFactory.make(config.destinations)
+            destinations: destinations,
+            puller: puller
         )
+    }
+
+    /// The Viwoods token sits next to the state file, so separate configs never share a login.
+    public static func tokenURL(besideState stateURL: URL) -> URL {
+        stateURL.deletingLastPathComponent().appendingPathComponent("viwoods-token.json")
     }
 
     public func syncOnce() -> SyncReport {
         var report = SyncReport()
-        for source in config.sources {
+        if let puller {
+            let pull = puller.pull()
+            report.pull = pull
+            for failure in pull.failures {
+                report.failures.append(.init(item: puller.config.id, destinationID: nil, message: failure))
+            }
+        }
+        for source in config.allSources {
             let files: [ScannedFile]
             do {
                 files = try FolderScanner.scan(source, fileManager: fileManager)
@@ -129,12 +152,15 @@ public struct SyncReport: Equatable {
     public var synced = 0
     public var unchanged = 0
     public var failures: [Failure] = []
+    /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
+    public var pull: PullReport?
 
     public init() {}
 
     public var summary: String {
         var text = "\(scanned) found, \(synced) synced, \(unchanged) unchanged"
         if !failures.isEmpty { text += ", \(failures.count) failed" }
+        if let pull { text = pull.summary + "; " + text }
         return text
     }
 }
