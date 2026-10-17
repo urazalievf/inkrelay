@@ -19,7 +19,7 @@ The app shows `MAJOR.MINOR.PATCH` as its version. Its build number has to keep r
 
 Needs an Apple Developer Program membership.
 
-1. **Developer ID Application certificate.** In Xcode → Settings → Accounts → Manage Certificates, add a "Developer ID Application" certificate. In Keychain Access, export it with its private key as a `.p12` with a password.
+1. **Developer ID Application certificate.** This Mac has only an "Apple Development" certificate, which can't sign apps for distribution outside the App Store. In Xcode → Settings → Accounts, select the team (DT9JP293AM) → Manage Certificates → + → **Developer ID Application**. Only the team's Account Holder can create one. Then in Keychain Access → My Certificates, right-click "Developer ID Application: …" → Export, as a `.p12` with a password. Check it with `security find-identity -v -p codesigning`.
 2. **App Store Connect API key** for notarization: App Store Connect → Users and Access → Integrations → App Store Connect API → generate a key with the Developer role. Download the `.p8` and note the key id and issuer id.
 3. Add the secrets (Settings → Secrets and variables → Actions), or with `gh`:
 

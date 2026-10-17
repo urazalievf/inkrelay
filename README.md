@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.4.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.5.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -254,7 +254,7 @@ For people without a Mac running all the time. The app in `iOS/` (open `iOS/InkR
 - Apple Notes has no API on iOS either, so the app hands notes to Shortcuts: **Get New Ink Notes** returns one text per note with the title on the first line; follow it with **Repeat with Each** and **Create Note**, and run it from an automation. **Recognize Handwriting** reads any PDF or image shared to it.
 - **Sync with your Mac**: with `"sharedLedger": {}` in the Mac's config (setup offers it), the Mac keeps a small `ledger.json` in iCloud Drive/InkRelay of what it filed into Apple Notes. Pick that same folder in the app, and each side skips what the other already filed, so a note never lands in Notes twice. Obsidian and the other Mac destinations still get everything. Whichever device sees a new version of an export first files it.
 
-Signing for a device needs your Apple team in Xcode (Signing & Capabilities). The shared ledger is a plain file, so it needs no iCloud entitlement.
+The project signs with the team set in `iOS/project.yml`; run it on a device from Xcode, which creates the provisioning profile the first time. The shared ledger is a plain file, so it needs no iCloud entitlement.
 
 ## Run
 
