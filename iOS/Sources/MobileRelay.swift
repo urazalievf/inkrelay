@@ -58,7 +58,8 @@ final class MobileRelay {
         let accessing = folder.startAccessingSecurityScopedResource()
         defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
 
-        let source = SourceConfig(id: "mobile", device: "Tablet", path: folder.path, fileTypes: ["pdf", "png", "jpg"])
+        let source = SourceConfig(id: "mobile", device: "Tablet", path: folder.path, fileTypes: ["pdf", "png", "jpg", "note"])
+        let converted = FileManager.default.temporaryDirectory.appendingPathComponent("converted", isDirectory: true)
         let files = try FolderScanner.scan(source)
         var seen = defaults.dictionary(forKey: seenKey) as? [String: String] ?? [:]
         let recognizer = VisionTextRecognizer(config: RecognitionConfig(languages: []))
@@ -70,7 +71,7 @@ final class MobileRelay {
             let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
             seen[file.relativePath] = stamp
             if cloud.object(forKey: "relayed." + hash) != nil { continue }
-            let pages = try recognizer.recognize(fileAt: file.url)
+            let pages = try recognizer.recognize(fileAt: ExportConverter.readableURL(for: file.url, key: file.relativePath, cache: converted))
             let text = pages.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n")
             notes.append(RelayedNote(id: file.relativePath, title: file.url.deletingPathExtension().lastPathComponent, text: text.isEmpty ? "(No text recognized.)" : text, modified: file.modified))
             cloud.set(Date().timeIntervalSince1970, forKey: "relayed." + hash)

@@ -16,6 +16,10 @@ enum PDFComposer {
             }
             return image
         }
+        try write(images: images, to: url)
+    }
+
+    static func write(images: [CGImage], to url: URL) throws {
         guard let first = images.first else { throw PDFComposerError.noPages }
 
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

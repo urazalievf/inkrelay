@@ -20,6 +20,7 @@ Usage:
   inkrelay ai login                 Save an Anthropic API key for AI transcription
   inkrelay ai status                This month's AI transcription spend
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
+  inkrelay convert NOTE PDF          Turn a Supernote .note notebook into a PDF
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -453,6 +454,18 @@ case "send":
     do {
         let file = try sender.prepare(input, title: option("--title"))
         print(try sender.deliver(file, to: target))
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "convert":
+    guard arguments.count >= 2 else { fail("Usage: inkrelay convert NOTEBOOK.note OUTPUT.pdf") }
+    do {
+        let input = URL(fileURLWithPath: (arguments[0] as NSString).expandingTildeInPath)
+        let output = URL(fileURLWithPath: (arguments[1] as NSString).expandingTildeInPath)
+        let note = try SupernoteNote(data: Data(contentsOf: input))
+        try note.writePDF(to: output)
+        print("Wrote \(note.pages.count) page(s) to \(output.path).")
     } catch {
         fail(error.localizedDescription)
     }

@@ -152,15 +152,17 @@ public final class RelayEngine {
                 return
             }
 
+            // Native notebooks (Supernote .note) become a PDF first; everything downstream reads that.
+            let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
             let note = InkNote(
                 title: file.url.deletingPathExtension().lastPathComponent,
                 sourceID: source.id,
                 device: source.device,
-                originalURL: file.url,
+                originalURL: readable,
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: file.url)
+                pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
             )
 
             var deliveredAll = true
@@ -176,6 +178,7 @@ public final class RelayEngine {
             try store.set(record, for: key)
             if let renamedFrom {
                 try store.remove(renamedFrom)
+                ExportConverter.discard(key: renamedFrom, cache: convertedDirectory)
                 report.renamed += 1
             }
             if deliveredAll { report.synced += 1 }
@@ -186,6 +189,9 @@ public final class RelayEngine {
             report.failures.append(.init(item: item, destinationID: nil, message: error.localizedDescription))
         }
     }
+
+    /// PDFs made from native notebooks, next to the sync state.
+    private var convertedDirectory: URL { store.url.deletingLastPathComponent().appendingPathComponent("converted", isDirectory: true) }
 
     /// Seconds an export must stay missing before destinations act on it, so a cloud app re-downloading a file doesn't count.
     static let deletionGraceSeconds: TimeInterval = 60
@@ -216,6 +222,7 @@ public final class RelayEngine {
         do {
             if record.destinations.isEmpty {
                 try store.remove(key)
+                ExportConverter.discard(key: key, cache: convertedDirectory)
             } else {
                 try store.set(record, for: key)
             }
