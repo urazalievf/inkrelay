@@ -30,18 +30,19 @@ final class RelayRunnerTests: XCTestCase {
 
     func testFirstSyncFillsTheSnapshotWithRecentNotes() throws {
         let runner = try runner(config: try config())
-        var changes = 0
-        runner.onChange = { _ in changes += 1 }
+        var seen: [RelayRunner.Snapshot] = []
+        runner.onChange = { seen.append($0) }
         runner.start()
         runner.waitUntilIdle()
-        defer { runner.stop() }
+        // The folder watcher can start a second pass for the file written just before it started; stopping waits
+        // for that, and the snapshots arrive on the runner's queue, so they're read once it's done.
+        runner.stop()
 
+        let afterFirstPass = try XCTUnwrap(seen.last { $0.status == .idle && $0.summary.contains("1 synced") })
+        XCTAssertNotNil(afterFirstPass.lastSync)
+        XCTAssertEqual(afterFirstPass.recent.map(\.title), ["Meeting notes"])
+        XCTAssertEqual(afterFirstPass.recent.first?.openURL?.lastPathComponent, "Meeting notes.pdf", "no vault, so it opens the export")
         XCTAssertEqual(runner.snapshot.status, .idle)
-        XCTAssertNotNil(runner.snapshot.lastSync)
-        XCTAssertTrue(runner.snapshot.summary.contains("1 synced"))
-        XCTAssertEqual(runner.snapshot.recent.map(\.title), ["Meeting notes"])
-        XCTAssertEqual(runner.snapshot.recent.first?.openURL?.lastPathComponent, "Meeting notes.pdf", "no vault, so it opens the export")
-        XCTAssertGreaterThan(changes, 0)
         XCTAssertEqual(destination.upserts.count, 1)
     }
 
