@@ -200,6 +200,16 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 - **Fallbacks:** a page Claude can't do (no key, budget reached, an API error, a declined or cut-off answer) is read by Vision instead, and the sync log says which pages and why. `serverFallback` lets the API retry a declined page on Anthropic's recommended fallback model first.
 - **Key:** `inkrelay ai login` saves an Anthropic API key in the login Keychain (`ANTHROPIC_API_KEY` in the environment works too). `inkrelay ai status` shows the month's spend.
 
+## Menu bar app
+
+`scripts/build-app.sh` builds `build/InkRelay.app`. Move it to Applications and open it: it lives in the menu bar and runs the same engine inside the app, so macOS asks once, for InkRelay itself, for Notes, Calendar, Reminders and folder access.
+
+- The icon shows the state at a glance: ready, syncing, paused, or a warning when the last sync had problems.
+- The menu shows the last sync, Sync now and Pause, the problems if any, how many review cards are waiting, and the most recent notes; click one to open it in Obsidian (or the original export).
+- Settings… sets everything up in a window when there's no config yet, with the same choices as `inkrelay setup`. Config and Logs open the files; Open at login uses macOS's login items.
+- If the command-line agent from `scripts/install-agent.sh` is running, the app waits and offers to stop it, so notes aren't synced twice.
+- The `inkrelay` command is inside the app at `InkRelay.app/Contents/Resources/inkrelay`.
+
 ## Run
 
 ```bash
