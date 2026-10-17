@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.6.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.7.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -36,7 +36,7 @@ Any tablet reaches every destination: sources and destinations are independent, 
 
 | Tablet | How InkRelay reads it | State |
 |---|---|---|
-| Viwoods AiPaper, AiPaper Mini | Straight from Viwoods Cloud (notebooks, memos, Daily planner), or a PDF export folder | Cloud built against the live API's responses; a full pull on a real account still to run |
+| Viwoods AiPaper, AiPaper Mini | Straight from Viwoods Cloud (notebooks, memos, Daily planner), or a PDF export folder | Pulled from a real account: notebooks, a memo and 20 planner days |
 | reMarkable | PDF export to Google Drive, Dropbox or OneDrive | Folder route works; reading reMarkable Cloud directly is planned (#23) |
 | Supernote | Its own `.note` notebooks, straight from Supernote's Dropbox, Google Drive or OneDrive sync; or PDF exports | Notebook reader checked page by page against Supernote's own PDF exports, on real notebooks from A6 X, Nomad and Manta in both the 2023 and 2026 formats |
 | Boox | PDF or PNG export to a cloud drive | Folder route works |
@@ -128,7 +128,7 @@ The cloud is checked on every sync and, under `watch`, every `rescanIntervalSeco
 
 ## Apple Calendar
 
-The `appleCalendar` destination takes only the Daily planner. A handwritten day page becomes an all-day event titled `Daily plan: <first recognized line>` with the full recognized text in the notes. Each typed to-do becomes an all-day event of its own, `☐ …` or `☑ …` by its state, with its priority in the notes. Events are updated in place when the page or to-do changes; one deleted in Calendar is recreated on the next change. The calendar named in the config is created if missing. macOS asks once to let `inkrelay` control Calendar.
+The `appleCalendar` destination takes only the Daily planner. A handwritten day page becomes an all-day event titled `Daily plan` with the full recognized text in the notes (with AI transcription on, its title for the page follows: `Daily plan: Gym and errands`). The first line of handwriting is too often misread to make a good title, and Vision is as sure of its misreadings as of the rest. Each typed to-do becomes an all-day event of its own, `☐ …` or `☑ …` by its state, with its priority in the notes. Events are updated in place when the page or to-do changes; one deleted in Calendar is recreated on the next change. The calendar named in the config is created if missing. macOS asks once to let `inkrelay` control Calendar.
 
 ## Send articles and documents to the tablet
 
@@ -164,6 +164,8 @@ Add a `reviewStack` destination and every page InkRelay relays becomes a card. W
 - A page comes back only when its ink or text changes. To-dos ticked off on the tablet leave the stack by themselves.
 - `resurfaceDays`, such as `[3, 14, 60]`, brings done cards back on that schedule, like a light spaced-repetition review. Empty (the default) means done is done.
 - From the terminal: `inkrelay review` lists today's cards; `inkrelay review done <id>` and `inkrelay review later <id>` act on one by the short id it prints.
+- Empty pages get no card.
+- `"shareWithPhone": true` puts the stack in the iPhone and iPad app too (see below). `setup` turns it on when you say you'll use InkRelay on a phone.
 
 The page listens on 127.0.0.1 only, refuses requests whose Host isn't local, and actions need a custom header, so other websites can't read or change your stack. Cards and their images live in `review/` next to the config.
 
@@ -241,7 +243,7 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 
 - The icon shows the state at a glance: ready, syncing, paused, or a warning when the last sync had problems.
 - The menu shows the last sync, Sync now and Pause, the problems if any, how many review cards are waiting, and the most recent notes; click one to open it in Obsidian (or the original export).
-- Settings… sets everything up in a window when there's no config yet, with the same choices as `inkrelay setup`. Config and Logs open the files; Open at login uses macOS's login items.
+- Settings… sets everything up in a window when there's no config yet, with the same choices as `inkrelay setup`. Config and Logs open the files; Open at login uses macOS's login items, and the first launch from Applications asks once whether to turn it on.
 - If the command-line agent from `scripts/install-agent.sh` is running, the app waits and offers to stop it, so notes aren't synced twice.
 - The `inkrelay` command is inside the app at `InkRelay.app/Contents/Resources/inkrelay`.
 
@@ -253,6 +255,8 @@ For people without a Mac running all the time. The app in `iOS/` (open `iOS/InkR
 - **Check for New Notes** reads what's new or changed since the last check.
 - Apple Notes has no API on iOS either, so the app hands notes to Shortcuts: **Get New Ink Notes** returns one text per note with the title on the first line; follow it with **Repeat with Each** and **Create Note**, and run it from an automation. **Recognize Handwriting** reads any PDF or image shared to it.
 - **Sync with your Mac**: with `"sharedLedger": {}` in the Mac's config (setup offers it), the Mac keeps a small `ledger.json` in iCloud Drive/InkRelay of what it filed into Apple Notes. Pick that same folder in the app, and each side skips what the other already filed, so a note never lands in Notes twice. Obsidian and the other Mac destinations still get everything. Whichever device sees a new version of an export first files it.
+
+- **Review**: with `"shareWithPhone": true` on the Mac's `reviewStack`, the Mac copies the stack (`stack.json` and the page images) to `Review/` in iCloud Drive/InkRelay after every sync, or to `shareFolder` if you set one. Pick that folder in the app, and the Review tab shows today's cards one at a time: swipe right or tap **Done**, swipe left or tap **Later**, and **Add to Calendar** for a suggested event when the Mac has a calendar. Each phone writes its choices to a file of its own (`decisions-<device>.json`) and the Mac applies them on its next pass, so iCloud never has two versions of one file to reconcile. Cards you decide leave the phone at once; a card whose page changed in the meantime comes back as new.
 
 The project signs with the team set in `iOS/project.yml`; run it on a device from Xcode, which creates the provisioning profile the first time. The shared ledger is a plain file, so it needs no iCloud entitlement.
 
@@ -306,6 +310,7 @@ Agent logs go to `~/Library/Logs/InkRelay/inkrelay.log`, trimmed to the newest 5
 ## How syncing behaves
 
 - Each export becomes one note. Its title is the file name.
+- An export with nothing written in it yet (no text and next to no ink on every page) isn't filed anywhere. It's filed once someone writes in it. A note that was already filed keeps following its export, even if the ink is erased.
 - Changes are found by size and date first, then by content hash, so unchanged cloud files aren't downloaded again.
 - If one destination fails, only that destination is retried on the next pass.
 - In Obsidian, InkRelay rewrites only the part between `%% inkrelay:start %%` and `%% inkrelay:end %%` and its own frontmatter keys (`source`, `device`, `original`, `pages`, `modified`, `synced`). Write anything you like above or below the markers, and add your own frontmatter keys or tags: they survive every re-sync. Notes from before 0.4.0 get the markers on their next change.
