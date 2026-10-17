@@ -13,6 +13,8 @@ public final class RelayEngine {
     private let puller: ViwoodsCloudPuller?
     /// Used for sources with `"recognizer": "claude"`.
     private let aiRecognizer: TextRecognizer?
+    /// What other devices filed into Apple Notes.
+    private let ledger: SharedLedger?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -23,6 +25,7 @@ public final class RelayEngine {
         destinations: [NoteDestination],
         puller: ViwoodsCloudPuller? = nil,
         aiRecognizer: TextRecognizer? = nil,
+        ledger: SharedLedger? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -32,6 +35,7 @@ public final class RelayEngine {
         self.destinations = destinations
         self.puller = puller
         self.aiRecognizer = aiRecognizer
+        self.ledger = ledger
         self.fileManager = fileManager
         self.now = now
     }
@@ -58,7 +62,8 @@ public final class RelayEngine {
             recognizer: vision,
             destinations: destinations,
             puller: puller,
-            aiRecognizer: ai
+            aiRecognizer: ai,
+            ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } }
         )
     }
 
@@ -166,16 +171,33 @@ public final class RelayEngine {
             )
 
             var deliveredAll = true
+            var filedInNotes = false
             for destination in targets {
+                if destination is AppleNotesDestination, let ledger, ledger.filedElsewhere(hash) {
+                    // An iPhone or iPad already put this version in Notes; making another would duplicate it.
+                    record.destinations[destination.id] = DestinationRecord(
+                        externalID: record.destinations[destination.id]?.externalID ?? "", contentHash: hash, syncedAt: now()
+                    )
+                    report.filedElsewhere += 1
+                    continue
+                }
                 do {
                     let externalID = try destination.upsert(note, previous: record.destinations[destination.id])
                     record.destinations[destination.id] = DestinationRecord(externalID: externalID, contentHash: hash, syncedAt: now())
+                    if destination is AppleNotesDestination { filedInNotes = true }
                 } catch {
                     deliveredAll = false
                     report.failures.append(.init(item: item, destinationID: destination.id, message: error.localizedDescription))
                 }
             }
             try store.set(record, for: key)
+            if filedInNotes, let ledger {
+                do {
+                    try ledger.record([(hash, note.title)], at: now())
+                } catch {
+                    report.warnings.append("Couldn't update the shared ledger: \(error.localizedDescription)")
+                }
+            }
             if let renamedFrom {
                 try store.remove(renamedFrom)
                 ExportConverter.discard(key: renamedFrom, cache: convertedDirectory)
@@ -254,6 +276,8 @@ public struct SyncReport: Equatable {
     public var deferred = 0
     public var renamed = 0
     public var removed = 0
+    /// Versions another device had already filed into Apple Notes.
+    public var filedElsewhere = 0
     /// Things worth knowing that aren't failures.
     public var warnings: [String] = []
     /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
@@ -265,6 +289,7 @@ public struct SyncReport: Equatable {
         var text = "\(scanned) found, \(synced) synced, \(unchanged) unchanged"
         if renamed > 0 { text += ", \(renamed) renamed" }
         if removed > 0 { text += ", \(removed) removed" }
+        if filedElsewhere > 0 { text += ", \(filedElsewhere) already in Notes from another device" }
         if deferred > 0 { text += ", \(deferred) still being written" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         if let pull { text = pull.summary + "; " + text }

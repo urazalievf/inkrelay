@@ -2,7 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    private enum Picking { case exports, ledger }
+
     @State private var folderName = MobileRelay.shared.folderName
+    @State private var ledgerName = MobileRelay.shared.ledgerFolderName
+    @State private var picking: Picking = .exports
     @State private var choosing = false
     @State private var checking = false
     @State private var notes: [RelayedNote] = []
@@ -13,6 +17,7 @@ struct ContentView: View {
             List {
                 Section {
                     Button {
+                        picking = .exports
                         choosing = true
                     } label: {
                         LabeledContent("Export folder") {
@@ -21,6 +26,19 @@ struct ContentView: View {
                     }
                 } footer: {
                     Text("The folder your tablet exports PDFs to, in iCloud Drive, Google Drive, Dropbox or OneDrive.")
+                }
+
+                Section {
+                    Button {
+                        picking = .ledger
+                        choosing = true
+                    } label: {
+                        LabeledContent("Sync with your Mac") {
+                            Text(ledgerName ?? "Choose…").foregroundStyle(ledgerName == nil ? Color.accentColor : .secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Pick the InkRelay folder in iCloud Drive, the same one the Mac uses, so a note filed by one isn't filed again by the other.")
                 }
 
                 Section {
@@ -80,10 +98,16 @@ struct ContentView: View {
                 switch result {
                 case .success(let url):
                     do {
-                        try MobileRelay.shared.setFolder(url)
-                        folderName = MobileRelay.shared.folderName
-                        notes = []
-                        message = "Everything already in the folder counts as new the first time."
+                        if picking == .ledger {
+                            try MobileRelay.shared.setLedgerFolder(url)
+                            ledgerName = MobileRelay.shared.ledgerFolderName
+                            message = "Notes filed by the Mac won't be filed again here."
+                        } else {
+                            try MobileRelay.shared.setFolder(url)
+                            folderName = MobileRelay.shared.folderName
+                            notes = []
+                            message = "Everything already in the folder counts as new the first time."
+                        }
                     } catch {
                         message = error.localizedDescription
                     }

@@ -112,6 +112,9 @@
       "address": "you_123@kindle.com"
     }
   ],
+  "sharedLedger": {
+    "device": "Mac"
+  },
   "recognition": {
     "languages": ["en-US"],
     "usesLanguageCorrection": true,

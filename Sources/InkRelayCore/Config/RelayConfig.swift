@@ -23,6 +23,8 @@ public struct RelayConfig: Codable, Equatable {
     public var ai: AITranscriptionConfig?
     /// Where `inkrelay send` delivers articles and documents. The first is the default.
     public var sendTargets: [SendTargetConfig]
+    /// Shares what was filed into Apple Notes with InkRelay on an iPhone or iPad, so they don't duplicate notes.
+    public var sharedLedger: SharedLedgerConfig?
 
     public init(
         sources: [SourceConfig],
@@ -35,7 +37,8 @@ public struct RelayConfig: Codable, Equatable {
         onDelete: [String: RemovalPolicy] = [:],
         settleSeconds: Int = 5,
         ai: AITranscriptionConfig? = nil,
-        sendTargets: [SendTargetConfig] = []
+        sendTargets: [SendTargetConfig] = [],
+        sharedLedger: SharedLedgerConfig? = nil
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -48,10 +51,11 @@ public struct RelayConfig: Codable, Equatable {
         self.settleSeconds = settleSeconds
         self.ai = ai
         self.sendTargets = sendTargets
+        self.sharedLedger = sharedLedger
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets, sharedLedger
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -72,6 +76,7 @@ public struct RelayConfig: Codable, Equatable {
         settleSeconds = try container.decodeIfPresent(Int.self, forKey: .settleSeconds) ?? 5
         ai = try container.decodeIfPresent(AITranscriptionConfig.self, forKey: .ai)
         sendTargets = try container.decodeIfPresent([SendTargetConfig].self, forKey: .sendTargets) ?? []
+        sharedLedger = try container.decodeIfPresent(SharedLedgerConfig.self, forKey: .sharedLedger)
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.

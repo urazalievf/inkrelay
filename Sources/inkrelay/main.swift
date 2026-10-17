@@ -152,6 +152,9 @@ case "setup":
     choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource)
     choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
     choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
+    if choices.appleNotesAccount != nil, SharedLedger.iCloudDriveFolder != nil {
+        choices.shareWithPhone = yes("Also use InkRelay on an iPhone or iPad? Share what's filed in Notes through iCloud Drive so it isn't filed twice.", default: false)
+    }
 
     do {
         let config = try choices.config()

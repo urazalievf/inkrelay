@@ -16,6 +16,7 @@ struct SetupView: View {
     @State private var appleCalendar = true
     @State private var appleReminders = true
     @State private var reviewStack = true
+    @State private var shareWithPhone = false
     @State private var error: String?
 
     private var tablet: TabletPreset { TabletPreset.all[tabletIndex] }
@@ -40,6 +41,9 @@ struct SetupView: View {
                 Toggle("Apple Calendar (planner pages and to-dos)", isOn: $appleCalendar)
                 Toggle("Apple Reminders (tasks you write)", isOn: $appleReminders)
                 Toggle("Review stack (read later)", isOn: $reviewStack)
+                if appleNotes, SharedLedger.iCloudDriveFolder != nil {
+                    Toggle("Share with InkRelay on iPhone and iPad (iCloud Drive)", isOn: $shareWithPhone)
+                }
             }
             if let error {
                 Text(error).foregroundStyle(.red).font(.callout)
@@ -83,7 +87,8 @@ struct SetupView: View {
             appleNotesAccount: appleNotes ? .some(nil) : nil,
             appleCalendar: appleCalendar,
             appleReminders: appleReminders,
-            reviewStack: reviewStack
+            reviewStack: reviewStack,
+            shareWithPhone: shareWithPhone
         )
         do {
             try ConfigStore.save(try choices.config(), to: model.runner.configURL)

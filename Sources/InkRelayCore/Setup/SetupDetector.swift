@@ -95,9 +95,12 @@ public struct SetupChoices: Equatable {
     public var appleCalendar: Bool
     public var appleReminders: Bool
     public var reviewStack: Bool
+    /// Share what's filed into Notes with InkRelay on an iPhone or iPad, through iCloud Drive.
+    public var shareWithPhone: Bool
 
     public init(tablet: TabletPreset, useViwoodsCloud: Bool = false, exportFolder: String? = nil, obsidianVault: String? = nil,
-                appleNotesAccount: String?? = nil, appleCalendar: Bool = false, appleReminders: Bool = false, reviewStack: Bool = true) {
+                appleNotesAccount: String?? = nil, appleCalendar: Bool = false, appleReminders: Bool = false, reviewStack: Bool = true,
+                shareWithPhone: Bool = false) {
         self.tablet = tablet
         self.useViwoodsCloud = useViwoodsCloud
         self.exportFolder = exportFolder
@@ -106,6 +109,7 @@ public struct SetupChoices: Equatable {
         self.appleCalendar = appleCalendar
         self.appleReminders = appleReminders
         self.reviewStack = reviewStack
+        self.shareWithPhone = shareWithPhone
     }
 
     public func config() throws -> RelayConfig {
@@ -123,7 +127,8 @@ public struct SetupChoices: Equatable {
         let config = RelayConfig(
             sources: sources,
             destinations: destinations,
-            viwoodsCloud: useViwoodsCloud ? ViwoodsCloudConfig(device: tablet.name) : nil
+            viwoodsCloud: useViwoodsCloud ? ViwoodsCloudConfig(device: tablet.name) : nil,
+            sharedLedger: shareWithPhone && appleNotesAccount != nil ? SharedLedgerConfig() : nil
         )
         try config.validate()
         return config
