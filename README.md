@@ -40,7 +40,7 @@ Any tablet reaches every destination: sources and destinations are independent, 
 | reMarkable | PDF export to Google Drive, Dropbox or OneDrive | Folder route works; reading reMarkable Cloud directly is planned (#23) |
 | Supernote | Its own `.note` notebooks, straight from Supernote's Dropbox, Google Drive or OneDrive sync; or PDF exports | Notebook reader checked page by page against Supernote's own PDF exports, on real notebooks from A6 X, Nomad and Manta in both the 2023 and 2026 formats |
 | Boox | PDF or PNG export to a cloud drive | Folder route works |
-| Kindle Scribe | PDF shared to Google Drive or OneDrive | Folder route works; the email-export path is planned (#23) |
+| Kindle Scribe | Notebooks shared by email (Share → Send to email), picked up from Mail; or PDFs in a folder | Mail pickup built and tested against simulated Mail; not yet run on a real Scribe email |
 | Any other tablet | PDF or PNG in any folder | Works |
 
 | Destination | What it gets | Sign-in | State |
@@ -96,6 +96,14 @@ Tips:
 Supernote can sync its Note folder to Dropbox, Google Drive or OneDrive by itself (Settings → Sync), but it syncs the notebooks in its own `.note` format, not PDFs. InkRelay reads those directly: add `"note"` to the source's `fileTypes` (setup does it when you pick Supernote) and point the source at that folder. Each notebook is turned into a PDF, page by page with all its visible layers, before recognition, so every destination gets the pages as you see them on the device. `inkrelay convert notebook.note notebook.pdf` does the same for one file.
 
 Password-protected notebooks and the oldest A5 format (before firmware C.053) aren't supported.
+
+## Kindle Scribe
+
+A Kindle Scribe shares a notebook by email: Share → Send to email sends a PDF (attached, or as a download link) from Amazon. With a `kindleMail` section in the config (setup adds it when you pick the Scribe), InkRelay asks Mail every 15 minutes for recent messages from Amazon that mention Kindle, saves each notebook's PDF into its own cache, and relays it like any other export. It reads nothing else, remembers which messages it has handled, and only follows links that turn out to be PDFs. macOS asks once to let InkRelay read Mail.
+
+```json
+"kindleMail": { "sender": "amazon", "lookbackDays": 14, "checkEveryMinutes": 15 }
+```
 
 ## Viwoods Cloud
 

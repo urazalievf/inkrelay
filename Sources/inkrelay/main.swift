@@ -124,11 +124,14 @@ case "setup":
     if tablet.hasCloudSource {
         choices.useViwoodsCloud = yes("\nPull notebooks and the Daily planner straight from Viwoods Cloud? (Turn on Viwoods Cloud on the tablet.)", default: true)
     }
-    if !choices.useViwoodsCloud || yes("Also watch an export folder?", default: false) {
+    if tablet.name == "Kindle Scribe" {
+        choices.kindleMail = yes("\nPick up notebooks you share from the Kindle by email, from Mail? (macOS asks once to let InkRelay read Mail.)", default: true)
+    }
+    if !(choices.useViwoodsCloud || choices.kindleMail) || yes("Also watch an export folder?", default: false) {
         print("\n" + tablet.exportHint)
         let clouds = detector.cloudFolders()
         let labels = clouds.map { "\($0.provider)\($0.account.isEmpty ? "" : " (\($0.account))"): \(detector.tilde($0.url))" }
-        if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud ? "No export folder" : nil) {
+        if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud || choices.kindleMail ? "No export folder" : nil) {
             if chosen < clouds.count {
                 let base = detector.tilde(clouds[chosen].url)
                 choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: base + "/" + tablet.name.split(separator: " ").first!)

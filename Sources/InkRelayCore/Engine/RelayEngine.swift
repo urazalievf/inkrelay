@@ -15,6 +15,7 @@ public final class RelayEngine {
     private let aiRecognizer: TextRecognizer?
     /// What other devices filed into Apple Notes.
     private let ledger: SharedLedger?
+    private let kindle: KindleMailPuller?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -26,6 +27,7 @@ public final class RelayEngine {
         puller: ViwoodsCloudPuller? = nil,
         aiRecognizer: TextRecognizer? = nil,
         ledger: SharedLedger? = nil,
+        kindle: KindleMailPuller? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -36,6 +38,7 @@ public final class RelayEngine {
         self.puller = puller
         self.aiRecognizer = aiRecognizer
         self.ledger = ledger
+        self.kindle = kindle
         self.fileManager = fileManager
         self.now = now
     }
@@ -63,7 +66,8 @@ public final class RelayEngine {
             destinations: destinations,
             puller: puller,
             aiRecognizer: ai,
-            ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } }
+            ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
+            kindle: config.kindleMail.map { KindleMailPuller(config: $0) }
         )
     }
 
@@ -80,6 +84,10 @@ public final class RelayEngine {
             for failure in pull.failures {
                 report.failures.append(.init(item: puller.config.id, destinationID: nil, message: failure))
             }
+        }
+        if let kindle {
+            let (_, failures) = kindle.pull()
+            for failure in failures { report.failures.append(.init(item: kindle.config.id, destinationID: nil, message: failure)) }
         }
         for source in config.allSources {
             let files: [ScannedFile]

@@ -25,6 +25,8 @@ public struct RelayConfig: Codable, Equatable {
     public var sendTargets: [SendTargetConfig]
     /// Shares what was filed into Apple Notes with InkRelay on an iPhone or iPad, so they don't duplicate notes.
     public var sharedLedger: SharedLedgerConfig?
+    /// Notebooks a Kindle Scribe shares by email, picked up from Mail.
+    public var kindleMail: KindleMailConfig?
 
     public init(
         sources: [SourceConfig],
@@ -38,7 +40,8 @@ public struct RelayConfig: Codable, Equatable {
         settleSeconds: Int = 5,
         ai: AITranscriptionConfig? = nil,
         sendTargets: [SendTargetConfig] = [],
-        sharedLedger: SharedLedgerConfig? = nil
+        sharedLedger: SharedLedgerConfig? = nil,
+        kindleMail: KindleMailConfig? = nil
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -52,15 +55,16 @@ public struct RelayConfig: Codable, Equatable {
         self.ai = ai
         self.sendTargets = sendTargets
         self.sharedLedger = sharedLedger
+        self.kindleMail = kindleMail
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets, sharedLedger
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets, sharedLedger, kindleMail
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
     public var allSources: [SourceConfig] {
-        sources + (viwoodsCloud.map { [$0.source] } ?? [])
+        sources + (viwoodsCloud.map { [$0.source] } ?? []) + (kindleMail.map { [$0.source] } ?? [])
     }
 
     public init(from decoder: Decoder) throws {
@@ -77,11 +81,12 @@ public struct RelayConfig: Codable, Equatable {
         ai = try container.decodeIfPresent(AITranscriptionConfig.self, forKey: .ai)
         sendTargets = try container.decodeIfPresent([SendTargetConfig].self, forKey: .sendTargets) ?? []
         sharedLedger = try container.decodeIfPresent(SharedLedgerConfig.self, forKey: .sharedLedger)
+        kindleMail = try container.decodeIfPresent(KindleMailConfig.self, forKey: .kindleMail)
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
     public func validate() throws {
-        guard !allSources.isEmpty else { throw ConfigError.invalid("Add at least one source folder, or a viwoodsCloud section.") }
+        guard !allSources.isEmpty else { throw ConfigError.invalid("Add at least one source folder, or a viwoodsCloud or kindleMail section.") }
         guard !destinations.isEmpty else { throw ConfigError.invalid("Add at least one destination.") }
         try viwoodsCloud?.validate()
         if google == nil, let needing = destinations.first(where: \.needsGoogle) {
