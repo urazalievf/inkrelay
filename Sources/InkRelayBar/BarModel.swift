@@ -34,7 +34,25 @@ final class BarModel: ObservableObject {
         // First run with Viwoods Cloud configured: ask for the sign-in straight away, no menu hunting.
         if needsViwoodsSignIn {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.showViwoodsSignIn() }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.askToOpenAtLoginOnce() }
         }
+    }
+
+    /// InkRelay only syncs while it runs, so the first launch from Applications asks whether to open it at login.
+    /// Asked once; the menu's "Open at login" changes it later.
+    func askToOpenAtLoginOnce() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "askedOpenAtLogin"), !launchAtLogin, !needsSetup,
+              Bundle.main.bundlePath.hasPrefix("/Applications/") else { return }
+        defaults.set(true, forKey: "askedOpenAtLogin")
+        let alert = NSAlert()
+        alert.messageText = "Open InkRelay when you log in?"
+        alert.informativeText = "InkRelay syncs your tablet only while it's running. You can change this any time with Open at Login in its menu."
+        alert.addButton(withTitle: "Open at Login")
+        alert.addButton(withTitle: "Not Now")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { setLaunchAtLogin(true) }
     }
 
     var isPaused: Bool { snapshot.status == .paused }
@@ -78,6 +96,7 @@ final class BarModel: ObservableObject {
             _ = try ViwoodsClient(credentials: FileCredentialStore(url: viwoodsTokenURL)).login(token: token)
             runner.syncNow()
             objectWillChange.send()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.askToOpenAtLoginOnce() }
             return nil
         } catch {
             return error.localizedDescription
