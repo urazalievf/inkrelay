@@ -13,6 +13,9 @@ public final class RelayEngine {
     private let puller: ViwoodsCloudPuller?
     /// Used for sources with `"recognizer": "claude"`.
     private let aiRecognizer: TextRecognizer?
+    /// What other devices filed into Apple Notes.
+    private let ledger: SharedLedger?
+    private let kindle: KindleMailPuller?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -23,6 +26,8 @@ public final class RelayEngine {
         destinations: [NoteDestination],
         puller: ViwoodsCloudPuller? = nil,
         aiRecognizer: TextRecognizer? = nil,
+        ledger: SharedLedger? = nil,
+        kindle: KindleMailPuller? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -32,6 +37,8 @@ public final class RelayEngine {
         self.destinations = destinations
         self.puller = puller
         self.aiRecognizer = aiRecognizer
+        self.ledger = ledger
+        self.kindle = kindle
         self.fileManager = fileManager
         self.now = now
     }
@@ -58,7 +65,9 @@ public final class RelayEngine {
             recognizer: vision,
             destinations: destinations,
             puller: puller,
-            aiRecognizer: ai
+            aiRecognizer: ai,
+            ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
+            kindle: config.kindleMail.map { KindleMailPuller(config: $0) }
         )
     }
 
@@ -67,7 +76,28 @@ public final class RelayEngine {
         stateURL.deletingLastPathComponent().appendingPathComponent("viwoods-token.json")
     }
 
+    /// The recognized text of every relayed note, for search.
+    public var archive: NoteArchive { NoteArchive(directory: store.url.deletingLastPathComponent().appendingPathComponent("archive", isDirectory: true)) }
+    private lazy var notes = archive
+
     public func syncOnce() -> SyncReport {
+        // One pass at a time across processes (watch, the menu bar app, the MCP server), each starting from
+        // the state the last one saved, so none overwrites another's records.
+        let lock = store.url.deletingLastPathComponent().appendingPathComponent(".sync.lock")
+        try? FileManager.default.createDirectory(at: lock.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let descriptor = open(lock.path, O_CREAT | O_RDWR, 0o600)
+        if descriptor >= 0 { flock(descriptor, LOCK_EX) }
+        defer {
+            if descriptor >= 0 {
+                flock(descriptor, LOCK_UN)
+                close(descriptor)
+            }
+        }
+        try? store.reload()
+        return pass()
+    }
+
+    private func pass() -> SyncReport {
         var report = SyncReport()
         if let puller {
             let pull = puller.pull()
@@ -75,6 +105,10 @@ public final class RelayEngine {
             for failure in pull.failures {
                 report.failures.append(.init(item: puller.config.id, destinationID: nil, message: failure))
             }
+        }
+        if let kindle {
+            let (_, failures) = kindle.pull()
+            for failure in failures { report.failures.append(.init(item: kindle.config.id, destinationID: nil, message: failure)) }
         }
         for source in config.allSources {
             let files: [ScannedFile]
@@ -113,7 +147,10 @@ public final class RelayEngine {
         let item = "\(source.id)/\(file.relativePath)"
         var previous = store.record(for: key)
 
-        if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty {
+        // Notes synced before the archive existed get archived once, read with Vision so it costs nothing.
+        let needsArchive = previous.map { notes.entry(forKey: key)?.contentHash != $0.contentHash } ?? false
+        if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty,
+           !needsArchive || source.recognizer == .claude {
             if known.missingSince != nil { try? store.set(FileRecord(size: known.size, modified: known.modified, contentHash: known.contentHash, destinations: known.destinations), for: key) }
             report.unchanged += 1
             return
@@ -148,34 +185,64 @@ public final class RelayEngine {
             guard !targets.isEmpty else {
                 // Touched but not changed: remember the new date so the next pass skips the read.
                 try store.set(record, for: key)
+                if notes.entry(forKey: key)?.contentHash != hash, source.recognizer != .claude {
+                    let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
+                    try notes.upsert(InkNote(
+                        title: file.url.deletingPathExtension().lastPathComponent, sourceID: source.id, device: source.device,
+                        originalURL: readable, relativePath: file.relativePath, modified: file.modified, contentHash: hash,
+                        pages: try recognizer.recognize(fileAt: readable)
+                    ), key: key, at: now())
+                }
                 report.unchanged += 1
                 return
             }
 
+            // Native notebooks (Supernote .note) become a PDF first; everything downstream reads that.
+            let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
             let note = InkNote(
                 title: file.url.deletingPathExtension().lastPathComponent,
                 sourceID: source.id,
                 device: source.device,
-                originalURL: file.url,
+                originalURL: readable,
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: file.url)
+                pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
             )
 
+            try? notes.upsert(note, key: key, at: now())
             var deliveredAll = true
+            var filedInNotes = false
             for destination in targets {
+                if destination is AppleNotesDestination, let ledger, ledger.filedElsewhere(hash) {
+                    // An iPhone or iPad already put this version in Notes; making another would duplicate it.
+                    record.destinations[destination.id] = DestinationRecord(
+                        externalID: record.destinations[destination.id]?.externalID ?? "", contentHash: hash, syncedAt: now()
+                    )
+                    report.filedElsewhere += 1
+                    continue
+                }
                 do {
                     let externalID = try destination.upsert(note, previous: record.destinations[destination.id])
                     record.destinations[destination.id] = DestinationRecord(externalID: externalID, contentHash: hash, syncedAt: now())
+                    if destination is AppleNotesDestination { filedInNotes = true }
                 } catch {
                     deliveredAll = false
                     report.failures.append(.init(item: item, destinationID: destination.id, message: error.localizedDescription))
                 }
             }
             try store.set(record, for: key)
+            if filedInNotes, let ledger {
+                do {
+                    try ledger.record([(hash, note.title)], at: now())
+                } catch {
+                    report.warnings.append("Couldn't update the shared ledger: \(error.localizedDescription)")
+                }
+            }
             if let renamedFrom {
                 try store.remove(renamedFrom)
+                ExportConverter.discard(key: renamedFrom, cache: convertedDirectory)
+                notes.remove(key: renamedFrom)
                 report.renamed += 1
             }
             if deliveredAll { report.synced += 1 }
@@ -186,6 +253,9 @@ public final class RelayEngine {
             report.failures.append(.init(item: item, destinationID: nil, message: error.localizedDescription))
         }
     }
+
+    /// PDFs made from native notebooks, next to the sync state.
+    private var convertedDirectory: URL { store.url.deletingLastPathComponent().appendingPathComponent("converted", isDirectory: true) }
 
     /// Seconds an export must stay missing before destinations act on it, so a cloud app re-downloading a file doesn't count.
     static let deletionGraceSeconds: TimeInterval = 60
@@ -216,6 +286,8 @@ public final class RelayEngine {
         do {
             if record.destinations.isEmpty {
                 try store.remove(key)
+                ExportConverter.discard(key: key, cache: convertedDirectory)
+                notes.remove(key: key)
             } else {
                 try store.set(record, for: key)
             }
@@ -247,6 +319,8 @@ public struct SyncReport: Equatable {
     public var deferred = 0
     public var renamed = 0
     public var removed = 0
+    /// Versions another device had already filed into Apple Notes.
+    public var filedElsewhere = 0
     /// Things worth knowing that aren't failures.
     public var warnings: [String] = []
     /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
@@ -258,6 +332,7 @@ public struct SyncReport: Equatable {
         var text = "\(scanned) found, \(synced) synced, \(unchanged) unchanged"
         if renamed > 0 { text += ", \(renamed) renamed" }
         if removed > 0 { text += ", \(removed) removed" }
+        if filedElsewhere > 0 { text += ", \(filedElsewhere) already in Notes from another device" }
         if deferred > 0 { text += ", \(deferred) still being written" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         if let pull { text = pull.summary + "; " + text }

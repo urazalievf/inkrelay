@@ -11,9 +11,9 @@ public struct TabletPreset: Equatable {
     public static let all: [TabletPreset] = [
         TabletPreset(name: "Viwoods AiPaper", fileTypes: ["pdf"], exportHint: "Turn on Viwoods Cloud on the tablet, or long-press the cloud-sync button → Settings → Google Drive, OneDrive or Dropbox, format PDF.", hasCloudSource: true),
         TabletPreset(name: "reMarkable", fileTypes: ["pdf"], exportHint: "Settings → Integrations → Google Drive, Dropbox or OneDrive, then share notebooks there as PDF.", hasCloudSource: false),
-        TabletPreset(name: "Supernote", fileTypes: ["pdf"], exportHint: "Export notes as PDF to Google Drive, Dropbox or OneDrive from the file manager.", hasCloudSource: false),
+        TabletPreset(name: "Supernote", fileTypes: ["pdf", "note"], exportHint: "Turn on Settings → Sync with Dropbox, Google Drive or OneDrive and pick its Note folder: InkRelay reads the .note notebooks themselves, no PDF export needed.", hasCloudSource: false),
         TabletPreset(name: "Boox", fileTypes: ["pdf", "png"], exportHint: "Share or auto-export notes as PDF or PNG to a cloud drive.", hasCloudSource: false),
-        TabletPreset(name: "Kindle Scribe", fileTypes: ["pdf"], exportHint: "Share notebooks as PDF to Google Drive or OneDrive, or email them and save the PDF to a folder.", hasCloudSource: false),
+        TabletPreset(name: "Kindle Scribe", fileTypes: ["pdf"], exportHint: "Share a notebook → Send to email: InkRelay can pick the PDF up from Mail. Or save the PDFs into a folder.", hasCloudSource: false),
         TabletPreset(name: "Other tablet", fileTypes: ["pdf"], exportHint: "Export PDFs into a folder on this Mac or in a synced cloud drive.", hasCloudSource: false),
     ]
 }
@@ -95,9 +95,14 @@ public struct SetupChoices: Equatable {
     public var appleCalendar: Bool
     public var appleReminders: Bool
     public var reviewStack: Bool
+    /// Share what's filed into Notes with InkRelay on an iPhone or iPad, through iCloud Drive.
+    public var shareWithPhone: Bool
+    /// Pick up notebooks a Kindle Scribe emails, from Mail.
+    public var kindleMail: Bool = false
 
     public init(tablet: TabletPreset, useViwoodsCloud: Bool = false, exportFolder: String? = nil, obsidianVault: String? = nil,
-                appleNotesAccount: String?? = nil, appleCalendar: Bool = false, appleReminders: Bool = false, reviewStack: Bool = true) {
+                appleNotesAccount: String?? = nil, appleCalendar: Bool = false, appleReminders: Bool = false, reviewStack: Bool = true,
+                shareWithPhone: Bool = false) {
         self.tablet = tablet
         self.useViwoodsCloud = useViwoodsCloud
         self.exportFolder = exportFolder
@@ -106,6 +111,7 @@ public struct SetupChoices: Equatable {
         self.appleCalendar = appleCalendar
         self.appleReminders = appleReminders
         self.reviewStack = reviewStack
+        self.shareWithPhone = shareWithPhone
     }
 
     public func config() throws -> RelayConfig {
@@ -123,7 +129,9 @@ public struct SetupChoices: Equatable {
         let config = RelayConfig(
             sources: sources,
             destinations: destinations,
-            viwoodsCloud: useViwoodsCloud ? ViwoodsCloudConfig(device: tablet.name) : nil
+            viwoodsCloud: useViwoodsCloud ? ViwoodsCloudConfig(device: tablet.name) : nil,
+            sharedLedger: shareWithPhone && appleNotesAccount != nil ? SharedLedgerConfig() : nil,
+            kindleMail: kindleMail ? KindleMailConfig() : nil
         )
         try config.validate()
         return config

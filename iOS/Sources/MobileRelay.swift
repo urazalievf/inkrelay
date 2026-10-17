@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import InkRelayCore
+import UIKit
 
 /// A note read on this device, as Shortcuts and the app show it.
 struct RelayedNote: Identifiable, Equatable {
@@ -20,8 +21,8 @@ final class MobileRelay {
     static let shared = MobileRelay()
 
     private let defaults: UserDefaults
-    private let cloud = NSUbiquitousKeyValueStore.default
     private let bookmarkKey = "exportFolderBookmark"
+    private let ledgerBookmarkKey = "ledgerFolderBookmark"
     private let seenKey = "seenExports"
 
     init(defaults: UserDefaults = .standard) {
@@ -30,35 +31,51 @@ final class MobileRelay {
 
     // MARK: Folder
 
-    var folderName: String? { resolveFolder()?.lastPathComponent }
+    var folderName: String? { resolve(bookmarkKey)?.lastPathComponent }
+    /// The folder shared with InkRelay on the Mac, usually iCloud Drive/InkRelay.
+    var ledgerFolderName: String? { resolve(ledgerBookmarkKey)?.lastPathComponent }
 
     func setFolder(_ url: URL) throws {
-        let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-        defaults.set(try url.bookmarkData(options: .minimalBookmark), forKey: bookmarkKey)
+        try save(url, as: bookmarkKey)
         // A new folder starts fresh: everything already in it counts as new once.
         defaults.removeObject(forKey: seenKey)
     }
 
-    private func resolveFolder() -> URL? {
-        guard let data = defaults.data(forKey: bookmarkKey) else { return nil }
+    func setLedgerFolder(_ url: URL) throws {
+        try save(url, as: ledgerBookmarkKey)
+    }
+
+    private func save(_ url: URL, as key: String) throws {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        defaults.set(try url.bookmarkData(options: .minimalBookmark), forKey: key)
+    }
+
+    private func resolve(_ key: String) -> URL? {
+        guard let data = defaults.data(forKey: key) else { return nil }
         var stale = false
         guard let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale) else { return nil }
-        if stale, let fresh = try? url.bookmarkData(options: .minimalBookmark) { defaults.set(fresh, forKey: bookmarkKey) }
+        if stale, let fresh = try? url.bookmarkData(options: .minimalBookmark) { defaults.set(fresh, forKey: key) }
         return url
     }
 
     // MARK: Reading
 
     /// Exports that are new or changed since the last call, read and returned newest first. Each export is
-    /// returned once per change; a note already relayed from another device of the same Apple ID is skipped
-    /// when iCloud key-value sync is available.
+    /// returned once per change. With a shared folder chosen, versions the Mac (or another iPhone or iPad)
+    /// already filed into Notes are skipped, and what this device returns is recorded for them.
     func newNotes() throws -> [RelayedNote] {
-        guard let folder = resolveFolder() else { throw MobileError.noFolder }
+        guard let folder = resolve(bookmarkKey) else { throw MobileError.noFolder }
         let accessing = folder.startAccessingSecurityScopedResource()
         defer { if accessing { folder.stopAccessingSecurityScopedResource() } }
+        let ledgerFolder = resolve(ledgerBookmarkKey)
+        let ledgerAccess = ledgerFolder?.startAccessingSecurityScopedResource() ?? false
+        defer { if ledgerAccess { ledgerFolder?.stopAccessingSecurityScopedResource() } }
+        let ledger = ledgerFolder.map { SharedLedger(folder: $0, device: UIDevice.current.name) }
+        var filed: [(hash: String, title: String)] = []
 
-        let source = SourceConfig(id: "mobile", device: "Tablet", path: folder.path, fileTypes: ["pdf", "png", "jpg"])
+        let source = SourceConfig(id: "mobile", device: "Tablet", path: folder.path, fileTypes: ["pdf", "png", "jpg", "note"])
+        let converted = FileManager.default.temporaryDirectory.appendingPathComponent("converted", isDirectory: true)
         let files = try FolderScanner.scan(source)
         var seen = defaults.dictionary(forKey: seenKey) as? [String: String] ?? [:]
         let recognizer = VisionTextRecognizer(config: RecognitionConfig(languages: []))
@@ -69,14 +86,15 @@ final class MobileRelay {
             let data = try Data(contentsOf: file.url, options: .mappedIfSafe)
             let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
             seen[file.relativePath] = stamp
-            if cloud.object(forKey: "relayed." + hash) != nil { continue }
-            let pages = try recognizer.recognize(fileAt: file.url)
+            if ledger?.entry(for: hash) != nil { continue }
+            let pages = try recognizer.recognize(fileAt: ExportConverter.readableURL(for: file.url, key: file.relativePath, cache: converted))
             let text = pages.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n")
-            notes.append(RelayedNote(id: file.relativePath, title: file.url.deletingPathExtension().lastPathComponent, text: text.isEmpty ? "(No text recognized.)" : text, modified: file.modified))
-            cloud.set(Date().timeIntervalSince1970, forKey: "relayed." + hash)
+            let title = file.url.deletingPathExtension().lastPathComponent
+            notes.append(RelayedNote(id: file.relativePath, title: title, text: text.isEmpty ? "(No text recognized.)" : text, modified: file.modified))
+            filed.append((hash, title))
         }
         defaults.set(seen, forKey: seenKey)
-        cloud.synchronize()
+        try? ledger?.record(filed)
         return notes.sorted { $0.modified > $1.modified }
     }
 

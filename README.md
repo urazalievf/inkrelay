@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.4.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.5.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -38,9 +38,9 @@ Any tablet reaches every destination: sources and destinations are independent, 
 |---|---|---|
 | Viwoods AiPaper, AiPaper Mini | Straight from Viwoods Cloud (notebooks, memos, Daily planner), or a PDF export folder | Cloud built against the live API's responses; a full pull on a real account still to run |
 | reMarkable | PDF export to Google Drive, Dropbox or OneDrive | Folder route works; reading reMarkable Cloud directly is planned (#23) |
-| Supernote | PDF export to a cloud drive | Folder route works; native `.note` files and Supernote Cloud are planned (#23) |
+| Supernote | Its own `.note` notebooks, straight from Supernote's Dropbox, Google Drive or OneDrive sync; or PDF exports | Notebook reader checked page by page against Supernote's own PDF exports, on real notebooks from A6 X, Nomad and Manta in both the 2023 and 2026 formats |
 | Boox | PDF or PNG export to a cloud drive | Folder route works |
-| Kindle Scribe | PDF shared to Google Drive or OneDrive | Folder route works; the email-export path is planned (#23) |
+| Kindle Scribe | Notebooks shared by email (Share → Send to email), picked up from Mail; or PDFs in a folder | Mail pickup built and tested against simulated Mail; not yet run on a real Scribe email |
 | Any other tablet | PDF or PNG in any folder | Works |
 
 | Destination | What it gets | Sign-in | State |
@@ -90,6 +90,20 @@ Tips:
 
 - In the cloud app, mark the export folder **Available offline**. Otherwise every new export downloads on first read.
 - Set the tablet to export **PDF**, not its own notebook format.
+
+## Supernote
+
+Supernote can sync its Note folder to Dropbox, Google Drive or OneDrive by itself (Settings → Sync), but it syncs the notebooks in its own `.note` format, not PDFs. InkRelay reads those directly: add `"note"` to the source's `fileTypes` (setup does it when you pick Supernote) and point the source at that folder. Each notebook is turned into a PDF, page by page with all its visible layers, before recognition, so every destination gets the pages as you see them on the device. `inkrelay convert notebook.note notebook.pdf` does the same for one file.
+
+Password-protected notebooks and the oldest A5 format (before firmware C.053) aren't supported.
+
+## Kindle Scribe
+
+A Kindle Scribe shares a notebook by email: Share → Send to email sends a PDF (attached, or as a download link) from Amazon. With a `kindleMail` section in the config (setup adds it when you pick the Scribe), InkRelay asks Mail every 15 minutes for recent messages from Amazon that mention Kindle, saves each notebook's PDF into its own cache, and relays it like any other export. It reads nothing else, remembers which messages it has handled, and only follows links that turn out to be PDFs. macOS asks once to let InkRelay read Mail.
+
+```json
+"kindleMail": { "sender": "amazon", "lookbackDays": 14, "checkEveryMinutes": 15 }
+```
 
 ## Viwoods Cloud
 
@@ -238,9 +252,44 @@ For people without a Mac running all the time. The app in `iOS/` (open `iOS/InkR
 - Choose the folder your tablet exports to, through the Files app, so iCloud Drive, Google Drive, Dropbox and OneDrive all work. Handwriting is read on the device with Vision; nothing is uploaded.
 - **Check for New Notes** reads what's new or changed since the last check.
 - Apple Notes has no API on iOS either, so the app hands notes to Shortcuts: **Get New Ink Notes** returns one text per note with the title on the first line; follow it with **Repeat with Each** and **Create Note**, and run it from an automation. **Recognize Handwriting** reads any PDF or image shared to it.
-- Notes already relayed from another iPhone or iPad on the same Apple ID are skipped through iCloud key-value storage, once the app is signed with your team and that capability.
+- **Sync with your Mac**: with `"sharedLedger": {}` in the Mac's config (setup offers it), the Mac keeps a small `ledger.json` in iCloud Drive/InkRelay of what it filed into Apple Notes. Pick that same folder in the app, and each side skips what the other already filed, so a note never lands in Notes twice. Obsidian and the other Mac destinations still get everything. Whichever device sees a new version of an export first files it.
 
-Signing for a device needs your Apple team in Xcode (Signing & Capabilities). The Mac and the phone don't share sync state yet, so use one or the other for the same folder.
+The project signs with the team set in `iOS/project.yml`; run it on a device from Xcode, which creates the provisioning profile the first time. The shared ledger is a plain file, so it needs no iCloud entitlement.
+
+## Use with AI assistants (MCP)
+
+`inkrelay mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude and other AI assistants can work with your handwritten notes: "what did I write about the bank last week?", "list my open tasks", "go through today's review stack with me", "send this article to my tablet".
+
+InkRelay keeps the recognized text of every note it relays in `archive/` next to the config (notes synced before 0.5.0 are read once more with Vision on the next sync to fill it). The server reads that archive and InkRelay's state; it runs on your Mac and talks to the assistant over stdio, so nothing goes anywhere the assistant doesn't take it.
+
+| Tool | What it does |
+|---|---|
+| `inkrelay_status` | Sources, destinations, last sync, searchable notes, review cards due |
+| `inkrelay_list_notes` | Notes newest first, with a preview; paged |
+| `inkrelay_search_notes` | Notes containing every word of a query (case and accents ignored), with the matching page and a snippet |
+| `inkrelay_get_note` | One note's full text page by page, its tasks, where it was delivered and the original file |
+| `inkrelay_list_tasks` | Tasks written on pages, open, done or all, with due dates |
+| `inkrelay_review_stack` / `inkrelay_review_card` | Today's read-later cards; mark done, later, or accept a suggested event into your calendars |
+| `inkrelay_sync_now` | Runs one sync pass (waits for one the app or agent is running) |
+| `inkrelay_send_to_tablet` | Sends a link or a file to the tablet through a send target |
+
+**Claude Desktop**: Settings → Developer → Edit Config, then add (use the path where your `inkrelay` is; inside the app it's `InkRelay.app/Contents/Resources/inkrelay`):
+
+```json
+{
+  "mcpServers": {
+    "inkrelay": { "command": "/Applications/InkRelay.app/Contents/Resources/inkrelay", "args": ["mcp"] }
+  }
+}
+```
+
+**Claude Code**:
+
+```bash
+claude mcp add inkrelay -- /Applications/InkRelay.app/Contents/Resources/inkrelay mcp
+```
+
+Add `--config PATH` after `mcp` to use another config. Sync passes from the server, the menu bar app, `watch` and `sync` take turns through a lock, each starting from the state the last one saved.
 
 ## Run
 

@@ -103,6 +103,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					6257E865D13B7950396AC5BA = {
+						DevelopmentTeam = DT9JP293AM;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -151,6 +152,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0;
+				DEVELOPMENT_TEAM = DT9JP293AM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = InkRelay;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -162,7 +164,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.urazalievf.InkRelay.mobile;
 				PRODUCT_NAME = InkRelay;
 				SDKROOT = iphoneos;
@@ -241,6 +243,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0;
+				DEVELOPMENT_TEAM = DT9JP293AM;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = InkRelay;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
@@ -252,7 +255,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.urazalievf.InkRelay.mobile;
 				PRODUCT_NAME = InkRelay;
 				SDKROOT = iphoneos;

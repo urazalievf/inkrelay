@@ -20,6 +20,8 @@ Usage:
   inkrelay ai login                 Save an Anthropic API key for AI transcription
   inkrelay ai status                This month's AI transcription spend
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
+  inkrelay convert NOTE PDF          Turn a Supernote .note notebook into a PDF
+  inkrelay mcp                      Serve InkRelay to AI assistants over MCP (stdio)
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -123,11 +125,14 @@ case "setup":
     if tablet.hasCloudSource {
         choices.useViwoodsCloud = yes("\nPull notebooks and the Daily planner straight from Viwoods Cloud? (Turn on Viwoods Cloud on the tablet.)", default: true)
     }
-    if !choices.useViwoodsCloud || yes("Also watch an export folder?", default: false) {
+    if tablet.name == "Kindle Scribe" {
+        choices.kindleMail = yes("\nPick up notebooks you share from the Kindle by email, from Mail? (macOS asks once to let InkRelay read Mail.)", default: true)
+    }
+    if !(choices.useViwoodsCloud || choices.kindleMail) || yes("Also watch an export folder?", default: false) {
         print("\n" + tablet.exportHint)
         let clouds = detector.cloudFolders()
         let labels = clouds.map { "\($0.provider)\($0.account.isEmpty ? "" : " (\($0.account))"): \(detector.tilde($0.url))" }
-        if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud ? "No export folder" : nil) {
+        if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud || choices.kindleMail ? "No export folder" : nil) {
             if chosen < clouds.count {
                 let base = detector.tilde(clouds[chosen].url)
                 choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: base + "/" + tablet.name.split(separator: " ").first!)
@@ -151,6 +156,9 @@ case "setup":
     choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource)
     choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
     choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
+    if choices.appleNotesAccount != nil, SharedLedger.iCloudDriveFolder != nil {
+        choices.shareWithPhone = yes("Also use InkRelay on an iPhone or iPad? Share what's filed in Notes through iCloud Drive so it isn't filed twice.", default: false)
+    }
 
     do {
         let config = try choices.config()
@@ -453,6 +461,24 @@ case "send":
     do {
         let file = try sender.prepare(input, title: option("--title"))
         print(try sender.deliver(file, to: target))
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "mcp":
+    // stdout carries only MCP messages from here on; anything else goes to stderr.
+    setvbuf(stdout, nil, _IONBF, 0)
+    FileHandle.standardError.write(Data("InkRelay MCP server \(InkRelayCore.version), config \(configURL.path)\n".utf8))
+    MCPServer(configURL: configURL).run()
+
+case "convert":
+    guard arguments.count >= 2 else { fail("Usage: inkrelay convert NOTEBOOK.note OUTPUT.pdf") }
+    do {
+        let input = URL(fileURLWithPath: (arguments[0] as NSString).expandingTildeInPath)
+        let output = URL(fileURLWithPath: (arguments[1] as NSString).expandingTildeInPath)
+        let note = try SupernoteNote(data: Data(contentsOf: input))
+        try note.writePDF(to: output)
+        print("Wrote \(note.pages.count) page(s) to \(output.path).")
     } catch {
         fail(error.localizedDescription)
     }

@@ -197,6 +197,20 @@ final class RelayEngineTests: XCTestCase {
         XCTAssertNil(try StateStore(url: support.url.appendingPathComponent("state.json")).record(for: "viwoods/Back.pdf")?.missingSince)
     }
 
+    func testTwoProcessesSharingStateDontUndoEachOther() throws {
+        // Both created up front, like the menu bar app and the MCP server holding their own copies.
+        let first = try makeEngine()
+        let second = try makeEngine()
+        try exports.write("One.pdf", "one")
+        _ = first.syncOnce()
+
+        let report = second.syncOnce()
+
+        XCTAssertEqual(report.unchanged, 1, "the second starts from what the first saved")
+        XCTAssertEqual(vault.upserts.count, 1, "so it doesn't send the note again")
+        XCTAssertEqual(try trackedKeys(), ["viwoods/One.pdf"])
+    }
+
     func testMissingSourceFolderIsReportedWithoutStoppingOtherSources() throws {
         try exports.write("One.pdf", "one")
         let config = RelayConfig(
