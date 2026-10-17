@@ -120,7 +120,9 @@ final class SetupAndDoctorTests: XCTestCase {
         /// Notes as InkRelay sees it: ids, a body per note, and the Recently Deleted folder.
         final class FakeNotes: AppleScriptRunner {
             var notes: [String: String] = [:]
+            var folders: [String: String] = [:]
             var deleted: Set<String> = []
+            var removedFolders: [String] = []
             var counter = 0
             /// When true, behaves like a buggy script that keeps updating deleted notes.
             var ignoreRecentlyDeleted = false
@@ -128,6 +130,7 @@ final class SetupAndDoctorTests: XCTestCase {
                 if source == AppleNotesDestination.createScript {
                     counter += 1
                     notes["note-\(counter)"] = arguments[2]
+                    folders["note-\(counter)"] = arguments[0]
                     return "note-\(counter)"
                 }
                 if source == AppleNotesDestination.updateScript {
@@ -140,12 +143,19 @@ final class SetupAndDoctorTests: XCTestCase {
                     deleted.insert(arguments[0])
                     return ""
                 }
+                if source == AppleNotesDestination.archiveScript {
+                    folders[arguments[0]] = arguments[1]
+                    return ""
+                }
+                if source == NotesRoundTrip.folderOfNoteScript { return folders[arguments[0]] ?? "" }
+                if source == NotesRoundTrip.removeFoldersScript { removedFolders = Array(arguments.dropFirst()) }
                 return ""
             }
         }
         let good = FakeNotes()
-        XCTAssertEqual(NotesRoundTrip(runner: good).run().map(\.status), [.ok, .ok, .ok, .ok])
+        XCTAssertEqual(NotesRoundTrip(runner: good).run().map(\.status), [.ok, .ok, .ok, .ok, .ok])
         XCTAssertEqual(good.deleted.count, 2, "both test notes are deleted at the end")
+        XCTAssertEqual(good.removedFolders, ["InkRelay Test", "InkRelay Test Archive"], "and the test folders removed")
 
         let buggy = FakeNotes()
         buggy.ignoreRecentlyDeleted = true

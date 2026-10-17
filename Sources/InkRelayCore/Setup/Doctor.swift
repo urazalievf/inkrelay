@@ -222,11 +222,40 @@ public enum LogTrimmer {
     }
 }
 
-/// The checks issue #2 lists for Apple Notes, run for real in a throwaway folder: create, update, delete,
+/// The checks issue #2 lists for Apple Notes, run for real in a throwaway folder: create, update, archive, delete,
 /// what happens to a note in Recently Deleted, long text and non-Latin text. It cleans up after itself.
 public struct NotesRoundTrip {
     let runner: AppleScriptRunner
     let account: String?
+
+    static let folder = "InkRelay Test"
+    static let archiveFolder = "InkRelay Test Archive"
+
+    static let folderOfNoteScript = """
+    on run argv
+        tell application "Notes" to return (get name of (get container of note id (item 1 of argv)))
+    end run
+    """
+
+    /// Removes the test folders once their notes are gone (deleted notes sit in Recently Deleted, not the folder).
+    static let removeFoldersScript = """
+    on run argv
+        set accountName to item 1 of argv
+        tell application "Notes"
+            if accountName is "" then
+                set theAccount to default account
+            else
+                set theAccount to account accountName
+            end if
+            repeat with i from 2 to count of argv
+                set folderName to item i of argv
+                if exists folder folderName of theAccount then
+                    if (count of notes of folder folderName of theAccount) is 0 then delete folder folderName of theAccount
+                end if
+            end repeat
+        end tell
+    end run
+    """
 
     public init(runner: AppleScriptRunner = OSAScriptRunner(), account: String? = nil) {
         self.runner = runner
@@ -234,18 +263,21 @@ public struct NotesRoundTrip {
     }
 
     public func run() -> [DoctorCheck] {
-        let destination = AppleNotesDestination(config: .init(id: "doctor", folder: "InkRelay Test", account: account, attachOriginal: false), runner: runner)
+        let destination = AppleNotesDestination(config: .init(id: "doctor", folder: Self.folder, account: account, attachOriginal: false), runner: runner)
         func note(_ text: String) -> InkNote {
             InkNote(title: "InkRelay test note", sourceID: "doctor", device: "InkRelay doctor", originalURL: URL(fileURLWithPath: "/dev/null"),
                     relativePath: "doctor.pdf", modified: Date(), contentHash: UUID().uuidString, pages: [RecognizedPage(number: 1, text: text)])
         }
         var results: [DoctorCheck] = []
         var created: [String] = []
-        defer { for id in created { _ = try? runner.run(AppleNotesDestination.deleteScript, arguments: [id]) } }
+        defer {
+            for id in created { _ = try? runner.run(AppleNotesDestination.deleteScript, arguments: [id]) }
+            _ = try? runner.run(Self.removeFoldersScript, arguments: [account ?? "", Self.folder, Self.archiveFolder])
+        }
         do {
             let first = try destination.upsert(note("First version"), previous: nil)
             created.append(first)
-            results.append(DoctorCheck(.ok, "Create a note", "folder \"InkRelay Test\" in \(account ?? "the default account")"))
+            results.append(DoctorCheck(.ok, "Create a note", "folder \"\(Self.folder)\" in \(account ?? "the default account")"))
 
             let updated = try destination.upsert(note("Second version"), previous: DestinationRecord(externalID: first, contentHash: "a", syncedAt: Date()))
             results.append(updated == first
@@ -257,6 +289,12 @@ public struct NotesRoundTrip {
             let big = try destination.upsert(note(long), previous: DestinationRecord(externalID: first, contentHash: "b", syncedAt: Date()))
             results.append(DoctorCheck(.ok, "Long and non-Latin text", "\(long.count) characters accepted"))
             if big != first { created.append(big) }
+
+            _ = try runner.run(AppleNotesDestination.archiveScript, arguments: [first, Self.archiveFolder])
+            let archivedIn = try runner.run(Self.folderOfNoteScript, arguments: [first]).trimmingCharacters(in: .whitespacesAndNewlines)
+            results.append(archivedIn == Self.archiveFolder
+                ? DoctorCheck(.ok, "Archive", "moved to \"\(Self.archiveFolder)\" in the same account")
+                : DoctorCheck(.problem, "Archive", "the note is in \"\(archivedIn)\" instead of \"\(Self.archiveFolder)\""))
 
             _ = try runner.run(AppleNotesDestination.deleteScript, arguments: [first])
             let afterDelete = try destination.upsert(note("Third version"), previous: DestinationRecord(externalID: first, contentHash: "c", syncedAt: Date()))

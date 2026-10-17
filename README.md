@@ -46,7 +46,7 @@ Any tablet reaches every destination: sources and destinations are independent, 
 | Destination | What it gets | Sign-in | State |
 |---|---|---|---|
 | Obsidian | Markdown with your edits kept, the original PDF | none | Working, tested |
-| Apple Notes | Text with the original PDF attached | macOS Automation prompt | Built and tested with a simulated Notes; `inkrelay doctor --notes-roundtrip` runs it for real |
+| Apple Notes | Text with the original PDF attached | macOS Automation prompt | Checked against real Notes (iCloud and Google accounts); `inkrelay doctor --notes-roundtrip` runs the same checks on yours |
 | Apple Calendar | Planner pages and to-dos as all-day events; accepted suggested events | macOS Automation prompt | Built, scripts compile; not yet run against Calendar |
 | Apple Reminders | Written tasks and Daily to-dos, ticked off from the tablet | macOS Automation prompt | Built, scripts compile; not yet run against Reminders |
 | Google Docs, Google Calendar | A Doc per note; planner events | Your Google OAuth client | Tested against the API's shapes and a real loopback sign-in; not yet run on a real account |
@@ -78,7 +78,7 @@ swift build -c release
 .build/release/inkrelay doctor    # checks folders, permissions, sign-ins and the background agent
 ```
 
-`setup` finds the folders under `~/Library/CloudStorage` (Google Drive, Dropbox, OneDrive, Box) and iCloud Drive, reads Obsidian's own list of vaults, and can list your Notes accounts, then runs a first sync. Nobody has to type JSON. `doctor` prints one line per check with what to fix; `doctor --notes-roundtrip` also creates, updates and deletes a test note in a folder called "InkRelay Test" to check Apple Notes end to end (the test notes end up in Recently Deleted), and `--no-apps` skips the Apple app checks that make macOS ask for permission.
+`setup` finds the folders under `~/Library/CloudStorage` (Google Drive, Dropbox, OneDrive, Box) and iCloud Drive, reads Obsidian's own list of vaults, and can list your Notes accounts, then runs a first sync. Nobody has to type JSON. `doctor` prints one line per check with what to fix; `doctor --notes-roundtrip` also creates, updates, archives and deletes a test note in a folder called "InkRelay Test" to check Apple Notes end to end (the test notes end up in Recently Deleted and the test folders are removed; `--notes-account NAME` picks an account other than the configured one), and `--no-apps` skips the Apple app checks that make macOS ask for permission.
 
 To write the config by hand instead, `inkrelay init` writes an example to `~/Library/Application Support/InkRelay/config.json` (full example in [config.example.json](config.example.json)):
 

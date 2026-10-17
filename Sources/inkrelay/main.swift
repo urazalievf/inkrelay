@@ -6,7 +6,7 @@ inkrelay \(InkRelayCore.version): relay handwritten notes from e-ink tablets int
 
 Usage:
   inkrelay setup                    Set up step by step: tablet, folders, vault, Apple apps
-  inkrelay doctor [--notes-roundtrip] [--no-apps]
+  inkrelay doctor [--notes-roundtrip [--notes-account NAME]] [--no-apps]
                                     Check folders, permissions, sign-ins and the background agent
   inkrelay init [--config PATH]     Write an example config to edit
   inkrelay sync [--config PATH]     Sync once and exit
@@ -188,11 +188,12 @@ case "doctor":
     }
     var checks = [DoctorCheck(.ok, "Config", configURL.path)] + Doctor(config: config, supportDirectory: supportDirectory).checks(includeApps: includeApps)
     if arguments.contains("--notes-roundtrip") {
-        let account = config.destinations.compactMap { destination -> String?? in
+        let configured = config.destinations.compactMap { destination -> String?? in
             if case .appleNotes(let notes) = destination { return .some(notes.account) }
             return nil
         }.first ?? nil
-        checks += NotesRoundTrip(account: account).run()
+        let named = arguments.firstIndex(of: "--notes-account").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
+        checks += NotesRoundTrip(account: named ?? configured).run()
     }
     for check in checks {
         print("\(check.status.rawValue) \(check.title)" + (check.detail.isEmpty ? "" : ": \(check.detail)"))
