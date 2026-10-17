@@ -5,7 +5,7 @@ import Foundation
 /// so macOS asks once for permission to control Calendar.
 ///
 /// Notebooks that aren't planner pages are ignored here; they belong in Obsidian and Notes.
-public struct AppleCalendarDestination: NoteDestination, PlanDestination {
+public struct AppleCalendarDestination: NoteDestination, PlanDestination, PlannerEventWriter {
     public var config: DestinationConfig.AppleCalendarConfig
     private let runner: AppleScriptRunner
 
@@ -15,54 +15,28 @@ public struct AppleCalendarDestination: NoteDestination, PlanDestination {
     }
 
     public var id: String { config.id }
+    var pageTitle: String { config.pageTitle }
 
     /// Handle returned for notes this destination doesn't take, so the engine doesn't retry them.
-    public static let skipped = "skipped"
+    public static let skipped = PlannerEvent.skipped
 
     public func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String {
-        guard let date = Self.plannerDate(of: note) else { return Self.skipped }
-        let text = note.pages.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }.joined(separator: "\n\n")
-        let summary = Self.summary(prefix: config.pageTitle, text: text)
-        let description = (text.isEmpty ? "No text recognized." : text) + "\n\nFrom \(note.device). Synced by InkRelay."
-        return try upsertEvent(summary: summary, description: description, date: date, previous: previous?.externalID)
+        try upsertPlannerPage(note, previous: previous)
     }
 
     public func upsert(_ todo: DailyTodo, previous: String?) throws -> String {
-        let mark = todo.isFinished ? "☑ " : "☐ "
-        let summary = mark + (todo.text.isEmpty ? "To-do" : Self.firstLine(of: todo.text))
-        var description = todo.text
-        if let priority = todo.priority { description += "\n\nPriority: \(priority)" }
-        description += "\n\nViwoods Daily to-do. Synced by InkRelay."
-        return try upsertEvent(summary: summary, description: description, date: todo.date, previous: previous)
+        try upsertTodo(todo, previous: previous)
     }
 
-    private func upsertEvent(summary: String, description: String, date: String, previous: String?) throws -> String {
-        if let previous, previous != Self.skipped {
+    func upsertEvent(_ event: PlannerEvent, previous: String?) throws -> String {
+        if let previous {
             // Empty means the event was deleted in Calendar; a fresh one is created below.
-            let updated = try runner.run(Self.updateScript, arguments: [config.calendar, previous, summary, description, date])
+            let updated = try runner.run(Self.updateScript, arguments: [config.calendar, previous, event.summary, event.description, event.date])
             if !updated.isEmpty { return updated }
         }
-        let created = try runner.run(Self.createScript, arguments: [config.calendar, summary, description, date])
+        let created = try runner.run(Self.createScript, arguments: [config.calendar, event.summary, event.description, event.date])
         guard !created.isEmpty else { throw DestinationError.failed(id, "Calendar didn't return an id for the new event") }
         return created
-    }
-
-    /// Planner pages live under `Daily/` and are named by date.
-    static func plannerDate(of note: InkNote) -> String? {
-        let parts = note.relativePath.split(separator: "/")
-        guard parts.count >= 2, parts[parts.count - 2] == "Daily" else { return nil }
-        return ViwoodsDate.normalize(note.title)
-    }
-
-    static func summary(prefix: String, text: String) -> String {
-        let line = firstLine(of: text)
-        return line.isEmpty ? prefix : "\(prefix): \(line)"
-    }
-
-    static func firstLine(of text: String, limit: Int = 80) -> String {
-        let line = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
-        return line.count > limit ? String(line.prefix(limit - 1)) + "…" : line
     }
 
     static let dateHandler = """

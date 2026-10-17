@@ -71,8 +71,14 @@ final class AppleCalendarDestinationTests: XCTestCase {
 
     func testLongFirstLinesAreShortenedInTheTitle() {
         let long = String(repeating: "x", count: 100)
-        XCTAssertEqual(AppleCalendarDestination.firstLine(of: long).count, 80)
-        XCTAssertEqual(AppleCalendarDestination.summary(prefix: "Daily plan", text: ""), "Daily plan")
+        XCTAssertEqual(PlannerEvent.firstLine(of: long).count, 80)
+        XCTAssertEqual(PlannerEvent.summary(prefix: "Daily plan", text: ""), "Daily plan")
+    }
+
+    func testAllDayEventsEndTheNextDay() {
+        XCTAssertEqual(PlannerEvent.dayAfter("2026-01-31"), "2026-02-01")
+        XCTAssertEqual(PlannerEvent.dayAfter("2028-02-28"), "2028-02-29")
+        XCTAssertEqual(PlannerEvent.dayAfter("2026-12-31"), "2027-01-01")
     }
 
     func testDestinationFactoryBuildsCalendarAndFindsPlanSinks() {
