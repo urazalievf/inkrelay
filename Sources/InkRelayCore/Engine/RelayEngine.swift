@@ -11,6 +11,8 @@ public final class RelayEngine {
     private let recognizer: TextRecognizer
     private let destinations: [NoteDestination]
     private let puller: ViwoodsCloudPuller?
+    /// Used for sources with `"recognizer": "claude"`.
+    private let aiRecognizer: TextRecognizer?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -20,6 +22,7 @@ public final class RelayEngine {
         recognizer: TextRecognizer,
         destinations: [NoteDestination],
         puller: ViwoodsCloudPuller? = nil,
+        aiRecognizer: TextRecognizer? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -28,6 +31,7 @@ public final class RelayEngine {
         self.recognizer = recognizer
         self.destinations = destinations
         self.puller = puller
+        self.aiRecognizer = aiRecognizer
         self.fileManager = fileManager
         self.now = now
     }
@@ -44,12 +48,17 @@ public final class RelayEngine {
             let client = ViwoodsClient(credentials: FileCredentialStore(url: Self.tokenURL(besideState: stateURL)))
             puller = try ViwoodsCloudPuller(config: cloud, client: client, plans: DestinationFactory.plans(in: destinations))
         }
+        let vision = VisionTextRecognizer(config: config.recognition)
+        let ai: TextRecognizer? = config.allSources.contains { $0.recognizer == .claude }
+            ? ClaudeTextRecognizer(config: config.ai ?? AITranscriptionConfig(), supportDirectory: stateURL.deletingLastPathComponent(), fallback: vision)
+            : nil
         return RelayEngine(
             config: config,
             store: try StateStore(url: stateURL),
-            recognizer: VisionTextRecognizer(config: config.recognition),
+            recognizer: vision,
             destinations: destinations,
-            puller: puller
+            puller: puller,
+            aiRecognizer: ai
         )
     }
 
@@ -151,7 +160,7 @@ public final class RelayEngine {
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try recognizer.recognize(fileAt: file.url)
+                pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: file.url)
             )
 
             var deliveredAll = true
@@ -170,6 +179,9 @@ public final class RelayEngine {
                 report.renamed += 1
             }
             if deliveredAll { report.synced += 1 }
+            if source.recognizer == .claude, let claude = aiRecognizer as? ClaudeTextRecognizer {
+                report.warnings += claude.takeFallbacks().map { "Vision read \($0)" }
+            }
         } catch {
             report.failures.append(.init(item: item, destinationID: nil, message: error.localizedDescription))
         }

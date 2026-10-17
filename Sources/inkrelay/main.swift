@@ -14,6 +14,8 @@ Usage:
   inkrelay google login             Sign in to Google for the googleCalendar and googleDocs destinations
   inkrelay microsoft login          Sign in to Microsoft for the outlookCalendar and oneNote destinations
   inkrelay notion login             Save a Notion integration token in the Keychain
+  inkrelay ai login                 Save an Anthropic API key for AI transcription
+  inkrelay ai status                This month's AI transcription spend
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -280,6 +282,45 @@ case "notion":
     } catch {
         try? keychain.deleteSecret(for: NotionDestination.keychainAccount)
         fail(error.localizedDescription)
+    }
+
+case "ai":
+    let config = loadConfig()
+    let ai = config.ai ?? AITranscriptionConfig()
+    let claudeSources = config.allSources.filter { $0.recognizer == .claude }.map(\.id)
+    switch arguments.first ?? "" {
+    case "login":
+        print("""
+        AI transcription sends each page image of the sources that opt in ("recognizer": "claude") to Anthropic's API,
+        which returns the text. Nothing else leaves the Mac, and Vision stays the default for every other source.
+        Model: \(ai.model), effort \(ai.effort), spending capped at $\(String(format: "%.2f", ai.monthlyBudgetUSD)) a month.
+        Sources opted in: \(claudeSources.isEmpty ? "none yet" : claudeSources.joined(separator: ", ")).
+
+        Create a key at https://platform.claude.com/settings/keys and paste it here. It's kept in your login Keychain.
+
+        """)
+        print("API key: ", terminator: "")
+        guard let key = readLine(strippingNewline: true)?.trimmingCharacters(in: .whitespaces), !key.isEmpty else { fail("No key entered.") }
+        var check = URLRequest(url: URL(string: "https://api.anthropic.com/v1/models")!)
+        check.setValue(key, forHTTPHeaderField: "x-api-key")
+        check.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        do {
+            let (_, response) = try URLSessionTransport().send(check)
+            guard response.statusCode == 200 else { fail("Anthropic didn't accept the key (HTTP \(response.statusCode)).") }
+            try KeychainStore().setSecret(key, for: ClaudeTextRecognizer.keychainAccount)
+            print("Saved.")
+        } catch {
+            fail(error.localizedDescription)
+        }
+    case "status":
+        let recognizer = ClaudeTextRecognizer(config: ai, supportDirectory: supportDirectory, fallback: VisionTextRecognizer())
+        let (spent, pages) = recognizer.spentThisMonth()
+        print("AI transcription: \(ai.model), effort \(ai.effort)")
+        print("This month: $\(String(format: "%.2f", spent)) of $\(String(format: "%.2f", ai.monthlyBudgetUSD)) for \(pages) page(s)")
+        print("Key: " + (recognizer.apiKey() == nil ? "missing; run `inkrelay ai login`" : "saved"))
+        print("Sources using it: " + (claudeSources.isEmpty ? "none" : claudeSources.joined(separator: ", ")))
+    default:
+        fail("Usage: inkrelay ai login | status")
     }
 
 case "review":

@@ -366,6 +366,8 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
     public var dailyMonths: Int
     /// Where the PDFs are mirrored. Defaults to `~/Library/Application Support/InkRelay/viwoods`.
     public var cachePath: String?
+    /// `vision` (default) or `claude`, as for folder sources.
+    public var recognizer: RecognizerKind = .vision
 
     public init(
         id: String = "viwoods-cloud",
@@ -383,7 +385,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         self.cachePath = cachePath
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, apps, daily, dailyMonths, cachePath }
+    private enum CodingKeys: String, CodingKey { case id, device, apps, daily, dailyMonths, cachePath, recognizer }
 
     public init(from decoder: Decoder) throws {
         let defaults = ViwoodsCloudConfig()
@@ -394,6 +396,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         daily = try container.decodeIfPresent(Bool.self, forKey: .daily) ?? defaults.daily
         dailyMonths = try container.decodeIfPresent(Int.self, forKey: .dailyMonths) ?? defaults.dailyMonths
         cachePath = try container.decodeIfPresent(String.self, forKey: .cachePath)
+        recognizer = try container.decodeIfPresent(RecognizerKind.self, forKey: .recognizer) ?? .vision
     }
 
     public var enabledApps: [ViwoodsApp] {
@@ -409,7 +412,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
 
     /// The cache as a source, so the engine treats pulled PDFs like any other export.
     public var source: SourceConfig {
-        var source = SourceConfig(id: id, device: device, path: cacheURL.path, fileTypes: ["pdf"])
+        var source = SourceConfig(id: id, device: device, path: cacheURL.path, fileTypes: ["pdf"], recognizer: recognizer)
         source.waitsForSettle = false
         return source
     }

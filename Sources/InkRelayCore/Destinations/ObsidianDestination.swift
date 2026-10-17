@@ -107,7 +107,7 @@ public enum MarkdownRenderer {
     public static let startMarker = "%% inkrelay:start — written by InkRelay; edits between these markers are replaced on the next sync %%"
     public static let endMarker = "%% inkrelay:end %%"
     /// Frontmatter keys InkRelay rewrites. `tags` is written once, then belongs to the user.
-    static let managedKeys = ["source", "device", "original", "pages", "modified", "synced"]
+    static let managedKeys = ["source", "device", "original", "pages", "modified", "synced", "suggested_title", "suggested_tags"]
 
     public static func render(_ note: InkNote, embedPath: String?, tags: [String], syncedAt: Date = Date(), merging existing: String? = nil) -> String {
         var managed: [(String, String)] = [
@@ -118,6 +118,10 @@ public enum MarkdownRenderer {
             ("modified", NoteFormatting.timestamp.string(from: note.modified)),
             ("synced", NoteFormatting.timestamp.string(from: syncedAt)),
         ]
+        // AI transcription suggests a title and topic tags; they're InkRelay's, so they update with the note.
+        if let suggested = note.pages.compactMap(\.suggestedTitle).first { managed.append(("suggested_title", yamlString(suggested))) }
+        let suggestedTags = Array(Set(note.pages.flatMap(\.tags))).sorted()
+        if !suggestedTags.isEmpty { managed.append(("suggested_tags", "[\(suggestedTags.map(yamlString).joined(separator: ", "))]")) }
         let tagsValue = tags.isEmpty ? nil : "[\(tags.map(yamlString).joined(separator: ", "))]"
         let block = generatedBlock(note, embedPath: embedPath)
 

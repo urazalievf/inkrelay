@@ -155,6 +155,18 @@ Google needs an OAuth client of your own while InkRelay is in development:
 .build/release/inkrelay notion login
 ```
 
+## AI transcription (optional)
+
+Vision is free and never sends anything anywhere, but it struggles with cursive and dense pages. For a source that needs better reading, set `"recognizer": "claude"` on it (or on `viwoodsCloud`). **Its page images are then sent to Anthropic's API**, one request per page, and Claude returns the text with paragraphs, lists and checkboxes rebuilt, plus a suggested title and tags that land in Obsidian's frontmatter as `suggested_title` and `suggested_tags`. Every other source stays on Vision.
+
+```json
+"ai": { "model": "claude-opus-5-5", "effort": "medium", "monthlyBudgetUSD": 5, "serverFallback": true }
+```
+
+- **Budget:** each answer's token usage is priced and added up in `ai-usage.json`. A page is only sent if a worst-case page still fits under `monthlyBudgetUSD`; after that, Vision reads the rest of the month for free. At the default model a page costs roughly two to four cents.
+- **Fallbacks:** a page Claude can't do (no key, budget reached, an API error, a declined or cut-off answer) is read by Vision instead, and the sync log says which pages and why. `serverFallback` lets the API retry a declined page on Anthropic's recommended fallback model first.
+- **Key:** `inkrelay ai login` saves an Anthropic API key in the login Keychain (`ANTHROPIC_API_KEY` in the environment works too). `inkrelay ai status` shows the month's spend.
+
 ## Run
 
 ```bash

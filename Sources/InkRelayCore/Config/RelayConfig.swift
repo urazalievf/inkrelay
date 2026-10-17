@@ -19,6 +19,8 @@ public struct RelayConfig: Codable, Equatable {
     public var onDelete: [String: RemovalPolicy]
     /// A file must sit unchanged this long before it's read, so half-downloaded exports aren't relayed.
     public var settleSeconds: Int
+    /// AI transcription settings for sources with `"recognizer": "claude"`. Defaults apply when missing.
+    public var ai: AITranscriptionConfig?
 
     public init(
         sources: [SourceConfig],
@@ -29,7 +31,8 @@ public struct RelayConfig: Codable, Equatable {
         google: GoogleAccountConfig? = nil,
         microsoft: MicrosoftAccountConfig? = nil,
         onDelete: [String: RemovalPolicy] = [:],
-        settleSeconds: Int = 5
+        settleSeconds: Int = 5,
+        ai: AITranscriptionConfig? = nil
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -40,10 +43,11 @@ public struct RelayConfig: Codable, Equatable {
         self.microsoft = microsoft
         self.onDelete = onDelete
         self.settleSeconds = settleSeconds
+        self.ai = ai
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -62,6 +66,7 @@ public struct RelayConfig: Codable, Equatable {
         microsoft = try container.decodeIfPresent(MicrosoftAccountConfig.self, forKey: .microsoft)
         onDelete = try container.decodeIfPresent([String: RemovalPolicy].self, forKey: .onDelete) ?? [:]
         settleSeconds = try container.decodeIfPresent(Int.self, forKey: .settleSeconds) ?? 5
+        ai = try container.decodeIfPresent(AITranscriptionConfig.self, forKey: .ai)
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
@@ -89,6 +94,7 @@ public struct RelayConfig: Codable, Equatable {
             throw ConfigError.invalid("onDelete names \"\(unknown)\", which isn't a destination id.")
         }
         guard (0...600).contains(settleSeconds) else { throw ConfigError.invalid("settleSeconds must be between 0 and 600.") }
+        try ai?.validate()
         for (kind, ids) in [("source", allSources.map(\.id)), ("destination", destinations.map(\.id))] {
             if let duplicate = ids.firstDuplicate() {
                 throw ConfigError.invalid("Two \(kind)s share the id \"\(duplicate)\". Ids must be unique.")
@@ -111,15 +117,18 @@ public struct SourceConfig: Codable, Equatable {
     public var fileTypes: [String]
     /// Wait for files to settle before reading. Off for InkRelay's own cloud cache, which it writes atomically.
     public var waitsForSettle = true
+    /// `vision` (default, on the Mac) or `claude` (page images are sent to Anthropic; see the `ai` section).
+    public var recognizer: RecognizerKind
 
-    public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"]) {
+    public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"], recognizer: RecognizerKind = .vision) {
         self.id = id
         self.device = device
         self.path = path
         self.fileTypes = fileTypes
+        self.recognizer = recognizer
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes }
+    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -127,9 +136,24 @@ public struct SourceConfig: Codable, Equatable {
         device = try container.decodeIfPresent(String.self, forKey: .device) ?? id
         path = try container.decode(String.self, forKey: .path)
         fileTypes = try container.decodeIfPresent([String].self, forKey: .fileTypes) ?? ["pdf"]
+        recognizer = try container.decodeIfPresent(RecognizerKind.self, forKey: .recognizer) ?? .vision
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(device, forKey: .device)
+        try container.encode(path, forKey: .path)
+        try container.encode(fileTypes, forKey: .fileTypes)
+        if recognizer != .vision { try container.encode(recognizer, forKey: .recognizer) }
     }
 
     public var url: URL { URL(fileURLWithPath: PathExpansion.expand(path), isDirectory: true) }
+}
+
+public enum RecognizerKind: String, Codable, Equatable {
+    case vision
+    case claude
 }
 
 /// Where recognized notes are written. The `kind` field picks the case in JSON.
