@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared constants for InkRelay.
 public enum InkRelayCore {
-    public static let version = "0.5.0"
+    public static let version = "0.6.0"
 
     /// `~/Library/Application Support/InkRelay`, where the config and sync state live.
     /// The user's home folder on the Mac; the app's own container on iPhone and iPad.

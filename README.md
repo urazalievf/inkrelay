@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.5.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.6.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
