@@ -92,6 +92,30 @@ The cloud is checked on every sync and, under `watch`, every `rescanIntervalSeco
 
 The `appleCalendar` destination takes only the Daily planner. A handwritten day page becomes an all-day event titled `Daily plan: <first recognized line>` with the full recognized text in the notes. Each typed to-do becomes an all-day event of its own, `☐ …` or `☑ …` by its state, with its priority in the notes. Events are updated in place when the page or to-do changes; one deleted in Calendar is recreated on the next change. The calendar named in the config is created if missing. macOS asks once to let `inkrelay` control Calendar.
 
+## Send articles and documents to the tablet
+
+The other direction: `inkrelay send` takes a web link or a file and delivers it to the tablet.
+
+```bash
+inkrelay send https://example.com/some-article        # to the first send target
+inkrelay send ~/Downloads/paper.pdf --to kindle
+inkrelay send notes.md --title "Reading list"
+```
+
+A web page becomes an **EPUB**: the article's own text, headings, lists and pictures, without menus, ads, scripts or footers, which reflows to fit any e-ink screen. PDF and EPUB files go as they are; HTML, Markdown and plain text become EPUB too.
+
+```json
+"sendTargets": [
+  { "kind": "viwoodsCloud", "id": "viwoods", "app": "learning" },
+  { "kind": "folder", "id": "drive", "path": "~/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/Viwoods/Import" },
+  { "kind": "kindle", "id": "kindle", "address": "you_123@kindle.com" }
+]
+```
+
+- **viwoodsCloud** uploads into Learning (the reader, default) or Paper, the same way the portal's Import button does; it needs `inkrelay viwoods login`.
+- **folder** drops the file where the tablet or its cloud app picks files up. Existing files are never overwritten.
+- **kindle** mails the file from Mail's default account. Add that address to the approved senders in Amazon's Send to Kindle settings first.
+
 ## Review stack
 
 Add a `reviewStack` destination and every page InkRelay relays becomes a card. While `inkrelay watch` runs, the stack is at <http://127.0.0.1:7788>; without it, `inkrelay review open` serves and opens it.

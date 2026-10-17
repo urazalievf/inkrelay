@@ -16,6 +16,8 @@ final class FakeTransport: HTTPTransport {
     typealias Handler = (Sent) throws -> (Int, Data)
 
     var handlers: [String: Handler] = [:]
+    /// Response headers by path or full URL, such as an ETag for an upload.
+    var responseHeaders: [String: [String: String]] = [:]
     var sent: [Sent] = []
 
     func send(_ request: URLRequest) throws -> (Data, HTTPURLResponse) {
@@ -29,7 +31,8 @@ final class FakeTransport: HTTPTransport {
             return (Data(), HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!)
         }
         let (status, data) = try handler(record)
-        return (data, HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!)
+        let headers = responseHeaders[path] ?? responseHeaders[url.absoluteString]
+        return (data, HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: headers)!)
     }
 
     /// Registers a 200 envelope with the given payload.

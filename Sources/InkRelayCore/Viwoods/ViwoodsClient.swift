@@ -96,18 +96,32 @@ public final class ViwoodsClient {
     public enum Param: Equatable {
         case string(String)
         case int(Int)
+        /// Only the upload's part tags use an object.
+        case object([String: String])
 
+        /// How the portal's JavaScript turns the value into text for the signature.
         var signed: String {
             switch self {
             case .string(let text): return text
             case .int(let number): return String(number)
+            case .object: return "[object Object]"
+            }
+        }
+
+        var json: Any {
+            switch self {
+            case .string(let text): return text
+            case .int(let number): return number
+            case .object(let map): return map
             }
         }
     }
 
     /// The portal's signature: parameters sorted by key as `k=v&k=v`, the signing key appended, MD5 in hex.
-    static func sign(_ body: [String: Param]) -> String {
-        let joined = body.keys.sorted().map { "\($0)=\(body[$0]!.signed)" }.joined(separator: "&")
+    /// Like the portal, it leaves the part tags out when completing an upload.
+    static func sign(_ body: [String: Param], path: String = "") -> String {
+        let keys = body.keys.sorted().filter { !($0 == "eTags" && path.contains("upload/complete")) }
+        let joined = keys.map { "\($0)=\(body[$0]!.signed)" }.joined(separator: "&")
         let digest = Insecure.MD5.hash(data: Data((joined + signingKey).utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -117,12 +131,7 @@ public final class ViwoodsClient {
         body["uri"] = .string("/" + path)
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
-        request.httpBody = try JSONSerialization.data(withJSONObject: body.mapValues { param -> Any in
-            switch param {
-            case .string(let text): return text
-            case .int(let number): return number
-            }
-        })
+        request.httpBody = try JSONSerialization.data(withJSONObject: body.mapValues(\.json))
         let headers = [
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -132,7 +141,7 @@ public final class ViwoodsClient {
             "Machine-Model": "web",
             "Machine-Number": "",
             "Language": "us",
-            "Sign": sign(body),
+            "Sign": sign(body, path: path),
         ]
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         if let token {
@@ -150,18 +159,88 @@ public final class ViwoodsClient {
     }
 
     private func call<T: Decodable>(_ path: String, _ body: [String: Param]) throws -> T {
+        try decode(T.self, from: try reply(path, body), path: path)
+    }
+
+    /// The raw envelope after a successful call, refreshing the token once if it expired.
+    private func reply(_ path: String, _ body: [String: Param]) throws -> Data {
         let token = try currentToken()
-        let first = try perform(path: path, body: body, token: token)
-        switch first {
+        switch try perform(path: path, body: body, token: token) {
         case .success(let data):
-            return try decode(T.self, from: data, path: path)
+            return data
         case .expired:
             let fresh = try refresh(expired: token)
             switch try perform(path: path, body: body, token: fresh) {
-            case .success(let data): return try decode(T.self, from: data, path: path)
+            case .success(let data): return data
             case .expired: throw ViwoodsError.notLoggedIn
             }
         }
+    }
+
+    /// The `data` object of a reply, loosely typed, for endpoints whose field names vary.
+    private func object(_ path: String, _ body: [String: Param]) throws -> [String: Any] {
+        let envelope = (try? JSONSerialization.jsonObject(with: try reply(path, body))) as? [String: Any]
+        return envelope?["data"] as? [String: Any] ?? [:]
+    }
+
+    // MARK: Importing
+
+    /// Uploads a file into a Viwoods app the way the portal's Import button does: start an upload, PUT the
+    /// bytes to the storage URL it hands out, complete it with the file's MD5 and the part's ETag, then
+    /// register the file with the app. Learning takes EPUB and PDF; Paper takes PDF.
+    public func importFile(_ data: Data, fileName: String, to target: ViwoodsImportTarget, pageCount: Int, parentID: String = "") throws {
+        let folder = "/\(target.folderType)/"
+        let ticket = try object("api/v2/cloud/upload/init", ["fileName": .string(fileName), "partNum": .int(1), "type": .string(folder)])
+        let uploadID = Self.first(ticket, ["uploadId", "id"])
+        let filePath = Self.first(ticket, ["filePath", "path"])
+        let part = Self.uploadPart(ticket["uploadPath"])
+        guard !uploadID.isEmpty, let partURL = URL(string: part.url) else {
+            throw ViwoodsError.unexpectedResponse("upload/init", "no upload URL")
+        }
+
+        var put = URLRequest(url: partURL)
+        put.httpMethod = "PUT"
+        put.httpBody = data
+        for (name, value) in part.headers { put.setValue(value, forHTTPHeaderField: name) }
+        let (_, stored) = try transport.send(put)
+        guard (200..<300).contains(stored.statusCode), let etag = stored.value(forHTTPHeaderField: "ETag"), !etag.isEmpty else {
+            throw ViwoodsError.http("upload", stored.statusCode, "the storage server didn't accept the file")
+        }
+
+        let hash = Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let done = try object("api/v2/cloud/upload/complete", [
+            "uploadId": .string(uploadID), "folder": .string(folder), "source": .string(String(target.rawValue)),
+            "filePath": .string(filePath), "fileName": .string(fileName), "hash": .string(hash),
+            "eTags": .object([part.partNumber: etag]),
+        ])
+        let fileURL = Self.first(done, ["fileURL", "fileUrl", "file_url", "filePath", "path", "url"])
+        _ = try reply("api/v1/resourceSync/import", [
+            "appType": .int(target.rawValue), "name": .string(fileName), "parentId": .string(parentID),
+            "fileSize": .int(data.count), "filePath": .string(fileURL.isEmpty ? filePath : fileURL), "pageNumber": .int(pageCount),
+        ])
+    }
+
+    static func first(_ object: [String: Any], _ keys: [String]) -> String {
+        for key in keys {
+            if let value = object[key], !(value is NSNull) {
+                let text = "\(value)".trimmingCharacters(in: .whitespaces)
+                if !text.isEmpty { return text }
+            }
+        }
+        return ""
+    }
+
+    /// `uploadPath` arrives as a URL, a list of URLs, or objects with the URL, part number and headers.
+    static func uploadPart(_ value: Any?) -> (url: String, partNumber: String, headers: [String: String]) {
+        let entry = (value as? [Any])?.first ?? value
+        if let url = entry as? String { return (url, "1", [:]) }
+        guard let object = entry as? [String: Any] else { return ("", "1", [:]) }
+        let headers = (object["headers"] ?? object["uploadHeaders"] ?? object["requestHeaders"]) as? [String: Any] ?? [:]
+        return (
+            first(object, ["url", "uploadUrl", "path", "uploadPath"]),
+            first(object, ["partNumber", "partNo", "part"]).isEmpty ? "1" : first(object, ["partNumber", "partNo", "part"]),
+            headers.mapValues { "\($0)" }
+        )
     }
 
     private enum Outcome {

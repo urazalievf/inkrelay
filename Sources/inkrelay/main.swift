@@ -16,6 +16,7 @@ Usage:
   inkrelay notion login             Save a Notion integration token in the Keychain
   inkrelay ai login                 Save an Anthropic API key for AI transcription
   inkrelay ai status                This month's AI transcription spend
+  inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -323,6 +324,28 @@ case "ai":
         print("Sources using it: " + (claudeSources.isEmpty ? "none" : claudeSources.joined(separator: ", ")))
     default:
         fail("Usage: inkrelay ai login | status")
+    }
+
+case "send":
+    let config = loadConfig()
+    guard let input = arguments.first(where: { !$0.hasPrefix("--") }) else { fail("Usage: inkrelay send LINK|FILE [--to TARGET] [--title TITLE]") }
+    func option(_ name: String) -> String? {
+        guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else { return nil }
+        return arguments[index + 1]
+    }
+    guard !config.sendTargets.isEmpty else {
+        fail("Add a \"sendTargets\" list to \(configURL.path), for example a folder your tablet imports from:\n  \"sendTargets\": [{ \"kind\": \"folder\", \"id\": \"drive\", \"path\": \"~/Library/CloudStorage/…/Viwoods/Import\" }]")
+    }
+    let wanted = option("--to")
+    guard let target = wanted.map({ id in config.sendTargets.first { $0.id == id } }) ?? config.sendTargets.first else {
+        fail("No send target with id \"\(wanted ?? "")\". Known: \(config.sendTargets.map(\.id).joined(separator: ", ")).")
+    }
+    let sender = Sender(viwoods: { ViwoodsClient(credentials: FileCredentialStore(url: tokenURL)) })
+    do {
+        let file = try sender.prepare(input, title: option("--title"))
+        print(try sender.deliver(file, to: target))
+    } catch {
+        fail(error.localizedDescription)
     }
 
 case "review":

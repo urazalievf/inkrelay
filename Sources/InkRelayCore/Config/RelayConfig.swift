@@ -21,6 +21,8 @@ public struct RelayConfig: Codable, Equatable {
     public var settleSeconds: Int
     /// AI transcription settings for sources with `"recognizer": "claude"`. Defaults apply when missing.
     public var ai: AITranscriptionConfig?
+    /// Where `inkrelay send` delivers articles and documents. The first is the default.
+    public var sendTargets: [SendTargetConfig]
 
     public init(
         sources: [SourceConfig],
@@ -32,7 +34,8 @@ public struct RelayConfig: Codable, Equatable {
         microsoft: MicrosoftAccountConfig? = nil,
         onDelete: [String: RemovalPolicy] = [:],
         settleSeconds: Int = 5,
-        ai: AITranscriptionConfig? = nil
+        ai: AITranscriptionConfig? = nil,
+        sendTargets: [SendTargetConfig] = []
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -44,10 +47,11 @@ public struct RelayConfig: Codable, Equatable {
         self.onDelete = onDelete
         self.settleSeconds = settleSeconds
         self.ai = ai
+        self.sendTargets = sendTargets
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -67,6 +71,7 @@ public struct RelayConfig: Codable, Equatable {
         onDelete = try container.decodeIfPresent([String: RemovalPolicy].self, forKey: .onDelete) ?? [:]
         settleSeconds = try container.decodeIfPresent(Int.self, forKey: .settleSeconds) ?? 5
         ai = try container.decodeIfPresent(AITranscriptionConfig.self, forKey: .ai)
+        sendTargets = try container.decodeIfPresent([SendTargetConfig].self, forKey: .sendTargets) ?? []
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
@@ -95,6 +100,9 @@ public struct RelayConfig: Codable, Equatable {
         }
         guard (0...600).contains(settleSeconds) else { throw ConfigError.invalid("settleSeconds must be between 0 and 600.") }
         try ai?.validate()
+        if let duplicate = sendTargets.map(\.id).firstDuplicate() {
+            throw ConfigError.invalid("Two send targets share the id \"\(duplicate)\".")
+        }
         for (kind, ids) in [("source", allSources.map(\.id)), ("destination", destinations.map(\.id))] {
             if let duplicate = ids.firstDuplicate() {
                 throw ConfigError.invalid("Two \(kind)s share the id \"\(duplicate)\". Ids must be unique.")
