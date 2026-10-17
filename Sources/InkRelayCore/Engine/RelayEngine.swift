@@ -147,6 +147,17 @@ public final class RelayEngine {
         let item = "\(source.id)/\(file.relativePath)"
         var previous = store.record(for: key)
 
+        // An empty notebook stays out of every destination until someone writes in it.
+        if let known = previous, known.blank == true, known.looksUnchanged(file) {
+            if known.missingSince != nil {
+                var back = known
+                back.missingSince = nil
+                try? store.set(back, for: key)
+            }
+            report.unchanged += 1
+            return
+        }
+
         // Notes synced before the archive existed get archived once, read with Vision so it costs nothing.
         let needsArchive = previous.map { notes.entry(forKey: key)?.contentHash != $0.contentHash } ?? false
         if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty,
@@ -209,6 +220,13 @@ public final class RelayEngine {
                 contentHash: hash,
                 pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
             )
+
+            if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {
+                record.blank = true
+                try store.set(record, for: key)
+                report.blank += 1
+                return
+            }
 
             try? notes.upsert(note, key: key, at: now())
             var deliveredAll = true
@@ -321,6 +339,8 @@ public struct SyncReport: Equatable {
     public var removed = 0
     /// Versions another device had already filed into Apple Notes.
     public var filedElsewhere = 0
+    /// Exports with nothing written in them yet, left out of every destination.
+    public var blank = 0
     /// Things worth knowing that aren't failures.
     public var warnings: [String] = []
     /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
@@ -333,6 +353,7 @@ public struct SyncReport: Equatable {
         if renamed > 0 { text += ", \(renamed) renamed" }
         if removed > 0 { text += ", \(removed) removed" }
         if filedElsewhere > 0 { text += ", \(filedElsewhere) already in Notes from another device" }
+        if blank > 0 { text += ", \(blank) blank" }
         if deferred > 0 { text += ", \(deferred) still being written" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         if let pull { text = pull.summary + "; " + text }

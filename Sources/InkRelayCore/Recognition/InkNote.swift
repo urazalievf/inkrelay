@@ -41,12 +41,15 @@ public struct RecognizedPage: Equatable {
     /// From AI transcription only: a title in the writer's words, and topic tags.
     public var suggestedTitle: String?
     public var tags: [String]
+    /// No text and next to no ink: an empty page, which isn't worth a note or a review card.
+    public var isBlank: Bool
 
-    public init(number: Int, text: String, suggestedTitle: String? = nil, tags: [String] = []) {
+    public init(number: Int, text: String, suggestedTitle: String? = nil, tags: [String] = [], isBlank: Bool = false) {
         self.number = number
         self.text = text
         self.suggestedTitle = suggestedTitle
         self.tags = tags
+        self.isBlank = isBlank
     }
 }
 

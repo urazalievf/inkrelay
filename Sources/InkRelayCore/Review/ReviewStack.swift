@@ -262,7 +262,7 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
         let images = renderImages(note.originalURL)
         let title = Self.title(for: note)
         let folder = (note.relativePath as NSString).deletingLastPathComponent
-        let drafts = note.pages.map { page -> CardDraft in
+        let drafts = note.pages.filter { !$0.isBlank }.map { page -> CardDraft in
             let image = page.number <= images.count ? images[page.number - 1] : nil
             var subtitle = note.pages.count > 1 ? "Page \(page.number) of \(note.pages.count)" : "1 page"
             if !folder.isEmpty { subtitle += " · " + folder }

@@ -12,7 +12,8 @@ public struct VisionTextRecognizer: TextRecognizer {
     public func recognize(fileAt url: URL) throws -> [RecognizedPage] {
         let images = try PageRenderer.images(for: url, scale: config.renderScale, maxPixelDimension: config.maxPixelDimension)
         return try images.enumerated().map { index, image in
-            RecognizedPage(number: index + 1, text: try recognizeText(in: image))
+            let text = try recognizeText(in: image)
+            return RecognizedPage(number: index + 1, text: text, isBlank: text.isEmpty && InkCoverage.isBlank(image))
         }
     }
 
