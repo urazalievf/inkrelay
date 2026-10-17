@@ -16,6 +16,7 @@ public final class RelayEngine {
     /// What other devices filed into Apple Notes.
     private let ledger: SharedLedger?
     private let kindle: KindleMailPuller?
+    private let reviewShare: ReviewPublisher?
     private let fileManager: FileManager
     private let now: () -> Date
 
@@ -28,6 +29,7 @@ public final class RelayEngine {
         aiRecognizer: TextRecognizer? = nil,
         ledger: SharedLedger? = nil,
         kindle: KindleMailPuller? = nil,
+        reviewShare: ReviewPublisher? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -39,6 +41,7 @@ public final class RelayEngine {
         self.aiRecognizer = aiRecognizer
         self.ledger = ledger
         self.kindle = kindle
+        self.reviewShare = reviewShare
         self.fileManager = fileManager
         self.now = now
     }
@@ -67,8 +70,18 @@ public final class RelayEngine {
             puller: puller,
             aiRecognizer: ai,
             ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
-            kindle: config.kindleMail.map { KindleMailPuller(config: $0) }
+            kindle: config.kindleMail.map { KindleMailPuller(config: $0) },
+            reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent())
         )
+    }
+
+    static func reviewPublisher(config: RelayConfig, destinations: [NoteDestination], supportDirectory: URL) -> ReviewPublisher? {
+        for case .reviewStack(let stack) in config.destinations {
+            guard let base = stack.shareBase(ledger: config.sharedLedger) else { return nil }
+            let directory = DestinationContext(config: config, supportDirectory: supportDirectory).reviewDirectory
+            return ReviewPublisher(store: ReviewStore(directory: directory), base: base, config: stack, calendars: DestinationFactory.eventWriters(in: destinations))
+        }
+        return nil
     }
 
     /// The Viwoods token sits next to the state file, so separate configs never share a login.
@@ -138,6 +151,11 @@ public final class RelayEngine {
                     for key in gone { handleMissing(key, source: source, into: &report) }
                 }
             }
+        }
+        // Last, so phones see this pass's cards and the Mac applies what they decided since the previous one.
+        if let reviewShare {
+            let shared = reviewShare.sync()
+            report.warnings += shared.failures
         }
         return report
     }

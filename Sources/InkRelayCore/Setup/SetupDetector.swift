@@ -95,7 +95,7 @@ public struct SetupChoices: Equatable {
     public var appleCalendar: Bool
     public var appleReminders: Bool
     public var reviewStack: Bool
-    /// Share what's filed into Notes with InkRelay on an iPhone or iPad, through iCloud Drive.
+    /// Share the review stack, and what's filed into Notes, with InkRelay on an iPhone or iPad through iCloud Drive.
     public var shareWithPhone: Bool
     /// Pick up notebooks a Kindle Scribe emails, from Mail.
     public var kindleMail: Bool = false
@@ -125,7 +125,7 @@ public struct SetupChoices: Equatable {
         if let account = appleNotesAccount { destinations.append(.appleNotes(.init(id: "apple-notes", account: account))) }
         if appleCalendar { destinations.append(.appleCalendar(.init(id: "apple-calendar"))) }
         if appleReminders { destinations.append(.appleReminders(.init(id: "apple-reminders"))) }
-        if reviewStack { destinations.append(.reviewStack(.init(id: "review"))) }
+        if reviewStack { destinations.append(.reviewStack(.init(id: "review", shareWithPhone: shareWithPhone))) }
         let config = RelayConfig(
             sources: sources,
             destinations: destinations,
