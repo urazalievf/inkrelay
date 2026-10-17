@@ -14,6 +14,14 @@
     "daily": true,
     "dailyMonths": 12
   },
+  "google": {
+    "clientId": "YOUR-CLIENT-ID.apps.googleusercontent.com",
+    "clientSecret": "YOUR-CLIENT-SECRET"
+  },
+  "microsoft": {
+    "clientId": "YOUR-APPLICATION-ID",
+    "tenant": "common"
+  },
   "destinations": [
     {
       "kind": "obsidian",
@@ -34,6 +42,35 @@
       "id": "apple-calendar",
       "calendar": "Viwoods",
       "pageTitle": "Daily plan"
+    },
+    {
+      "kind": "reviewStack",
+      "id": "review",
+      "port": 7788,
+      "dailyLimit": 25,
+      "resurfaceDays": [3, 14, 60]
+    },
+    {
+      "kind": "googleCalendar",
+      "id": "google-calendar",
+      "calendar": "Viwoods",
+      "pageTitle": "Daily plan"
+    },
+    {
+      "kind": "googleDocs",
+      "id": "google-docs",
+      "folder": "Ink"
+    },
+    {
+      "kind": "outlookCalendar",
+      "id": "outlook-calendar",
+      "calendar": "Viwoods",
+      "pageTitle": "Daily plan"
+    },
+    {
+      "kind": "oneNote",
+      "id": "onenote",
+      "notebook": "Ink"
     }
   ],
   "recognition": {

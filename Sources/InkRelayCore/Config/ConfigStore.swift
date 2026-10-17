@@ -41,6 +41,7 @@ public enum ConfigStore {
                     vaultPath: "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault"
                 )),
                 .appleNotes(.init(id: "apple-notes")),
+                .reviewStack(.init(id: "review")),
             ]
         )
     }

@@ -11,23 +11,31 @@ public struct RelayConfig: Codable, Equatable {
     public var rescanIntervalSeconds: Int
     /// Pull notebooks and the planner straight from Viwoods Cloud, without a Drive export.
     public var viwoodsCloud: ViwoodsCloudConfig?
+    /// OAuth client for the Google destinations.
+    public var google: GoogleAccountConfig?
+    /// App registration for the Microsoft destinations.
+    public var microsoft: MicrosoftAccountConfig?
 
     public init(
         sources: [SourceConfig],
         destinations: [DestinationConfig],
         recognition: RecognitionConfig = RecognitionConfig(),
         rescanIntervalSeconds: Int = 300,
-        viwoodsCloud: ViwoodsCloudConfig? = nil
+        viwoodsCloud: ViwoodsCloudConfig? = nil,
+        google: GoogleAccountConfig? = nil,
+        microsoft: MicrosoftAccountConfig? = nil
     ) {
         self.sources = sources
         self.destinations = destinations
         self.recognition = recognition
         self.rescanIntervalSeconds = rescanIntervalSeconds
         self.viwoodsCloud = viwoodsCloud
+        self.google = google
+        self.microsoft = microsoft
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -42,6 +50,8 @@ public struct RelayConfig: Codable, Equatable {
         recognition = try container.decodeIfPresent(RecognitionConfig.self, forKey: .recognition) ?? RecognitionConfig()
         rescanIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .rescanIntervalSeconds) ?? 300
         viwoodsCloud = try container.decodeIfPresent(ViwoodsCloudConfig.self, forKey: .viwoodsCloud)
+        google = try container.decodeIfPresent(GoogleAccountConfig.self, forKey: .google)
+        microsoft = try container.decodeIfPresent(MicrosoftAccountConfig.self, forKey: .microsoft)
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
@@ -49,6 +59,18 @@ public struct RelayConfig: Codable, Equatable {
         guard !allSources.isEmpty else { throw ConfigError.invalid("Add at least one source folder, or a viwoodsCloud section.") }
         guard !destinations.isEmpty else { throw ConfigError.invalid("Add at least one destination.") }
         try viwoodsCloud?.validate()
+        if google == nil, let needing = destinations.first(where: \.needsGoogle) {
+            throw ConfigError.invalid("Destination \"\(needing.id)\" needs a \"google\" section with the clientId and clientSecret of a Desktop OAuth client.")
+        }
+        if microsoft == nil, let needing = destinations.first(where: \.needsMicrosoft) {
+            throw ConfigError.invalid("Destination \"\(needing.id)\" needs a \"microsoft\" section with the clientId of an app registration.")
+        }
+        let stacks = destinations.compactMap { destination -> DestinationConfig.ReviewStackConfig? in
+            if case .reviewStack(let stack) = destination { return stack }
+            return nil
+        }
+        if stacks.count > 1 { throw ConfigError.invalid("Only one reviewStack destination is supported.") }
+        try stacks.first?.validate()
         for (kind, ids) in [("source", allSources.map(\.id)), ("destination", destinations.map(\.id))] {
             if let duplicate = ids.firstDuplicate() {
                 throw ConfigError.invalid("Two \(kind)s share the id \"\(duplicate)\". Ids must be unique.")
@@ -95,6 +117,11 @@ public enum DestinationConfig: Codable, Equatable {
     case obsidian(ObsidianConfig)
     case appleNotes(AppleNotesConfig)
     case appleCalendar(AppleCalendarConfig)
+    case googleCalendar(GoogleCalendarConfig)
+    case googleDocs(GoogleDocsConfig)
+    case outlookCalendar(OutlookCalendarConfig)
+    case oneNote(OneNoteConfig)
+    case reviewStack(ReviewStackConfig)
 
     public struct ObsidianConfig: Codable, Equatable {
         public var id: String
@@ -180,6 +207,11 @@ public enum DestinationConfig: Codable, Equatable {
         case .obsidian(let config): return config.id
         case .appleNotes(let config): return config.id
         case .appleCalendar(let config): return config.id
+        case .googleCalendar(let config): return config.id
+        case .googleDocs(let config): return config.id
+        case .outlookCalendar(let config): return config.id
+        case .oneNote(let config): return config.id
+        case .reviewStack(let config): return config.id
         }
     }
 
@@ -188,6 +220,11 @@ public enum DestinationConfig: Codable, Equatable {
         case .obsidian: return "obsidian"
         case .appleNotes: return "appleNotes"
         case .appleCalendar: return "appleCalendar"
+        case .googleCalendar: return "googleCalendar"
+        case .googleDocs: return "googleDocs"
+        case .outlookCalendar: return "outlookCalendar"
+        case .oneNote: return "oneNote"
+        case .reviewStack: return "reviewStack"
         }
     }
 
@@ -199,8 +236,13 @@ public enum DestinationConfig: Codable, Equatable {
         case "obsidian": self = .obsidian(try ObsidianConfig(from: decoder))
         case "appleNotes": self = .appleNotes(try AppleNotesConfig(from: decoder))
         case "appleCalendar": self = .appleCalendar(try AppleCalendarConfig(from: decoder))
+        case "googleCalendar": self = .googleCalendar(try GoogleCalendarConfig(from: decoder))
+        case "googleDocs": self = .googleDocs(try GoogleDocsConfig(from: decoder))
+        case "outlookCalendar": self = .outlookCalendar(try OutlookCalendarConfig(from: decoder))
+        case "oneNote": self = .oneNote(try OneNoteConfig(from: decoder))
+        case "reviewStack": self = .reviewStack(try ReviewStackConfig(from: decoder))
         default:
-            throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use \"obsidian\", \"appleNotes\" or \"appleCalendar\".")
+            throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use one of: \(Self.kinds.joined(separator: ", ")).")
         }
     }
 
@@ -211,8 +253,15 @@ public enum DestinationConfig: Codable, Equatable {
         case .obsidian(let config): try config.encode(to: encoder)
         case .appleNotes(let config): try config.encode(to: encoder)
         case .appleCalendar(let config): try config.encode(to: encoder)
+        case .googleCalendar(let config): try config.encode(to: encoder)
+        case .googleDocs(let config): try config.encode(to: encoder)
+        case .outlookCalendar(let config): try config.encode(to: encoder)
+        case .oneNote(let config): try config.encode(to: encoder)
+        case .reviewStack(let config): try config.encode(to: encoder)
         }
     }
+
+    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack"]
 }
 
 public struct RecognitionConfig: Codable, Equatable {
