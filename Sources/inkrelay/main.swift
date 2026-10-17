@@ -74,6 +74,7 @@ func loadConfig() -> RelayConfig {
 
 func printReport(_ report: SyncReport) {
     log(report.summary)
+    for warning in report.warnings { log("  ! \(warning)") }
     for failure in report.failures {
         let destination = failure.destinationID.map { " → \($0)" } ?? ""
         log("  ✗ \(failure.item)\(destination): \(failure.message)")
@@ -148,7 +149,12 @@ case "watch":
     continuation.yield("startup")
     for await reason in triggers {
         log("Syncing (\(reason))…")
-        printReport(engine.syncOnce())
+        let report = engine.syncOnce()
+        printReport(report)
+        if report.deferred > 0 {
+            // Some files were still being written; look again once they've had time to settle.
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(config.settleSeconds + 1)) { continuation.yield("settled files") }
+        }
     }
     withExtendedLifetime((watcher, reviewServer)) {}
 

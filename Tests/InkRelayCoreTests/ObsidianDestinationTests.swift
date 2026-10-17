@@ -48,6 +48,41 @@ final class ObsidianDestinationTests: XCTestCase {
         XCTAssertFalse(markdown.contains("![["))
     }
 
+    func testRenameMovesTheNoteAndItsPDF() throws {
+        let original = try exports.write("Paper/Meeting notes.pdf", "%PDF")
+        let destination = ObsidianDestination(config: .init(id: "vault", vaultPath: vault.url.path))
+        let first = try destination.upsert(makeNote(originalURL: original), previous: nil)
+        let moved = try exports.write("Work/Standup.pdf", "%PDF")
+
+        let second = try destination.upsert(
+            makeNote(title: "Standup", relativePath: "Work/Standup.pdf", originalURL: moved),
+            previous: DestinationRecord(externalID: first, contentHash: "abc123", syncedAt: Date())
+        )
+
+        XCTAssertEqual(second, "Ink/viwoods/Work/Standup.md")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent(first).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent("Ink/viwoods/Paper/Meeting notes.pdf").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent("Ink/viwoods/Work/Standup.pdf").path))
+    }
+
+    func testArchiveMovesUnderArchiveAndDeleteUsesTheTrash() throws {
+        let original = try exports.write("Paper/Meeting notes.pdf", "%PDF")
+        let trash = TrashRecorder()
+        let destination = ObsidianDestination(config: .init(id: "vault", vaultPath: vault.url.path), fileManager: trash)
+        let path = try destination.upsert(makeNote(originalURL: original), previous: nil)
+        let record = DestinationRecord(externalID: path, contentHash: "h", syncedAt: Date())
+        let export = RemovedExport(sourceID: "viwoods", relativePath: "Paper/Meeting notes.pdf")
+
+        try destination.remove(record, export: export, policy: .archive)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent("Ink/Archive/viwoods/Paper/Meeting notes.md").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent("Ink/Archive/viwoods/Paper/Meeting notes.pdf").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: vault.url.appendingPathComponent(path).path))
+
+        let again = try destination.upsert(makeNote(originalURL: original), previous: nil)
+        try destination.remove(DestinationRecord(externalID: again, contentHash: "h", syncedAt: Date()), export: export, policy: .delete)
+        XCTAssertEqual(trash.trashed.map(\.lastPathComponent), ["Meeting notes.md", "Meeting notes.pdf"])
+    }
+
     func testMissingVaultFailsWithoutCreatingIt() {
         let missing = vault.url.appendingPathComponent("not-a-vault")
         let destination = ObsidianDestination(config: .init(id: "vault", vaultPath: missing.path))

@@ -32,6 +32,11 @@ public final class OutlookCalendarDestination: NoteDestination, PlanDestination,
         return try insert(body, retryingWithNewCalendar: true)
     }
 
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy == .delete, record.externalID != PlannerEvent.skipped else { return }
+        _ = try account.client.call("DELETE", MicrosoftAccount.url("me/events/\(pathSegment(record.externalID))"), allowing: [404])
+    }
+
     private func insert(_ body: [String: Any], retryingWithNewCalendar: Bool) throws -> String {
         let calendar = try calendarID()
         let (status, object) = try account.client.call("POST", MicrosoftAccount.url("me/calendars/\(pathSegment(calendar))/events"), json: body, allowing: [404])
@@ -103,6 +108,11 @@ public final class OneNoteDestination: NoteDestination {
             _ = try? account.client.call("DELETE", MicrosoftAccount.url("me/onenote/pages/\(pathSegment(previous.externalID))"), allowing: [404])
         }
         return created
+    }
+
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy == .delete, !record.externalID.isEmpty else { return }
+        _ = try account.client.call("DELETE", MicrosoftAccount.url("me/onenote/pages/\(pathSegment(record.externalID))"), allowing: [404])
     }
 
     private func create(_ note: InkNote, in section: String, retryingWithNewSection: Bool) throws -> String {

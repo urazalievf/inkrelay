@@ -38,7 +38,44 @@ public struct ObsidianDestination: NoteDestination {
 
         let markdown = MarkdownRenderer.render(note, embedPath: originalPath, tags: config.tags)
         try Data(markdown.utf8).write(to: vault.appendingPathComponent(notePath), options: .atomic)
+        if let old = previous?.externalID, !old.isEmpty, old != notePath {
+            // Renamed or moved at the source: the note moves with it.
+            for file in companions(of: old, in: vault) where file.path != vault.appendingPathComponent(notePath).path {
+                try? fileManager.removeItem(at: file)
+            }
+        }
         return notePath
+    }
+
+    /// Archive moves the note and its PDF under `<folder>/Archive/`; delete sends them to the Trash.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        let vault = config.vaultURL
+        let files = companions(of: record.externalID, in: vault)
+        switch policy {
+        case .keep:
+            return
+        case .delete:
+            for file in files { try fileManager.trashItem(at: file, resultingItemURL: nil) }
+        case .archive:
+            let relative = record.externalID.hasPrefix(config.folder + "/") ? String(record.externalID.dropFirst(config.folder.count + 1)) : record.externalID
+            let archiveDirectory = vault.appendingPathComponent(config.folder).appendingPathComponent("Archive")
+                .appendingPathComponent((relative as NSString).deletingLastPathComponent, isDirectory: true)
+            try fileManager.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
+            for file in files {
+                let target = archiveDirectory.appendingPathComponent(file.lastPathComponent)
+                if fileManager.fileExists(atPath: target.path) { try fileManager.removeItem(at: target) }
+                try fileManager.moveItem(at: file, to: target)
+            }
+        }
+    }
+
+    /// The note at `notePath` and the copied original beside it (same name, any extension).
+    func companions(of notePath: String, in vault: URL) -> [URL] {
+        let note = vault.appendingPathComponent(notePath)
+        let base = note.deletingPathExtension().lastPathComponent
+        let directory = note.deletingLastPathComponent()
+        let siblings = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return siblings.filter { $0.deletingPathExtension().lastPathComponent == base }.sorted { $0.path < $1.path }
     }
 
     static func vaultRelativeDirectory(for note: InkNote, folder: String) -> String {

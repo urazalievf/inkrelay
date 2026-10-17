@@ -6,7 +6,16 @@ public protocol NoteDestination {
 
     /// Creates the note, or updates it in place when `previous` says it was sent before.
     /// Returns the destination's handle for the note, stored for the next update.
+    /// After a rename `previous` belongs to the old path, so the note should move rather than be duplicated.
     func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String
+
+    /// The export behind `record` was deleted. Never called with `.keep`.
+    func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws
+}
+
+extension NoteDestination {
+    /// Destinations that can't remove anything keep the note.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {}
 }
 
 /// What destinations need beyond their own config: where tokens live, how to reach the network, how to run AppleScript.

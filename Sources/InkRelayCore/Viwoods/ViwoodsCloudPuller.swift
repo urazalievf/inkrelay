@@ -36,12 +36,15 @@ public final class ViwoodsCloudPuller {
             return report
         }
         for app in config.enabledApps {
+            var seen = Set<String>()
             do {
                 switch app {
-                case .memo: try pullMemos(into: &report)
-                case .paper, .meeting: try pullNotebooks(app, parent: "", folder: app.folderName, into: &report)
-                case .knowledgeBase: break // The portal exposes only its tabs; nothing to download yet.
+                case .memo: try pullMemos(seen: &seen, into: &report)
+                case .paper, .meeting: try pullNotebooks(app, parent: "", folder: app.folderName, seen: &seen, into: &report)
+                case .knowledgeBase: continue // The portal exposes only its tabs; nothing to download yet.
                 }
+                // Only after a complete listing: anything not seen was deleted in the cloud.
+                prune(app, keeping: seen, into: &report)
             } catch {
                 report.failures.append("\(app.folderName): \(error.localizedDescription)")
             }
@@ -59,12 +62,13 @@ public final class ViwoodsCloudPuller {
 
     // MARK: Notebooks
 
-    private func pullNotebooks(_ app: ViwoodsApp, parent: String, folder: String, into report: inout PullReport) throws {
+    private func pullNotebooks(_ app: ViwoodsApp, parent: String, folder: String, seen: inout Set<String>, into report: inout PullReport) throws {
         for item in try client.contents(of: app, parent: parent) where !item.isSkippable {
             if item.isFolder {
-                try pullNotebooks(app, parent: item.resourceId, folder: folder + "/" + safe(item.name), into: &report)
+                try pullNotebooks(app, parent: item.resourceId, folder: folder + "/" + safe(item.name), seen: &seen, into: &report)
                 continue
             }
+            seen.insert(item.resourceId)
             report.checked += 1
             if item.isEncrypted {
                 report.failures.append("\(folder)/\(item.name): password-protected notes can't be pulled")
@@ -73,6 +77,10 @@ public final class ViwoodsCloudPuller {
             let relativePath = folder + "/" + safe(item.name) + ".pdf"
             if isCurrent(item.resourceId, modified: item.lastModifiedTime, at: relativePath) {
                 report.unchanged += 1
+                continue
+            }
+            if moveIfOnlyRenamed(item.resourceId, modified: item.lastModifiedTime, to: relativePath) {
+                report.updated += 1
                 continue
             }
             do {
@@ -86,12 +94,17 @@ public final class ViwoodsCloudPuller {
         }
     }
 
-    private func pullMemos(into report: inout PullReport) throws {
+    private func pullMemos(seen: inout Set<String>, into report: inout PullReport) throws {
         for item in try client.contents(of: .memo, parent: "") where !item.isSkippable && !item.isFolder {
+            seen.insert(item.resourceId)
             report.checked += 1
             let relativePath = ViwoodsApp.memo.folderName + "/" + safe(item.name) + ".pdf"
             if isCurrent(item.resourceId, modified: item.lastModifiedTime, at: relativePath) {
                 report.unchanged += 1
+                continue
+            }
+            if moveIfOnlyRenamed(item.resourceId, modified: item.lastModifiedTime, to: relativePath) {
+                report.updated += 1
                 continue
             }
             do {
@@ -192,6 +205,34 @@ public final class ViwoodsCloudPuller {
             && fileManager.fileExists(atPath: config.cacheURL.appendingPathComponent(relativePath).path)
     }
 
+    /// A rename or move on the tablet with no new ink: move the cached PDF, byte for byte, so the relay
+    /// recognizes the same content at a new path and moves the notes instead of duplicating them.
+    private func moveIfOnlyRenamed(_ resourceID: String, modified: Int64?, to relativePath: String) -> Bool {
+        guard let entry = manifest.notes[resourceID], entry.modified == (modified ?? 0), entry.path != relativePath else { return false }
+        let old = config.cacheURL.appendingPathComponent(entry.path)
+        let new = config.cacheURL.appendingPathComponent(relativePath)
+        guard fileManager.fileExists(atPath: old.path) else { return false }
+        do {
+            try fileManager.createDirectory(at: new.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: new.path) { try fileManager.removeItem(at: new) }
+            try fileManager.moveItem(at: old, to: new)
+        } catch {
+            return false
+        }
+        manifest.notes[resourceID] = NoteEntry(modified: entry.modified, path: relativePath)
+        return true
+    }
+
+    /// Drops cached PDFs of notebooks that are no longer in the cloud, so the relay sees them as deleted.
+    private func prune(_ app: ViwoodsApp, keeping seen: Set<String>, into report: inout PullReport) {
+        let prefix = app.folderName + "/"
+        for (resourceID, entry) in manifest.notes where entry.path.hasPrefix(prefix) && !seen.contains(resourceID) {
+            try? fileManager.removeItem(at: config.cacheURL.appendingPathComponent(entry.path))
+            manifest.notes[resourceID] = nil
+            report.removed += 1
+        }
+    }
+
     private func remember(_ resourceID: String, modified: Int64?, at relativePath: String) {
         if let old = manifest.notes[resourceID]?.path, old != relativePath {
             // Renamed or moved on the tablet: drop the stale PDF so the old note stops being refreshed.
@@ -260,6 +301,8 @@ public struct PullReport: Equatable {
     public var updated = 0
     public var unchanged = 0
     public var plansDelivered = 0
+    /// Notebooks deleted in the cloud and dropped from the cache.
+    public var removed = 0
     public var failures: [String] = []
 
     public init() {}
@@ -267,6 +310,7 @@ public struct PullReport: Equatable {
     public var summary: String {
         var text = "cloud: \(checked) checked, \(updated) updated, \(unchanged) unchanged"
         if plansDelivered > 0 { text += ", \(plansDelivered) to-dos delivered" }
+        if removed > 0 { text += ", \(removed) deleted in the cloud" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         return text
     }
@@ -365,7 +409,9 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
 
     /// The cache as a source, so the engine treats pulled PDFs like any other export.
     public var source: SourceConfig {
-        SourceConfig(id: id, device: device, path: cacheURL.path, fileTypes: ["pdf"])
+        var source = SourceConfig(id: id, device: device, path: cacheURL.path, fileTypes: ["pdf"])
+        source.waitsForSettle = false
+        return source
     }
 
     func validate() throws {

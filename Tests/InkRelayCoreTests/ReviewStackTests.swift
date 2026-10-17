@@ -121,6 +121,29 @@ final class ReviewStackTests: XCTestCase {
         XCTAssertTrue(try todaysStack().isEmpty)
     }
 
+    func testRenamedNotebookKeepsItsCardsAndTheirStatus() throws {
+        let handle = try destination().upsert(twoPageNote(), previous: nil)
+        let firstPage = try todaysStack()[0]
+        try store.markDone(firstPage.id, now: clock, resurfaceDays: [])
+
+        _ = try destination().upsert(
+            makeNote(title: "Renamed", relativePath: "Paper/Renamed.pdf", pages: [RecognizedPage(number: 1, text: "page one"), RecognizedPage(number: 2, text: "page two")]),
+            previous: DestinationRecord(externalID: handle, contentHash: "h", syncedAt: clock)
+        )
+
+        let state = try store.load()
+        XCTAssertEqual(state.cards.count, 2)
+        XCTAssertTrue(state.cards.values.allSatisfy { $0.itemKey == "viwoods/Paper/Renamed.pdf" })
+        XCTAssertEqual(try todaysStack().map(\.page), [2], "page one stays done after the rename")
+        XCTAssertEqual(try todaysStack().first?.title, "Renamed")
+    }
+
+    func testRemovalDropsTheItemsCards() throws {
+        let handle = try destination().upsert(twoPageNote(), previous: nil)
+        try destination().remove(DestinationRecord(externalID: handle, contentHash: "h", syncedAt: clock), export: RemovedExport(sourceID: "viwoods", relativePath: "Paper/Work/Meeting notes.pdf"), policy: .archive)
+        XCTAssertTrue(try store.load().cards.isEmpty)
+    }
+
     func testPlannerPagesGetAFriendlyTitle() throws {
         _ = try destination().upsert(plannerNote("2026-01-13"), previous: nil)
         XCTAssertEqual(try todaysStack().first?.title, "Daily plan · Tue, Jan 13, 2026")

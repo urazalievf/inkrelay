@@ -39,6 +39,22 @@ public struct AppleCalendarDestination: NoteDestination, PlanDestination, Planne
         return created
     }
 
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy == .delete, record.externalID != PlannerEvent.skipped else { return }
+        _ = try runner.run(Self.deleteScript, arguments: [config.calendar, record.externalID])
+    }
+
+    static let deleteScript = """
+    on run argv
+        tell application "Calendar"
+            if not (exists calendar (item 1 of argv)) then return
+            tell calendar (item 1 of argv)
+                delete (every event whose uid is (item 2 of argv))
+            end tell
+        end tell
+    end run
+    """
+
     static let dateHandler = """
     on plannerDate(dateString)
         set theDate to current date

@@ -15,6 +15,10 @@ public struct RelayConfig: Codable, Equatable {
     public var google: GoogleAccountConfig?
     /// App registration for the Microsoft destinations.
     public var microsoft: MicrosoftAccountConfig?
+    /// What each destination does when an export is deleted from its folder, by destination id. Missing means keep.
+    public var onDelete: [String: RemovalPolicy]
+    /// A file must sit unchanged this long before it's read, so half-downloaded exports aren't relayed.
+    public var settleSeconds: Int
 
     public init(
         sources: [SourceConfig],
@@ -23,7 +27,9 @@ public struct RelayConfig: Codable, Equatable {
         rescanIntervalSeconds: Int = 300,
         viwoodsCloud: ViwoodsCloudConfig? = nil,
         google: GoogleAccountConfig? = nil,
-        microsoft: MicrosoftAccountConfig? = nil
+        microsoft: MicrosoftAccountConfig? = nil,
+        onDelete: [String: RemovalPolicy] = [:],
+        settleSeconds: Int = 5
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -32,10 +38,12 @@ public struct RelayConfig: Codable, Equatable {
         self.viwoodsCloud = viwoodsCloud
         self.google = google
         self.microsoft = microsoft
+        self.onDelete = onDelete
+        self.settleSeconds = settleSeconds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -52,6 +60,8 @@ public struct RelayConfig: Codable, Equatable {
         viwoodsCloud = try container.decodeIfPresent(ViwoodsCloudConfig.self, forKey: .viwoodsCloud)
         google = try container.decodeIfPresent(GoogleAccountConfig.self, forKey: .google)
         microsoft = try container.decodeIfPresent(MicrosoftAccountConfig.self, forKey: .microsoft)
+        onDelete = try container.decodeIfPresent([String: RemovalPolicy].self, forKey: .onDelete) ?? [:]
+        settleSeconds = try container.decodeIfPresent(Int.self, forKey: .settleSeconds) ?? 5
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
@@ -71,6 +81,11 @@ public struct RelayConfig: Codable, Equatable {
         }
         if stacks.count > 1 { throw ConfigError.invalid("Only one reviewStack destination is supported.") }
         try stacks.first?.validate()
+        let destinationIDs = Set(destinations.map(\.id))
+        if let unknown = onDelete.keys.sorted().first(where: { !destinationIDs.contains($0) }) {
+            throw ConfigError.invalid("onDelete names \"\(unknown)\", which isn't a destination id.")
+        }
+        guard (0...600).contains(settleSeconds) else { throw ConfigError.invalid("settleSeconds must be between 0 and 600.") }
         for (kind, ids) in [("source", allSources.map(\.id)), ("destination", destinations.map(\.id))] {
             if let duplicate = ids.firstDuplicate() {
                 throw ConfigError.invalid("Two \(kind)s share the id \"\(duplicate)\". Ids must be unique.")
@@ -91,6 +106,8 @@ public struct SourceConfig: Codable, Equatable {
     public var path: String
     /// Lowercased extensions to pick up. PDF covers most tablets; Boox can also export PNG.
     public var fileTypes: [String]
+    /// Wait for files to settle before reading. Off for InkRelay's own cloud cache, which it writes atomically.
+    public var waitsForSettle = true
 
     public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"]) {
         self.id = id

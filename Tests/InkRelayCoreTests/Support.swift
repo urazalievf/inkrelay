@@ -30,6 +30,16 @@ final class TemporaryFolder {
     }
 }
 
+/// A file manager whose Trash is a list, so tests never touch the real one.
+final class TrashRecorder: FileManager {
+    var trashed: [URL] = []
+
+    override func trashItem(at url: URL, resultingItemURL outResultingURL: AutoreleasingUnsafeMutablePointer<NSURL?>?) throws {
+        trashed.append(url)
+        try removeItem(at: url)
+    }
+}
+
 final class FakeRecognizer: TextRecognizer {
     var calls: [URL] = []
     var text = "hello from the tablet"
@@ -46,8 +56,15 @@ final class FakeDestination: NoteDestination {
         var previous: DestinationRecord?
     }
 
+    struct Removal {
+        var record: DestinationRecord
+        var export: RemovedExport
+        var policy: RemovalPolicy
+    }
+
     let id: String
     var upserts: [Upsert] = []
+    var removals: [Removal] = []
     var shouldFail = false
 
     init(id: String) {
@@ -58,6 +75,10 @@ final class FakeDestination: NoteDestination {
         if shouldFail { throw DestinationError.failed(id, "simulated") }
         upserts.append(Upsert(note: note, previous: previous))
         return previous?.externalID ?? "\(id):\(note.relativePath)"
+    }
+
+    func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        removals.append(Removal(record: record, export: export, policy: policy))
     }
 }
 

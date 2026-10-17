@@ -36,6 +36,12 @@ public final class GoogleCalendarDestination: NoteDestination, PlanDestination, 
         return try insert(body, retryingWithNewCalendar: true)
     }
 
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy == .delete, record.externalID != PlannerEvent.skipped, let calendar = account.ids[idKey] else { return }
+        let url = Self.api.appendingPathComponent("calendars/\(pathSegment(calendar))/events/\(pathSegment(record.externalID))")
+        _ = try account.client.call("DELETE", url, allowing: [404, 410])
+    }
+
     private func insert(_ body: [String: Any], retryingWithNewCalendar: Bool) throws -> String {
         let calendar = try calendarID()
         let url = Self.api.appendingPathComponent("calendars/\(pathSegment(calendar))/events")
@@ -95,27 +101,39 @@ public final class GoogleDocsDestination: NoteDestination {
     public func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String {
         let html = Self.html(note)
         if let previous, !previous.externalID.isEmpty {
-            // Uploading HTML onto an existing Doc replaces its content and keeps the link people may have shared.
+            // Uploading onto an existing Doc replaces its content (and its name, after a rename)
+            // and keeps the link people may have shared.
             var components = URLComponents(url: Self.upload.appendingPathComponent(pathSegment(previous.externalID)), resolvingAgainstBaseURL: false)!
-            components.queryItems = [URLQueryItem(name: "uploadType", value: "media")]
+            components.queryItems = [URLQueryItem(name: "uploadType", value: "multipart")]
+            let (body, boundary) = try Self.multipart(metadata: ["name": note.title], html: html)
             let (status, object) = try account.client.call(
-                "PATCH", components.url!, body: Data(html.utf8), contentType: "text/html; charset=utf-8", allowing: [404]
+                "PATCH", components.url!, body: body, contentType: "multipart/related; boundary=\(boundary)", allowing: [404]
             )
             if status == 200, let updated = object["id"] as? String { return updated }
         }
         return try create(note, html: html, retryingWithNewFolder: true)
     }
 
-    private func create(_ note: InkNote, html: String, retryingWithNewFolder: Bool) throws -> String {
-        let folder = try folderID()
+    /// Delete moves the Doc to the Drive trash, where it stays for 30 days.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy == .delete, !record.externalID.isEmpty else { return }
+        _ = try account.client.call("PATCH", Self.drive.appendingPathComponent(pathSegment(record.externalID)), json: ["trashed": true], allowing: [404])
+    }
+
+    static func multipart(metadata: [String: Any], html: String) throws -> (Data, String) {
         let boundary = "inkrelay-" + UUID().uuidString
-        let metadata: [String: Any] = ["name": note.title, "mimeType": Self.documentType, "parents": [folder]]
         var body = Data()
         body += Data("--\(boundary)\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".utf8)
         body += try JSONSerialization.data(withJSONObject: metadata)
         body += Data("\r\n--\(boundary)\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n".utf8)
         body += Data(html.utf8)
         body += Data("\r\n--\(boundary)--\r\n".utf8)
+        return (body, boundary)
+    }
+
+    private func create(_ note: InkNote, html: String, retryingWithNewFolder: Bool) throws -> String {
+        let folder = try folderID()
+        let (body, boundary) = try Self.multipart(metadata: ["name": note.title, "mimeType": Self.documentType, "parents": [folder]], html: html)
 
         var components = URLComponents(url: Self.upload, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "uploadType", value: "multipart")]

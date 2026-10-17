@@ -164,6 +164,51 @@ final class ViwoodsCloudPullerTests: XCTestCase {
         XCTAssertEqual(pageCount("Paper/Work- Q4/Renamed.pdf"), 2)
     }
 
+    func testRenameWithoutNewInkMovesTheCachedPDFByteForByte() throws {
+        _ = try makePuller().pull()
+        let before = try Data(contentsOf: cache.url.appendingPathComponent("Paper/Work- Q4/ll.pdf"))
+        let downloads = transport.sent.filter { $0.request.url?.host == "cdn.test" }.count
+        let original = transport.handlers["api/v1/resourceSync/getPage"]!
+        transport.handlers["api/v1/resourceSync/getPage"] = { sent in
+            if sent.body["resourceId"] as? String == "folder-1" {
+                return (200, try FakeTransport.envelope(["count": 1, "list": [
+                    ["resourceId": "note-1", "name": "Renamed", "resourceType": 1, "lastModifiedTime": 100],
+                ]]))
+            }
+            return try original(sent)
+        }
+
+        _ = try makePuller().pull()
+
+        XCTAssertEqual(try Data(contentsOf: cache.url.appendingPathComponent("Paper/Work- Q4/Renamed.pdf")), before, "same bytes, so the relay sees a rename")
+        XCTAssertEqual(transport.sent.filter { $0.request.url?.host == "cdn.test" }.count, downloads, "nothing downloaded again")
+    }
+
+    func testNotebooksDeletedInTheCloudLeaveTheCache() throws {
+        _ = try makePuller().pull()
+        let original = transport.handlers["api/v1/resourceSync/getPage"]!
+        transport.handlers["api/v1/resourceSync/getPage"] = { sent in
+            if sent.body["appType"] as? Int == 6 { return (200, try FakeTransport.envelope(["count": 0, "list": []])) }
+            return try original(sent)
+        }
+
+        let report = try makePuller().pull()
+
+        XCTAssertEqual(report.removed, 1)
+        XCTAssertNil(pageCount("Memo/Memo 1.pdf"))
+        XCTAssertEqual(pageCount("Paper/Work- Q4/ll.pdf"), 2)
+    }
+
+    func testAFailedListingRemovesNothing() throws {
+        _ = try makePuller().pull()
+        transport.handlers["api/v1/resourceSync/getPage"] = { _ in (500, Data()) }
+
+        let report = try makePuller().pull()
+
+        XCTAssertEqual(report.removed, 0)
+        XCTAssertEqual(pageCount("Memo/Memo 1.pdf"), 1)
+    }
+
     func testCloudErrorsAreReportedPerAppWithoutStoppingTheRest() throws {
         transport.handlers["api/v1/memoSync/get"] = { _ in (500, Data()) }
 

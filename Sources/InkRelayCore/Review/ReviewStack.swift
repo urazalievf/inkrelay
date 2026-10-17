@@ -135,6 +135,32 @@ public final class ReviewStore {
         }
     }
 
+    /// After a rename: the item's cards take the new key and ids, keeping their status and history.
+    func moveItem(from oldKey: String, to newKey: String, id: (Int?) -> String) throws {
+        try mutate { state in
+            for (oldID, card) in state.cards where card.itemKey == oldKey {
+                var moved = card
+                moved.itemKey = newKey
+                moved.id = id(card.page)
+                state.cards[oldID] = nil
+                state.cards[moved.id] = moved
+                if FileManager.default.fileExists(atPath: imageURL(for: oldID).path) {
+                    try? FileManager.default.removeItem(at: imageURL(for: moved.id))
+                    try? FileManager.default.moveItem(at: imageURL(for: oldID), to: imageURL(for: moved.id))
+                }
+            }
+        }
+    }
+
+    func removeItem(_ itemKey: String) throws {
+        try mutate { state in
+            for (id, card) in state.cards where card.itemKey == itemKey {
+                state.cards[id] = nil
+                try? FileManager.default.removeItem(at: imageURL(for: id))
+            }
+        }
+    }
+
     // MARK: Reading and acting
 
     /// Today's stack: everything due, newest arrivals first, a notebook's pages in order, at most `limit`.
@@ -222,6 +248,11 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
 
     public func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String {
         let itemKey = "\(note.sourceID)/\(note.relativePath)"
+        if let old = previous?.externalID, old.hasPrefix("review:"), old != "review:" + itemKey {
+            try store.moveItem(from: String(old.dropFirst("review:".count)), to: itemKey) { page in
+                ReviewStore.cardID("\(itemKey)#\(page ?? 1)")
+            }
+        }
         let images = renderImages(note.originalURL)
         let title = Self.title(for: note)
         let folder = (note.relativePath as NSString).deletingLastPathComponent
@@ -261,6 +292,12 @@ public struct ReviewStackDestination: NoteDestination, PlanDestination {
         )
         try store.ingest(itemKey: itemKey, drafts: [draft], now: now())
         return "review:" + itemKey
+    }
+
+    /// Archive or delete: either way the cards leave the stack.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        guard policy != .keep, record.externalID.hasPrefix("review:") else { return }
+        try store.removeItem(String(record.externalID.dropFirst("review:".count)))
     }
 
     static func title(for note: InkNote) -> String {

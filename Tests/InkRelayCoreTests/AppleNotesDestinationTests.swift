@@ -42,6 +42,20 @@ final class AppleNotesDestinationTests: XCTestCase {
         XCTAssertEqual(runner.calls[1].arguments[1], "", "no account configured means the default account")
     }
 
+    func testDeleteAndArchiveUseTheirScripts() throws {
+        let runner = FakeScriptRunner()
+        let destination = AppleNotesDestination(config: .init(id: "notes", folder: "Ink"), runner: runner)
+        let record = DestinationRecord(externalID: "x-coredata://note/p1", contentHash: "h", syncedAt: Date())
+        let export = RemovedExport(sourceID: "s", relativePath: "a.pdf")
+
+        try destination.remove(record, export: export, policy: .delete)
+        try destination.remove(record, export: export, policy: .archive)
+        try destination.remove(record, export: export, policy: .keep)
+
+        XCTAssertEqual(runner.calls.map(\.source), [AppleNotesDestination.deleteScript, AppleNotesDestination.archiveScript])
+        XCTAssertEqual(runner.calls[1].arguments, ["x-coredata://note/p1", "Ink Archive"])
+    }
+
     func testEmptyIdFromNotesIsAnError() {
         let runner = FakeScriptRunner()
         let destination = AppleNotesDestination(config: .init(id: "notes"), runner: runner)

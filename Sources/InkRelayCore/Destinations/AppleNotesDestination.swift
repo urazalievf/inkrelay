@@ -25,6 +25,39 @@ public struct AppleNotesDestination: NoteDestination {
         return created
     }
 
+    /// Delete puts the note in Recently Deleted; archive moves it to "<folder> Archive" in the same account.
+    public func remove(_ record: DestinationRecord, export: RemovedExport, policy: RemovalPolicy) throws {
+        switch policy {
+        case .keep: return
+        case .delete: _ = try runner.run(Self.deleteScript, arguments: [record.externalID])
+        case .archive: _ = try runner.run(Self.archiveScript, arguments: [record.externalID, config.folder + " Archive"])
+        }
+    }
+
+    static let deleteScript = """
+    on run argv
+        tell application "Notes"
+            if exists note id (item 1 of argv) then delete note id (item 1 of argv)
+        end tell
+    end run
+    """
+
+    static let archiveScript = """
+    on run argv
+        set noteID to item 1 of argv
+        set folderName to item 2 of argv
+        tell application "Notes"
+            if not (exists note id noteID) then return
+            set theNote to note id noteID
+            set theAccount to account of container of theNote
+            if not (exists folder folderName of theAccount) then
+                make new folder at theAccount with properties {name:folderName}
+            end if
+            move theNote to folder folderName of theAccount
+        end tell
+    end run
+    """
+
     static let createScript = """
     on run argv
         set folderName to item 1 of argv

@@ -75,33 +75,67 @@ public final class RelayEngine {
                 report.failures.append(.init(item: source.id, destinationID: nil, message: error.localizedDescription))
                 continue
             }
+            let present = Set(files.map { SyncState.key(sourceID: source.id, relativePath: $0.relativePath) })
+            let missing = store.keys(forSource: source.id).filter { !present.contains($0) }
+            // A tracked export that vanished while an identical one appeared elsewhere was renamed or moved.
+            var renameCandidates: [String: String] = [:]
+            for key in missing {
+                if let hash = store.record(for: key)?.contentHash { renameCandidates[hash] = key }
+            }
             for file in files {
                 report.scanned += 1
-                sync(file, from: source, into: &report)
+                sync(file, from: source, renameCandidates: &renameCandidates, into: &report)
+            }
+            let gone = missing.filter { store.record(for: $0) != nil }
+            if !gone.isEmpty {
+                if files.isEmpty {
+                    // An empty folder is far more often an unmounted cloud drive than a deliberate wipe.
+                    report.warnings.append("\(source.id): the folder is empty, so \(gone.count) missing export(s) were left alone.")
+                } else {
+                    for key in gone { handleMissing(key, source: source, into: &report) }
+                }
             }
         }
         return report
     }
 
-    private func sync(_ file: ScannedFile, from source: SourceConfig, into report: inout SyncReport) {
+    private func sync(_ file: ScannedFile, from source: SourceConfig, renameCandidates: inout [String: String], into report: inout SyncReport) {
         let key = SyncState.key(sourceID: source.id, relativePath: file.relativePath)
         let item = "\(source.id)/\(file.relativePath)"
-        let previous = store.record(for: key)
+        var previous = store.record(for: key)
 
-        if let previous, previous.looksUnchanged(file), pending(for: previous.contentHash, in: previous).isEmpty {
+        if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty {
+            if known.missingSince != nil { try? store.set(FileRecord(size: known.size, modified: known.modified, contentHash: known.contentHash, destinations: known.destinations), for: key) }
             report.unchanged += 1
+            return
+        }
+        // Age below zero means the cloud's clock is ahead of the Mac's, not that the file is being written.
+        let age = now().timeIntervalSince(file.modified)
+        if source.waitsForSettle, file.size == 0 || (age >= 0 && age < Double(config.settleSeconds)) {
+            // Probably still downloading or being written; the follow-up pass picks it up.
+            report.deferred += 1
             return
         }
 
         do {
             let hash = try ContentHash.sha256(of: file.url)
+            var renamedFrom: String?
+            if previous == nil, let oldKey = renameCandidates[hash], let old = store.record(for: oldKey) {
+                renamedFrom = oldKey
+                renameCandidates[hash] = nil
+                previous = old
+            }
             var record = FileRecord(
                 size: file.size,
                 modified: file.modified,
                 contentHash: hash,
                 destinations: previous?.destinations ?? [:]
             )
-            let targets = pending(for: hash, in: record)
+            // A rename goes to every destination that holds the note, so it moves instead of staying behind.
+            let pendingNow = pending(for: hash, in: record)
+            let targets = renamedFrom == nil ? pendingNow : destinations.filter { destination in
+                record.destinations[destination.id] != nil || pendingNow.contains { $0.id == destination.id }
+            }
             guard !targets.isEmpty else {
                 // Touched but not changed: remember the new date so the next pass skips the read.
                 try store.set(record, for: key)
@@ -131,10 +165,52 @@ public final class RelayEngine {
                 }
             }
             try store.set(record, for: key)
+            if let renamedFrom {
+                try store.remove(renamedFrom)
+                report.renamed += 1
+            }
             if deliveredAll { report.synced += 1 }
         } catch {
             report.failures.append(.init(item: item, destinationID: nil, message: error.localizedDescription))
         }
+    }
+
+    /// Seconds an export must stay missing before destinations act on it, so a cloud app re-downloading a file doesn't count.
+    static let deletionGraceSeconds: TimeInterval = 60
+
+    private func handleMissing(_ key: String, source: SourceConfig, into report: inout SyncReport) {
+        guard var record = store.record(for: key) else { return }
+        let firstMissed = record.missingSince ?? now()
+        if record.missingSince == nil {
+            record.missingSince = firstMissed
+            try? store.set(record, for: key)
+        }
+        guard now().timeIntervalSince(firstMissed) >= Self.deletionGraceSeconds else { return }
+
+        let export = RemovedExport(sourceID: source.id, relativePath: String(key.dropFirst(source.id.count + 1)))
+        var acted = false
+        for destination in destinations {
+            guard let held = record.destinations[destination.id] else { continue }
+            let policy = config.onDelete[destination.id] ?? .keep
+            guard policy != .keep else { continue }
+            do {
+                try destination.remove(held, export: export, policy: policy)
+                record.destinations[destination.id] = nil
+                acted = true
+            } catch {
+                report.failures.append(.init(item: key, destinationID: destination.id, message: error.localizedDescription))
+            }
+        }
+        do {
+            if record.destinations.isEmpty {
+                try store.remove(key)
+            } else {
+                try store.set(record, for: key)
+            }
+        } catch {
+            report.failures.append(.init(item: key, destinationID: nil, message: error.localizedDescription))
+        }
+        if acted { report.removed += 1 }
     }
 
     /// Destinations that haven't received the export with this hash.
@@ -155,6 +231,12 @@ public struct SyncReport: Equatable {
     public var synced = 0
     public var unchanged = 0
     public var failures: [Failure] = []
+    /// Files still being written; a follow-up pass picks them up.
+    public var deferred = 0
+    public var renamed = 0
+    public var removed = 0
+    /// Things worth knowing that aren't failures.
+    public var warnings: [String] = []
     /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
     public var pull: PullReport?
 
@@ -162,6 +244,9 @@ public struct SyncReport: Equatable {
 
     public var summary: String {
         var text = "\(scanned) found, \(synced) synced, \(unchanged) unchanged"
+        if renamed > 0 { text += ", \(renamed) renamed" }
+        if removed > 0 { text += ", \(removed) removed" }
+        if deferred > 0 { text += ", \(deferred) still being written" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         if let pull { text = pull.summary + "; " + text }
         return text
