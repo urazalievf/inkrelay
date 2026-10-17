@@ -15,14 +15,27 @@ public struct AppleNotesDestination: NoteDestination {
 
     public func upsert(_ note: InkNote, previous: DestinationRecord?) throws -> String {
         let body = AppleNotesHTML.render(note)
+        let attachment = config.attachOriginal ? note.originalURL.path : ""
+        var reply = ""
         if let previous {
             // An empty result means the note was deleted in Notes, so a fresh one is created below.
-            let updated = try runner.run(Self.updateScript, arguments: [previous.externalID, body])
-            if !updated.isEmpty { return updated }
+            reply = try runner.run(Self.updateScript, arguments: [previous.externalID, body, attachment])
         }
-        let created = try runner.run(Self.createScript, arguments: [config.folder, config.account ?? "", body])
-        guard !created.isEmpty else { throw DestinationError.failed(id, "Notes didn't return an id for the new note") }
-        return created
+        if Self.noteID(in: reply).isEmpty {
+            reply = try runner.run(Self.createScript, arguments: [config.folder, config.account ?? "", body, attachment])
+        }
+        let noteID = Self.noteID(in: reply)
+        guard !noteID.isEmpty else { throw DestinationError.failed(id, "Notes didn't return an id for the new note") }
+        if !attachment.isEmpty, reply.hasSuffix("\nnot attached") {
+            // This macOS won't attach files through AppleScript: link to the original instead.
+            _ = try runner.run(Self.updateScript, arguments: [noteID, AppleNotesHTML.render(note, linkingOriginal: true), ""])
+        }
+        return noteID
+    }
+
+    /// Scripts answer with the note id on the first line and the attachment outcome on the second.
+    static func noteID(in reply: String) -> String {
+        String(reply.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
     }
 
     /// Delete puts the note in Recently Deleted; archive moves it to "<folder> Archive" in the same account.
@@ -58,11 +71,14 @@ public struct AppleNotesDestination: NoteDestination {
     end run
     """
 
+    /// Attaching uses `make new attachment`; any failure is reported back instead of failing the note.
     static let createScript = """
     on run argv
         set folderName to item 1 of argv
         set accountName to item 2 of argv
         set noteBody to item 3 of argv
+        set attachmentPath to item 4 of argv
+        set outcome to ""
         tell application "Notes"
             if accountName is "" then
                 set targetAccount to default account
@@ -73,29 +89,57 @@ public struct AppleNotesDestination: NoteDestination {
                 make new folder at targetAccount with properties {name:folderName}
             end if
             set newNote to make new note at folder folderName of targetAccount with properties {body:noteBody}
-            return id of newNote
+            set noteID to id of newNote
         end tell
+        if attachmentPath is not "" then set outcome to my attach(noteID, attachmentPath)
+        return noteID & outcome
     end run
+    \(attachHandler)
     """
 
+    /// Notes in Recently Deleted still answer `exists`, so they count as gone and a fresh note is made.
     static let updateScript = """
     on run argv
         set noteID to item 1 of argv
         set noteBody to item 2 of argv
+        set attachmentPath to item 3 of argv
+        set outcome to ""
         tell application "Notes"
-            if exists note id noteID then
-                set body of note id noteID to noteBody
-                return noteID
-            end if
-            return ""
+            if not (exists note id noteID) then return ""
+            try
+                if name of container of note id noteID is "Recently Deleted" then return ""
+            end try
+            set body of note id noteID to noteBody
         end tell
+        if attachmentPath is not "" then set outcome to my attach(noteID, attachmentPath)
+        return noteID & outcome
     end run
+    \(attachHandler)
+    """
+
+    /// Replaces the note's copy of the original, so re-syncs don't pile up attachments.
+    static let attachHandler = """
+    on attach(noteID, attachmentPath)
+        try
+            set attachmentFile to (POSIX file attachmentPath) as alias
+            tell application "System Events" to set attachmentName to name of attachmentFile
+            tell application "Notes"
+                try
+                    delete (every attachment of note id noteID whose name is attachmentName)
+                end try
+                make new attachment at end of attachments of note id noteID with data attachmentFile
+            end tell
+            return ""
+        on error
+            return linefeed & "not attached"
+        end try
+    end attach
     """
 }
 
 /// Notes takes the first line of the HTML body as the note's title.
 public enum AppleNotesHTML {
-    public static func render(_ note: InkNote, syncedAt: Date = Date()) -> String {
+    public static func render(_ note: InkNote, syncedAt: Date = Date(), linkingOriginal: Bool = false) -> String {
         var html = "<h1>\(escape(note.title))</h1>"
         if !NoteFormatting.hasText(note) {
             html += "<div><i>No text recognized.</i></div>"
@@ -108,6 +152,9 @@ public enum AppleNotesHTML {
             html += lines.map { $0.isEmpty ? "<div><br></div>" : "<div>\(escape(String($0)))</div>" }.joined()
         }
         let synced = NoteFormatting.timestamp.string(from: syncedAt)
+        if linkingOriginal {
+            html += "<div><br></div><div><a href=\"\(escape(note.originalURL.absoluteString))\">Open the original \(escape(note.originalURL.lastPathComponent))</a></div>"
+        }
         html += "<div><br></div><div><i>From \(escape(note.device)): \(escape(note.relativePath)). Synced by InkRelay \(synced).</i></div>"
         return html
     }

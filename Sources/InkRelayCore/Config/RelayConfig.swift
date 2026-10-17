@@ -177,20 +177,24 @@ public enum DestinationConfig: Codable, Equatable {
         public var folder: String
         /// Notes account name such as "iCloud". Empty or missing uses the default account.
         public var account: String?
+        /// Attach the original PDF so the handwriting sits next to the text.
+        public var attachOriginal: Bool
 
-        public init(id: String, folder: String = "Ink", account: String? = nil) {
+        public init(id: String, folder: String = "Ink", account: String? = nil, attachOriginal: Bool = true) {
             self.id = id
             self.folder = folder
             self.account = account
+            self.attachOriginal = attachOriginal
         }
 
-        private enum CodingKeys: String, CodingKey { case id, folder, account }
+        private enum CodingKeys: String, CodingKey { case id, folder, account, attachOriginal }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decode(String.self, forKey: .id)
             folder = try container.decodeIfPresent(String.self, forKey: .folder) ?? "Ink"
             account = try container.decodeIfPresent(String.self, forKey: .account)
+            attachOriginal = try container.decodeIfPresent(Bool.self, forKey: .attachOriginal) ?? true
         }
     }
 
