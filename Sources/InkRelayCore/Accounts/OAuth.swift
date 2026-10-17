@@ -129,11 +129,13 @@ public final class AuthorizedClient {
         json: [String: Any]? = nil,
         body: Data? = nil,
         contentType: String? = nil,
+        headers: [String: String] = [:],
         allowing: Set<Int> = []
     ) throws -> (status: Int, object: [String: Any]) {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         if let json {
             request.httpBody = try JSONSerialization.data(withJSONObject: json)
             request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")

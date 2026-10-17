@@ -81,6 +81,9 @@ public struct RelayConfig: Codable, Equatable {
         }
         if stacks.count > 1 { throw ConfigError.invalid("Only one reviewStack destination is supported.") }
         try stacks.first?.validate()
+        for destination in destinations {
+            if case .notion(let notion) = destination { try notion.validate() }
+        }
         let destinationIDs = Set(destinations.map(\.id))
         if let unknown = onDelete.keys.sorted().first(where: { !destinationIDs.contains($0) }) {
             throw ConfigError.invalid("onDelete names \"\(unknown)\", which isn't a destination id.")
@@ -139,6 +142,7 @@ public enum DestinationConfig: Codable, Equatable {
     case outlookCalendar(OutlookCalendarConfig)
     case oneNote(OneNoteConfig)
     case reviewStack(ReviewStackConfig)
+    case notion(NotionConfig)
 
     public struct ObsidianConfig: Codable, Equatable {
         public var id: String
@@ -233,6 +237,7 @@ public enum DestinationConfig: Codable, Equatable {
         case .outlookCalendar(let config): return config.id
         case .oneNote(let config): return config.id
         case .reviewStack(let config): return config.id
+        case .notion(let config): return config.id
         }
     }
 
@@ -246,6 +251,7 @@ public enum DestinationConfig: Codable, Equatable {
         case .outlookCalendar: return "outlookCalendar"
         case .oneNote: return "oneNote"
         case .reviewStack: return "reviewStack"
+        case .notion: return "notion"
         }
     }
 
@@ -262,6 +268,7 @@ public enum DestinationConfig: Codable, Equatable {
         case "outlookCalendar": self = .outlookCalendar(try OutlookCalendarConfig(from: decoder))
         case "oneNote": self = .oneNote(try OneNoteConfig(from: decoder))
         case "reviewStack": self = .reviewStack(try ReviewStackConfig(from: decoder))
+        case "notion": self = .notion(try NotionConfig(from: decoder))
         default:
             throw ConfigError.invalid("Unknown destination kind \"\(kind)\". Use one of: \(Self.kinds.joined(separator: ", ")).")
         }
@@ -279,10 +286,11 @@ public enum DestinationConfig: Codable, Equatable {
         case .outlookCalendar(let config): try config.encode(to: encoder)
         case .oneNote(let config): try config.encode(to: encoder)
         case .reviewStack(let config): try config.encode(to: encoder)
+        case .notion(let config): try config.encode(to: encoder)
         }
     }
 
-    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack"]
+    public static let kinds = ["obsidian", "appleNotes", "appleCalendar", "googleCalendar", "googleDocs", "outlookCalendar", "oneNote", "reviewStack", "notion"]
 }
 
 public struct RecognitionConfig: Codable, Equatable {

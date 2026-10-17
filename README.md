@@ -139,6 +139,22 @@ Google needs an OAuth client of your own while InkRelay is in development:
 .build/release/inkrelay microsoft login   # prints a code to enter at microsoft.com/devicelogin
 ```
 
+## Notion
+
+`notion` files each note as a Notion page, under a parent page (`parentPageId`) or as a row of a database (`databaseId`), with the page images and the recognized text. It updates the same page on every change, and `onDelete` archive or delete moves it to Notion's trash. Anything you add inside the page in Notion is replaced on the next change; properties and comments stay.
+
+1. Create an internal integration at <https://www.notion.so/profile/integrations> with the Insert content and Update content capabilities.
+2. Open the parent page or database in Notion, then ••• → Connections → add the integration.
+3. Copy the page or database id from its link (the 32 characters at the end), and save the integration secret in the Keychain:
+
+```json
+{ "kind": "notion", "id": "notion", "parentPageId": "1a2b3c…" }
+```
+
+```bash
+.build/release/inkrelay notion login
+```
+
 ## Run
 
 ```bash

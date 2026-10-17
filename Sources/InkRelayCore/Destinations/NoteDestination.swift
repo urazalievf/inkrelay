@@ -26,6 +26,7 @@ public struct DestinationContext {
     public var google: GoogleAccountConfig?
     public var microsoft: MicrosoftAccountConfig?
     public var now: () -> Date
+    public var secrets: SecretStore
 
     public init(
         supportDirectory: URL = InkRelayCore.supportDirectory,
@@ -33,6 +34,7 @@ public struct DestinationContext {
         scriptRunner: AppleScriptRunner = OSAScriptRunner(),
         google: GoogleAccountConfig? = nil,
         microsoft: MicrosoftAccountConfig? = nil,
+        secrets: SecretStore = KeychainStore(),
         now: @escaping () -> Date = Date.init
     ) {
         self.supportDirectory = supportDirectory
@@ -40,6 +42,7 @@ public struct DestinationContext {
         self.scriptRunner = scriptRunner
         self.google = google
         self.microsoft = microsoft
+        self.secrets = secrets
         self.now = now
     }
 
@@ -89,6 +92,8 @@ public enum DestinationFactory {
                 return OneNoteDestination(config: oneNote, account: microsoft())
             case .reviewStack(let stack):
                 return ReviewStackDestination(config: stack, store: ReviewStore(directory: context.reviewDirectory), now: context.now)
+            case .notion(let notion):
+                return NotionDestination(config: notion, secrets: context.secrets, transport: context.transport)
             }
         }
     }

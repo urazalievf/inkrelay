@@ -13,6 +13,7 @@ Usage:
   inkrelay viwoods pull             Pull Viwoods Cloud into the local cache without syncing
   inkrelay google login             Sign in to Google for the googleCalendar and googleDocs destinations
   inkrelay microsoft login          Sign in to Microsoft for the outlookCalendar and oneNote destinations
+  inkrelay notion login             Save a Notion integration token in the Keychain
   inkrelay review                   List today's read-later stack
   inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
   inkrelay review done|later ID     Mark a card done, or push it to tomorrow
@@ -258,6 +259,26 @@ case "microsoft":
         try MicrosoftAccount(config: microsoft, supportDirectory: supportDirectory).login { message in print(message) }
         print("Signed in to Microsoft.")
     } catch {
+        fail(error.localizedDescription)
+    }
+
+case "notion":
+    guard arguments.first == "login" else { fail("Usage: inkrelay notion login") }
+    print("""
+    Create an internal integration at https://www.notion.so/profile/integrations with "Insert content" and
+    "Update content" capabilities, then share the parent page or database with it (••• → Connections).
+    Paste the integration secret here; it's kept in your login Keychain, not in the config.
+
+    """)
+    print("Integration secret: ", terminator: "")
+    guard let token = readLine(strippingNewline: true)?.trimmingCharacters(in: .whitespaces), !token.isEmpty else { fail("No token entered.") }
+    let keychain = KeychainStore()
+    do {
+        try keychain.setSecret(token, for: NotionDestination.keychainAccount)
+        let name = try NotionDestination(config: .init(id: "check", parentPageId: "-"), secrets: keychain).whoAmI()
+        print("Saved. Connected as \(name).")
+    } catch {
+        try? keychain.deleteSecret(for: NotionDestination.keychainAccount)
         fail(error.localizedDescription)
     }
 
