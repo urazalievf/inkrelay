@@ -334,3 +334,5 @@ swift test
 `Sources/InkRelayCore` holds the library: config, scanning, sync state, recognition, destinations and the engine. `Sources/inkrelay` is the command-line tool. The Vision test renders a PDF and runs real recognition, so the first run takes about 30 seconds while the model loads.
 
 Versions follow `MAJOR.MINOR.PATCH`, with a fourth number for bug-fix releases (`0.1.0.1`). The current version is `InkRelayCore.version`.
+
+Notes for whoever works on InkRelay next (current state, architecture, decisions, measurements on real data, how to test each part, the Viwoods Cloud API and the market research) are in [docs/](docs/README.md). Start with [docs/handoff.md](docs/handoff.md).
