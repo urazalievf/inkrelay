@@ -303,7 +303,9 @@ case "viwoods":
     case "login":
         let store = FileCredentialStore(url: tokenURL)
         print("""
-        InkRelay signs in to Viwoods Cloud with the access token the web portal already holds, because the portal's
+        Easiest: open the InkRelay menu bar app and choose Sign In to Viwoods; it signs in on Viwoods' own page.
+
+        Here, InkRelay signs in with the access token the web portal already holds, because the portal's
         sign-in form needs a slider captcha. To copy it:
           1. Open https://cloud.viwoods.com in Chrome or Safari and sign in.
           2. Open the developer tools (Option-Command-I), then Application (Chrome) or Storage (Safari) → Local Storage.

@@ -56,6 +56,17 @@ struct MenuContent: View {
     }
 
     @ViewBuilder private var content: some View {
+        if model.needsViwoodsSignIn {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Sign in to Viwoods Cloud so InkRelay can read your notebooks and planner.")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Sign In to Viwoods…") { model.showViwoodsSignIn() }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(12)
+            Divider()
+        }
         if !model.snapshot.problems.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(model.snapshot.problems.prefix(3), id: \.self) { problem in
