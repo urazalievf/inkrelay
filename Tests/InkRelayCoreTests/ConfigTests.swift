@@ -45,6 +45,49 @@ final class ConfigTests: XCTestCase {
         XCTAssertThrowsError(try clash.validate())
     }
 
+    func testDecodesTheGoogleMicrosoftAndReviewDestinations() throws {
+        let json = """
+        {
+          "sources": [{ "id": "s", "path": "~/x" }],
+          "google": { "clientId": "c.apps.googleusercontent.com", "clientSecret": "s" },
+          "microsoft": { "clientId": "m" },
+          "destinations": [
+            { "kind": "googleCalendar", "id": "gcal" },
+            { "kind": "googleDocs", "id": "docs", "folder": "Notes" },
+            { "kind": "outlookCalendar", "id": "outlook", "timeZone": "America/Chicago" },
+            { "kind": "oneNote", "id": "onenote" },
+            { "kind": "reviewStack", "id": "stack", "resurfaceDays": [3, 14] }
+          ]
+        }
+        """
+        let config = try JSONDecoder().decode(RelayConfig.self, from: Data(json.utf8))
+
+        XCTAssertNoThrow(try config.validate())
+        XCTAssertEqual(config.microsoft?.tenant, "common")
+        XCTAssertEqual(config.destinations, [
+            .googleCalendar(.init(id: "gcal")),
+            .googleDocs(.init(id: "docs", folder: "Notes")),
+            .outlookCalendar(.init(id: "outlook", timeZone: "America/Chicago")),
+            .oneNote(.init(id: "onenote")),
+            .reviewStack(.init(id: "stack", port: 7788, dailyLimit: 25, resurfaceDays: [3, 14])),
+        ])
+        let roundTrip = try JSONDecoder().decode(RelayConfig.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(roundTrip, config)
+    }
+
+    func testCloudDestinationsNeedTheirAccountSection() {
+        let google = RelayConfig(sources: [SourceConfig(id: "s", device: "d", path: "/x")], destinations: [.googleDocs(.init(id: "docs"))])
+        XCTAssertThrowsError(try google.validate()) { error in
+            XCTAssertTrue((error as? ConfigError)?.errorDescription?.contains("\"google\" section") == true)
+        }
+        let microsoft = RelayConfig(sources: [SourceConfig(id: "s", device: "d", path: "/x")], destinations: [.oneNote(.init(id: "n"))])
+        XCTAssertThrowsError(try microsoft.validate())
+        let twoStacks = RelayConfig(sources: [SourceConfig(id: "s", device: "d", path: "/x")], destinations: [.reviewStack(.init(id: "a")), .reviewStack(.init(id: "b"))])
+        XCTAssertThrowsError(try twoStacks.validate())
+        let badPort = RelayConfig(sources: [SourceConfig(id: "s", device: "d", path: "/x")], destinations: [.reviewStack(.init(id: "a", port: 80))])
+        XCTAssertThrowsError(try badPort.validate())
+    }
+
     func testExpandsTildeInPaths() throws {
         let source = SourceConfig(id: "s", device: "d", path: "~/Exports")
         XCTAssertEqual(source.url.path, FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Exports").path)
@@ -53,7 +96,7 @@ final class ConfigTests: XCTestCase {
     func testRejectsUnknownDestinationKind() {
         let json = #"{ "sources": [], "destinations": [{ "kind": "evernote", "id": "e" }] }"#
         XCTAssertThrowsError(try JSONDecoder().decode(RelayConfig.self, from: Data(json.utf8))) { error in
-            XCTAssertEqual(error as? ConfigError, .invalid("Unknown destination kind \"evernote\". Use \"obsidian\", \"appleNotes\" or \"appleCalendar\"."))
+            XCTAssertEqual(error as? ConfigError, .invalid("Unknown destination kind \"evernote\". Use one of: obsidian, appleNotes, appleCalendar, googleCalendar, googleDocs, outlookCalendar, oneNote, reviewStack."))
         }
     }
 

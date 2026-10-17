@@ -35,7 +35,10 @@ public final class RelayEngine {
     /// The production wiring: Vision for recognition, the destinations named in the config,
     /// and the Viwoods Cloud puller when the config has a `viwoodsCloud` section.
     public static func live(config: RelayConfig, stateURL: URL = InkRelayCore.defaultStateURL) throws -> RelayEngine {
-        let destinations = DestinationFactory.make(config.destinations)
+        let destinations = DestinationFactory.make(
+            config.destinations,
+            context: DestinationContext(config: config, supportDirectory: stateURL.deletingLastPathComponent())
+        )
         var puller: ViwoodsCloudPuller?
         if let cloud = config.viwoodsCloud {
             let client = ViwoodsClient(credentials: FileCredentialStore(url: Self.tokenURL(besideState: stateURL)))

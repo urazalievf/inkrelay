@@ -11,6 +11,11 @@ Usage:
   inkrelay status [--config PATH]   Show sources, destinations and what's been synced
   inkrelay viwoods login            Save a Viwoods Cloud token copied from cloud.viwoods.com
   inkrelay viwoods pull             Pull Viwoods Cloud into the local cache without syncing
+  inkrelay google login             Sign in to Google for the googleCalendar and googleDocs destinations
+  inkrelay microsoft login          Sign in to Microsoft for the outlookCalendar and oneNote destinations
+  inkrelay review                   List today's read-later stack
+  inkrelay review open              Open the stack in the browser (serves it until Ctrl-C)
+  inkrelay review done|later ID     Mark a card done, or push it to tomorrow
   inkrelay version
 
 The config lives at \(InkRelayCore.defaultConfigURL.path) unless --config says otherwise.
@@ -36,10 +41,28 @@ var configURL = InkRelayCore.defaultConfigURL
 if let flag = arguments.firstIndex(of: "--config") {
     guard arguments.indices.contains(flag + 1) else { fail("--config needs a path.") }
     configURL = URL(fileURLWithPath: (arguments[flag + 1] as NSString).expandingTildeInPath)
+    // Subcommands read their own arguments positionally, so the flag can go anywhere.
+    arguments.removeSubrange(flag...(flag + 1))
 }
 // Sync state sits next to the config, so separate configs never share state.
 let stateURL = configURL.deletingLastPathComponent().appendingPathComponent("state.json")
 let tokenURL = RelayEngine.tokenURL(besideState: stateURL)
+// Tokens, the review stack and other per-config data live next to the config.
+let supportDirectory = configURL.deletingLastPathComponent()
+
+func reviewStackConfig(_ config: RelayConfig) -> DestinationConfig.ReviewStackConfig? {
+    for destination in config.destinations {
+        if case .reviewStack(let stack) = destination { return stack }
+    }
+    return nil
+}
+
+func openInBrowser(_ url: URL) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    process.arguments = [url.absoluteString]
+    try? process.run()
+}
 
 func loadConfig() -> RelayConfig {
     do {
@@ -99,6 +122,16 @@ case "watch":
     // Folder events and the rescan timer both feed one trigger stream. Keeping only the newest
     // trigger means a burst of changes during a sync becomes a single follow-up pass.
     let (triggers, continuation) = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    var reviewServer: ReviewServer?
+    if let stack = reviewStackConfig(config) {
+        let server = ReviewServer(store: ReviewStore(directory: DestinationContext(config: config, supportDirectory: supportDirectory).reviewDirectory), config: stack)
+        do {
+            log("Review stack at \(try server.start())")
+            reviewServer = server
+        } catch {
+            log("Review stack unavailable: \(error.localizedDescription)")
+        }
+    }
     let watcher = FolderWatcher(urls: config.sources.map(\.url)) { continuation.yield("folder change") }
     if !config.sources.isEmpty, !watcher.start() {
         log("Folder events unavailable; relying on rescans every \(config.rescanIntervalSeconds)s.")
@@ -117,7 +150,7 @@ case "watch":
         log("Syncing (\(reason))…")
         printReport(engine.syncOnce())
     }
-    withExtendedLifetime(watcher) {}
+    withExtendedLifetime((watcher, reviewServer)) {}
 
 case "status":
     let config = loadConfig()
@@ -167,7 +200,7 @@ case "viwoods":
         let config = loadConfig()
         guard let cloud = config.viwoodsCloud else { fail("The config has no viwoodsCloud section.") }
         do {
-            let destinations = DestinationFactory.make(config.destinations)
+            let destinations = DestinationFactory.make(config.destinations, context: DestinationContext(config: config, supportDirectory: supportDirectory))
             let client = ViwoodsClient(credentials: FileCredentialStore(url: tokenURL))
             let puller = try ViwoodsCloudPuller(config: cloud, client: client, plans: DestinationFactory.plans(in: destinations))
             let report = puller.pull()
@@ -180,6 +213,108 @@ case "viwoods":
 
     default:
         fail("Usage: inkrelay viwoods login | pull")
+    }
+
+case "google":
+    guard arguments.first == "login" else { fail("Usage: inkrelay google login") }
+    let config = loadConfig()
+    guard let google = config.google else {
+        fail("""
+        Add a "google" section to \(configURL.path) first:
+          "google": { "clientId": "…apps.googleusercontent.com", "clientSecret": "…" }
+        Create the client in Google Cloud Console → APIs & Services → Credentials → OAuth client ID → Desktop app,
+        with the Google Calendar API and Google Drive API enabled for the project.
+        """)
+    }
+    let account = GoogleAccount(config: google, supportDirectory: supportDirectory)
+    do {
+        try account.login { url in
+            print("Opening Google sign-in in your browser. If it doesn't open, visit:\n\(url.absoluteString)\n")
+            openInBrowser(url)
+        }
+        print("Signed in to Google. InkRelay can only see calendars and Drive files it creates.")
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "microsoft":
+    guard arguments.first == "login" else { fail("Usage: inkrelay microsoft login") }
+    let config = loadConfig()
+    guard let microsoft = config.microsoft else {
+        fail("""
+        Add a "microsoft" section to \(configURL.path) first:
+          "microsoft": { "clientId": "…", "tenant": "common" }
+        Register an app in Microsoft Entra (portal.azure.com → App registrations), allow personal Microsoft accounts,
+        turn on "Allow public client flows", and add the delegated Graph permissions Calendars.ReadWrite and Notes.ReadWrite.
+        """)
+    }
+    do {
+        try MicrosoftAccount(config: microsoft, supportDirectory: supportDirectory).login { message in print(message) }
+        print("Signed in to Microsoft.")
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "review":
+    let config = loadConfig()
+    guard let stack = reviewStackConfig(config) else {
+        fail("Add a destination with \"kind\": \"reviewStack\" to \(configURL.path) to collect pages for later.")
+    }
+    let store = ReviewStore(directory: DestinationContext(config: config, supportDirectory: supportDirectory).reviewDirectory)
+    let subcommand = arguments.first ?? "list"
+    switch subcommand {
+    case "list":
+        do {
+            let (cards, due) = try store.stack(now: Date(), limit: stack.dailyLimit)
+            if cards.isEmpty {
+                print("All caught up. New pages and to-dos land here as your tablet syncs.")
+            } else {
+                print("\(cards.count) card(s) today" + (due > cards.count ? ", \(due - cards.count) more waiting" : "") + ":")
+                for card in cards {
+                    let line = card.text.split(separator: "\n").first.map(String.init) ?? ""
+                    print("  \(card.id.prefix(6))  \(card.title) · \(card.subtitle)" + (line.isEmpty ? "" : "\n          \(line)"))
+                }
+                print("\nOpen them with `inkrelay review open`, or `inkrelay review done <id>`.")
+            }
+        } catch {
+            fail(error.localizedDescription)
+        }
+
+    case "done", "later":
+        guard arguments.count >= 2 else { fail("Usage: inkrelay review \(subcommand) <card id>") }
+        do {
+            guard let id = try store.resolve(arguments[1]) else { fail("No single card starts with \"\(arguments[1])\".") }
+            if subcommand == "done" {
+                try store.markDone(id, now: Date(), resurfaceDays: stack.resurfaceDays)
+            } else {
+                try store.snooze(id, now: Date())
+            }
+            print(subcommand == "done" ? "Done." : "Back tomorrow.")
+        } catch {
+            fail(error.localizedDescription)
+        }
+
+    case "open", "serve":
+        let server = ReviewServer(store: store, config: stack)
+        let url: URL
+        do {
+            url = try server.start()
+        } catch {
+            // `inkrelay watch` may already be serving it on the configured port.
+            let running = URL(string: "http://127.0.0.1:\(stack.port)")!
+            if subcommand == "open" {
+                print("The stack is already being served at \(running.absoluteString) (by `inkrelay watch`?). Opening it.")
+                openInBrowser(running)
+                exit(0)
+            }
+            fail(error.localizedDescription)
+        }
+        print("Review stack at \(url.absoluteString). Press Ctrl-C to stop.")
+        if subcommand == "open" { openInBrowser(url) }
+        withExtendedLifetime(server) { dispatchMain() }
+
+    default:
+        fail("Usage: inkrelay review [list | open | serve | done ID | later ID]")
     }
 
 case "version", "--version", "-v":
