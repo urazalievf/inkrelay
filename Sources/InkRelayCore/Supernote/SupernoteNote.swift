@@ -89,12 +89,14 @@ public struct SupernoteNote {
     static let white: UInt8 = 0xFE
 
     /// One page as an 8-bit grayscale image: layers flattened bottom to top, background whitened.
-    public func image(of index: Int) throws -> CGImage {
+    /// `inkOnly` leaves the background template out, which is what recognition wants.
+    public func image(of index: Int, inkOnly: Bool = false) throws -> CGImage {
         let page = pages[index]
         let (w, h) = page.landscape ? (height, width) : (width, height)
         var canvas = [UInt8](repeating: Self.white, count: w * h)
         let order = page.order.isEmpty ? ["LAYER3", "LAYER2", "LAYER1", "MAINLAYER", "BGLAYER"] : page.order
         for name in order.reversed() {
+            if inkOnly, name == "BGLAYER" { continue }
             guard page.visibility[name] ?? (name == "MAINLAYER" || page.visibility.isEmpty),
                   let layer = page.layers.first(where: { $0.name == name }),
                   let bitmap = layer.bitmap, !bitmap.isEmpty else { continue }
@@ -127,8 +129,8 @@ public struct SupernoteNote {
     }
 
     /// Writes all pages as a PDF, one page each, so the rest of InkRelay treats it like any export.
-    public func writePDF(to url: URL) throws {
-        let images = try pages.indices.map(image(of:))
+    public func writePDF(to url: URL, inkOnly: Bool = false) throws {
+        let images = try pages.indices.map { try image(of: $0, inkOnly: inkOnly) }
         try PDFComposer.write(images: images, to: url)
     }
 

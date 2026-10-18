@@ -19,7 +19,11 @@
     ],
     "daily": true,
     "dailyMonths": 12,
-    "recognizeInkOnly": true
+    "recognizeInkOnly": true,
+    "aiFolders": [
+      "Daily"
+    ],
+    "aiMonthlyBudgetUSD": 2
   },
   "google": {
     "clientId": "YOUR-CLIENT-ID.apps.googleusercontent.com",
@@ -33,7 +37,8 @@
     "model": "claude-opus-5-5",
     "effort": "medium",
     "monthlyBudgetUSD": 5,
-    "serverFallback": true
+    "serverFallback": true,
+    "batchSize": 4
   },
   "destinations": [
     {

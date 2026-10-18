@@ -252,7 +252,7 @@ final class ViwoodsCloudPullerTests: XCTestCase {
         XCTAssertEqual(decoded.enabledApps, [.paper, .meeting, .memo])
         XCTAssertEqual(decoded.source.id, "viwoods-cloud")
         XCTAssertTrue(decoded.cacheURL.path.hasSuffix("Application Support/InkRelay/viwoods"))
-        XCTAssertThrowsError(try ViwoodsCloudConfig(apps: ["paper", "learning"]).validate())
+        XCTAssertThrowsError(try ViwoodsCloudConfig(apps: ["paper", "reader"]).validate())
         XCTAssertThrowsError(try ViwoodsCloudConfig(dailyMonths: 0).validate())
     }
 }

@@ -41,7 +41,7 @@ public final class ViwoodsCloudPuller {
                 switch app {
                 case .memo: try pullMemos(seen: &seen, into: &report)
                 case .paper, .meeting: try pullNotebooks(app, parent: "", folder: app.folderName, seen: &seen, into: &report)
-                case .knowledgeBase: continue // The portal exposes only its tabs; nothing to download yet.
+                case .knowledgeBase, .learning: continue // Not pulled yet; `inkrelay viwoods list` shows what's there.
                 }
                 // Only after a complete listing: anything not seen was deleted in the cloud.
                 prune(app, keeping: seen, into: &report)
@@ -398,6 +398,10 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
     public var cachePath: String?
     /// `vision` (default) or `claude`, as for folder sources.
     public var recognizer: RecognizerKind = .vision
+    /// With `claude`: only these folders of the cache go to Claude, such as `["Daily"]` for the planner alone.
+    public var aiFolders: [String] = []
+    /// With `claude`: this source's own monthly cap, inside `ai.monthlyBudgetUSD`.
+    public var aiMonthlyBudgetUSD: Double?
     /// Also pull each notebook page's ink layer, without the template, and recognize from that. The PDF keeps the
     /// full page. Costs one more image per page the first time a notebook is pulled.
     public var recognizeInkOnly: Bool = true
@@ -425,7 +429,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         cacheURL.appendingPathComponent(".ink", isDirectory: true).appendingPathComponent(relativePath)
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, apps, daily, dailyMonths, cachePath, recognizer, recognizeInkOnly }
+    private enum CodingKeys: String, CodingKey { case id, device, apps, daily, dailyMonths, cachePath, recognizer, recognizeInkOnly, aiFolders, aiMonthlyBudgetUSD }
 
     public init(from decoder: Decoder) throws {
         let defaults = ViwoodsCloudConfig()
@@ -438,6 +442,8 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         cachePath = try container.decodeIfPresent(String.self, forKey: .cachePath)
         recognizer = try container.decodeIfPresent(RecognizerKind.self, forKey: .recognizer) ?? .vision
         recognizeInkOnly = try container.decodeIfPresent(Bool.self, forKey: .recognizeInkOnly) ?? true
+        aiFolders = try container.decodeIfPresent([String].self, forKey: .aiFolders) ?? []
+        aiMonthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .aiMonthlyBudgetUSD)
     }
 
     public var enabledApps: [ViwoodsApp] {
@@ -455,6 +461,8 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
     public var source: SourceConfig {
         var source = SourceConfig(id: id, device: device, path: cacheURL.path, fileTypes: ["pdf"], recognizer: recognizer)
         source.waitsForSettle = false
+        source.aiFolders = aiFolders
+        source.aiMonthlyBudgetUSD = aiMonthlyBudgetUSD
         return source
     }
 

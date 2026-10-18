@@ -166,7 +166,8 @@ final class SupernoteNoteTests: XCTestCase {
 
         let pdf = try XCTUnwrap(destination.upserts.first?.note.originalURL)
         XCTAssertEqual(pdf.pathExtension, "pdf")
-        XCTAssertEqual(recognizer.calls, [pdf], "recognition reads the PDF, not the notebook")
+        XCTAssertEqual(recognizer.calls.map(\.lastPathComponent), ["Standup.pdf"], "recognition reads a PDF, not the notebook")
+        XCTAssertTrue(recognizer.calls[0].path.contains("/.ink/"), "and the ink-only one, without the template")
         XCTAssertEqual(PDFDocument(url: pdf)?.pageCount, 1)
         XCTAssertEqual(destination.upserts.first?.note.title, "Standup")
         XCTAssertEqual(destination.upserts.first?.note.relativePath, "Note/Standup.note")
@@ -185,5 +186,34 @@ final class SupernoteNoteTests: XCTestCase {
             XCTAssertFalse(note.pages.isEmpty, name)
             for index in note.pages.indices { XCTAssertNoThrow(try note.image(of: index), "\(name) page \(index + 1)") }
         }
+    }
+
+    func testInkOnlyLeavesTheTemplateOut() throws {
+        let note = try SupernoteNote(data: makeNote())
+        func darkPixels(_ image: CGImage) -> Int {
+            let width = image.width, height = image.height
+            var pixels = [UInt8](repeating: 255, count: width * height)
+            pixels.withUnsafeMutableBytes { buffer in
+                let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
+                                        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            }
+            return pixels.filter { $0 < 128 }.count
+        }
+        let full = darkPixels(try note.image(of: 0))
+        let ink = darkPixels(try note.image(of: 0, inkOnly: true))
+        XCTAssertGreaterThan(ink, 0, "the handwriting is still there")
+        XCTAssertLessThanOrEqual(ink, full, "and nothing from the background was added")
+
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let source = try folder.write("x/Book.note", "")
+        try makeNote().write(to: source)
+        let inkPDF = try XCTUnwrap(try ExportConverter.inkOnlyURL(for: source, key: "drive/x/Book.note", cache: folder.url.appendingPathComponent("converted")))
+        XCTAssertTrue(inkPDF.path.hasSuffix("converted/.ink/drive/x/Book.pdf"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: inkPDF.path))
+        XCTAssertNil(try ExportConverter.inkOnlyURL(for: URL(fileURLWithPath: "/tmp/plain.pdf"), key: "k", cache: folder.url))
+        ExportConverter.discard(key: "drive/x/Book.note", cache: folder.url.appendingPathComponent("converted"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: inkPDF.path))
     }
 }

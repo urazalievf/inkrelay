@@ -28,9 +28,12 @@ final class ClaudeTextRecognizerTests: XCTestCase {
         )
     }
 
+    /// Answers every page in the request with the same text, as `{"pages": [...]}`.
     private func answer(text: String = "Q4 planning\n\n- ship the stack", title: String = "Q4 planning", tags: [String] = ["Planning"], stop: String = "end_turn", model: String = "claude-opus-5-5", input: Int = 3000, output: Int = 500) {
-        transport.handlers["v1/messages"] = { _ in
-            let payload = try JSONSerialization.data(withJSONObject: ["text": text, "title": title, "tags": tags])
+        transport.handlers["v1/messages"] = { sent in
+            let content = ((sent.body["messages"] as? [[String: Any]])?.first?["content"] as? [[String: Any]]) ?? []
+            let numbers = content.compactMap { ($0["text"] as? String).flatMap { $0.hasPrefix("Page ") ? Int($0.split(separator: " ")[1]) : nil } }
+            let payload = try JSONSerialization.data(withJSONObject: ["pages": numbers.map { ["page": $0, "text": text, "title": title, "tags": tags] }])
             return (200, try jsonData([
                 "model": model, "stop_reason": stop,
                 "content": [["type": "thinking", "thinking": ""], ["type": "text", "text": String(decoding: payload, as: UTF8.self)]],
@@ -66,7 +69,7 @@ final class ClaudeTextRecognizerTests: XCTestCase {
 
     func testRecordsWhatEachPageCostAndStopsAtTheMonthlyBudget() throws {
         answer(input: 3000, output: 500) // $0.012 + $0.010 at Opus 5.5 prices
-        let budget = AITranscriptionConfig(monthlyBudgetUSD: 0.10)
+        let budget = AITranscriptionConfig(monthlyBudgetUSD: 0.10, batchSize: 1)
         _ = try recognizer(budget, pages: 2).recognize(fileAt: file)
         let spent = recognizer(budget).spentThisMonth()
         XCTAssertEqual(spent.pages, 2)
@@ -94,6 +97,38 @@ final class ClaudeTextRecognizerTests: XCTestCase {
         let overloaded = recognizer()
         XCTAssertEqual(try overloaded.recognize(fileAt: file).first?.text, "vision text")
         XCTAssertTrue(overloaded.takeFallbacks().first?.contains("HTTP 529: Overloaded") == true)
+    }
+
+    func testPagesGoInBatchesAndASourceCanHaveItsOwnCap() throws {
+        answer(input: 3000, output: 500)
+        let claude = recognizer(AITranscriptionConfig(batchSize: 3), pages: 5)
+        let pages = try claude.recognize(fileAt: file)
+        XCTAssertEqual(pages.map(\.number), [1, 2, 3, 4, 5])
+        XCTAssertEqual(transport.requests(to: "v1/messages").count, 2, "three pages, then two")
+        let first = try XCTUnwrap(transport.requests(to: "v1/messages").first)
+        let content = try XCTUnwrap(((first.body["messages"] as? [[String: Any]])?.first?["content"]) as? [[String: Any]])
+        XCTAssertEqual(content.filter { $0["type"] as? String == "image" }.count, 3)
+        XCTAssertEqual(content.last?["text"] as? String, "Transcribe each page above as one entry in pages, with its page number.")
+        XCTAssertEqual(recognizer().spentThisMonth().pages, 5)
+
+        // One answer short of a page: the whole batch goes to Vision rather than guessing which page is missing.
+        transport.handlers["v1/messages"] = { _ in
+            let payload = try JSONSerialization.data(withJSONObject: ["pages": [["page": 1, "text": "only one", "title": "", "tags": []]]])
+            return (200, try jsonData(["model": "claude-opus-5-5", "stop_reason": "end_turn", "content": [["type": "text", "text": String(decoding: payload, as: UTF8.self)]], "usage": ["input_tokens": 1, "output_tokens": 1]]))
+        }
+        let short = recognizer(AITranscriptionConfig(batchSize: 2), pages: 2)
+        let result = try short.recognize(fileAt: file)
+        XCTAssertFalse(result.map(\.text).contains("only one"))
+        XCTAssertEqual(short.takeFallbacks().count, 2, "both pages went to Vision")
+
+        // A per-source cap inside the overall budget.
+        answer(input: 3000, output: 500)
+        let capped = recognizer(AITranscriptionConfig(monthlyBudgetUSD: 50, batchSize: 1), pages: 1)
+        capped.currentSource = ("drive", 0.01)
+        XCTAssertEqual(try capped.recognize(fileAt: file).first?.text, "vision text")
+        XCTAssertTrue(capped.takeFallbacks().first?.contains("budget of $0.01 for drive") == true)
+        capped.currentSource = ("cloud", 1)
+        XCTAssertEqual(try capped.recognize(fileAt: file).first?.text, "Q4 planning\n\n- ship the stack")
     }
 
     func testWithoutAKeyNothingIsSentAndVisionReadsEverything() throws {
@@ -156,6 +191,7 @@ final class ClaudeTextRecognizerTests: XCTestCase {
     func testConfigDefaultsAndValidation() throws {
         XCTAssertEqual(try JSONDecoder().decode(AITranscriptionConfig.self, from: Data("{}".utf8)), AITranscriptionConfig())
         XCTAssertThrowsError(try AITranscriptionConfig(effort: "extreme").validate())
+        XCTAssertThrowsError(try AITranscriptionConfig(batchSize: 9).validate())
         let source = try JSONDecoder().decode(SourceConfig.self, from: Data(#"{"id":"s","path":"/x","recognizer":"claude"}"#.utf8))
         XCTAssertEqual(source.recognizer, .claude)
         XCTAssertFalse(String(decoding: try JSONEncoder().encode(SourceConfig(id: "s", device: "d", path: "/x")), as: UTF8.self).contains("recognizer"))

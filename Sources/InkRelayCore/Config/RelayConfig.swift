@@ -148,6 +148,16 @@ public struct SourceConfig: Codable, Equatable {
     public var waitsForSettle = true
     /// `vision` (default, on the Mac) or `claude` (page images are sent to Anthropic; see the `ai` section).
     public var recognizer: RecognizerKind
+    /// With `claude`: only exports under these folders (relative to the source, such as `Daily`) go to Claude;
+    /// Vision reads the rest. Empty means everything.
+    public var aiFolders: [String] = []
+    /// With `claude`: this source's own monthly cap in US dollars, inside the overall `ai.monthlyBudgetUSD`.
+    public var aiMonthlyBudgetUSD: Double?
+    /// Supernote `.note` files: recognize the ink without the template. The PDF keeps the whole page.
+    public var recognizeInkOnly = true
+    /// A PNG, JPEG or one-page PDF of the tablet's blank template; its lines and labels are taken out of each
+    /// page before recognition, so they stop turning up as text.
+    public var template: String?
 
     public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"], recognizer: RecognizerKind = .vision) {
         self.id = id
@@ -157,7 +167,7 @@ public struct SourceConfig: Codable, Equatable {
         self.recognizer = recognizer
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer }
+    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer, aiFolders, aiMonthlyBudgetUSD, recognizeInkOnly, template }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -166,6 +176,11 @@ public struct SourceConfig: Codable, Equatable {
         path = try container.decode(String.self, forKey: .path)
         fileTypes = try container.decodeIfPresent([String].self, forKey: .fileTypes) ?? ["pdf"]
         recognizer = try container.decodeIfPresent(RecognizerKind.self, forKey: .recognizer) ?? .vision
+        aiFolders = try container.decodeIfPresent([String].self, forKey: .aiFolders) ?? []
+        aiMonthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .aiMonthlyBudgetUSD)
+        recognizeInkOnly = try container.decodeIfPresent(Bool.self, forKey: .recognizeInkOnly) ?? true
+        template = try container.decodeIfPresent(String.self, forKey: .template)
+        if let budget = aiMonthlyBudgetUSD, budget < 0 { throw ConfigError.invalid("aiMonthlyBudgetUSD can't be negative.") }
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -175,7 +190,23 @@ public struct SourceConfig: Codable, Equatable {
         try container.encode(path, forKey: .path)
         try container.encode(fileTypes, forKey: .fileTypes)
         if recognizer != .vision { try container.encode(recognizer, forKey: .recognizer) }
+        if !aiFolders.isEmpty { try container.encode(aiFolders, forKey: .aiFolders) }
+        try container.encodeIfPresent(aiMonthlyBudgetUSD, forKey: .aiMonthlyBudgetUSD)
+        if !recognizeInkOnly { try container.encode(recognizeInkOnly, forKey: .recognizeInkOnly) }
+        try container.encodeIfPresent(template, forKey: .template)
     }
+
+    /// Whether an export at this relative path goes to Claude, given `recognizer` and `aiFolders`.
+    public func usesAI(for relativePath: String) -> Bool {
+        guard recognizer == .claude else { return false }
+        guard !aiFolders.isEmpty else { return true }
+        return aiFolders.contains { folder in
+            let prefix = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            return relativePath.hasPrefix(prefix + "/") || relativePath == prefix
+        }
+    }
+
+    public var templateURL: URL? { template.map { URL(fileURLWithPath: PathExpansion.expand($0)) } }
 
     public var url: URL { URL(fileURLWithPath: PathExpansion.expand(path), isDirectory: true) }
 }

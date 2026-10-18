@@ -14,6 +14,9 @@ Usage:
   inkrelay status [--config PATH]   Show sources, destinations and what's been synced
   inkrelay viwoods login            Save a Viwoods Cloud token copied from cloud.viwoods.com
   inkrelay viwoods pull             Pull Viwoods Cloud into the local cache without syncing
+  inkrelay viwoods list [APP]       What the cloud holds: paper, meeting, memo, learning, knowledgebase
+  inkrelay vocabulary               Words Vision is told to expect: yours and the ones learned from your edits
+  inkrelay vocabulary add WORD…     Add words; `remove WORD` takes one out
   inkrelay google login             Sign in to Google for the googleCalendar and googleDocs destinations
   inkrelay microsoft login          Sign in to Microsoft for the outlookCalendar and oneNote destinations
   inkrelay notion login             Save a Notion integration token in the Keychain
@@ -349,8 +352,35 @@ case "viwoods":
             fail(error.localizedDescription)
         }
 
+    case "list":
+        let client = ViwoodsClient(credentials: FileCredentialStore(url: tokenURL))
+        let wanted = arguments.dropFirst().first.flatMap(ViwoodsApp.init(name:))
+        if let raw = arguments.firstIndex(of: "--raw"), arguments.indices.contains(raw + 1), let app = wanted {
+            do {
+                let item = try client.rawItem(app, uuid: arguments[raw + 1])
+                print(String(decoding: try JSONSerialization.data(withJSONObject: item, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self))
+            } catch {
+                fail(error.localizedDescription)
+            }
+            break
+        }
+        func list(_ app: ViwoodsApp, parent: String, indent: String) {
+            do {
+                for item in try client.contents(of: app, parent: parent) where !item.isSkippable {
+                    let kind = item.isFolder ? "folder" : (item.isEncrypted ? "locked" : "item")
+                    print("\(indent)\(item.name)  [\(kind) \(item.resourceId)]")
+                    if item.isFolder { list(app, parent: item.resourceId, indent: indent + "  ") }
+                }
+            } catch {
+                print("\(indent)! \(error.localizedDescription)")
+            }
+        }
+        for app in wanted.map({ [$0] }) ?? ViwoodsApp.allCases {
+            print("\(app.folderName):")
+            list(app, parent: "", indent: "  ")
+        }
     default:
-        fail("Usage: inkrelay viwoods login | pull")
+        fail("Usage: inkrelay viwoods login | pull | list [APP] [--raw UUID]")
     }
 
 case "google":
@@ -578,6 +608,22 @@ case "license":
         }
     default:
         fail("Usage: inkrelay license [enter KEY | remove]")
+    }
+
+case "vocabulary":
+    let learned = LearnedVocabulary(url: supportDirectory.appendingPathComponent("vocabulary.json"))
+    switch arguments.first {
+    case "add":
+        let added = learned.add(Array(arguments.dropFirst()))
+        print(added.isEmpty ? "Nothing new." : "Added: " + added.joined(separator: ", "))
+    case "remove":
+        for word in arguments.dropFirst() { print(learned.remove(word) ? "Removed \(word)." : "\(word) wasn't there.") }
+    case nil, "list":
+        let own = (try? ConfigStore.load(from: configURL))?.recognition.vocabulary ?? []
+        print("From the config (recognition.vocabulary): " + (own.isEmpty ? "none" : own.joined(separator: ", ")))
+        print("Learned from your edits: " + (learned.all.isEmpty ? "none yet" : learned.all.joined(separator: ", ")))
+    default:
+        fail("Usage: inkrelay vocabulary [add WORD… | remove WORD…]")
     }
 
 case "update":

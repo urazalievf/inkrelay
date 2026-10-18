@@ -51,8 +51,13 @@ public final class ViwoodsClient {
     }
 
     public func notebook(_ app: ViwoodsApp, uuid: String) throws -> ViwoodsNotebook {
-        let path = app == .meeting ? "api/v1/meetingSync/get" : "api/v1/paperSync/get"
-        return try decodeBlob(try call(path, ["uuid": .string(uuid)]))
+        try decodeBlob(try call(app.syncPath, ["uuid": .string(uuid)]))
+    }
+
+    /// One item's content as the cloud sends it, for looking at apps InkRelay doesn't pull yet.
+    public func rawItem(_ app: ViwoodsApp, uuid: String) throws -> Any {
+        let blob: Blob = try call(app.syncPath, ["uuid": .string(uuid)])
+        return try JSONSerialization.jsonObject(with: try Gzip.decompressBase64(blob.data))
     }
 
     public func memo(uuid: String) throws -> ViwoodsMemo {
