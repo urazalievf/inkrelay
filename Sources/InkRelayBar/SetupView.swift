@@ -2,7 +2,8 @@ import AppKit
 import InkRelayCore
 import SwiftUI
 
-/// First-run setup, the same choices as `inkrelay setup`, without the terminal.
+/// Setup and Settings in one window: the same choices as `inkrelay setup`, shown again prefilled from the config,
+/// and saved without touching the sections it doesn't show.
 struct SetupView: View {
     @ObservedObject var model: BarModel
     @Environment(\.dismiss) private var dismiss
@@ -12,14 +13,22 @@ struct SetupView: View {
     @State private var useViwoodsCloud = true
     @State private var exportFolder = ""
     @State private var vault = ""
+    @State private var dailyNotes = false
+    @State private var weeklyDigest = false
     @State private var appleNotes = true
     @State private var appleCalendar = true
     @State private var appleReminders = true
     @State private var reviewStack = true
     @State private var shareWithPhone = false
+    @State private var notifyProblems = true
+    @State private var notifyNewNotes = false
+    @State private var remind = false
+    @State private var reminderTime = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? Date()
     @State private var error: String?
+    @State private var loaded = false
 
     private var tablet: TabletPreset { TabletPreset.all[tabletIndex] }
+    private var hasConfig: Bool { model.config != nil }
 
     var body: some View {
         Form {
@@ -37,6 +46,10 @@ struct SetupView: View {
             }
             Section("Where notes go") {
                 folderPicker(selection: $vault, suggestions: detector.obsidianVaults().map(detector.tilde), none: "No Obsidian", label: "Obsidian vault")
+                if !vault.isEmpty {
+                    Toggle("Add to the vault's daily notes", isOn: $dailyNotes)
+                    Toggle("Keep a weekly digest (Ink/Weekly)", isOn: $weeklyDigest)
+                }
                 Toggle("Apple Notes", isOn: $appleNotes)
                 Toggle("Apple Calendar (planner pages and to-dos)", isOn: $appleCalendar)
                 Toggle("Apple Reminders (tasks you write)", isOn: $appleReminders)
@@ -45,19 +58,56 @@ struct SetupView: View {
                     Toggle("Share with InkRelay on iPhone and iPad (iCloud Drive)", isOn: $shareWithPhone)
                 }
             }
+            Section("Notifications") {
+                Toggle("Tell me when something needs me", isOn: $notifyProblems)
+                Toggle("Tell me when new notes sync", isOn: $notifyNewNotes)
+                if reviewStack {
+                    Toggle("Daily review reminder", isOn: $remind)
+                    if remind {
+                        DatePicker("At", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                    }
+                }
+            }
             if let error {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
             HStack {
-                Text("Google, Microsoft, Notion and AI transcription are set up in the config; see the README.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Google, Microsoft, Notion, AI transcription and send targets are set in the config file and kept as they are.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Save") { save() }.keyboardShortcut(.defaultAction)
             }
         }
         .formStyle(.grouped)
         .frame(width: 480)
-        .onAppear { vault = detector.obsidianVaults().first.map(detector.tilde) ?? "" }
+        .onAppear(perform: load)
+    }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        guard let config = model.config else {
+            vault = detector.obsidianVaults().first.map(detector.tilde) ?? ""
+            return
+        }
+        let choices = SetupChoices(from: config)
+        tabletIndex = TabletPreset.all.firstIndex { $0.name == choices.tablet.name } ?? 0
+        useViwoodsCloud = choices.useViwoodsCloud
+        exportFolder = choices.exportFolder ?? ""
+        vault = choices.obsidianVault ?? ""
+        dailyNotes = choices.dailyNotes
+        weeklyDigest = choices.weeklyDigest
+        appleNotes = choices.appleNotesAccount != nil
+        appleCalendar = choices.appleCalendar
+        appleReminders = choices.appleReminders
+        reviewStack = choices.reviewStack
+        shareWithPhone = choices.shareWithPhone
+        notifyProblems = choices.notifyProblems
+        notifyNewNotes = choices.notifyNewNotes
+        if let time = config.notifications.reminderTime {
+            remind = true
+            reminderTime = Calendar.current.date(from: DateComponents(hour: time.hour, minute: time.minute)) ?? reminderTime
+        }
     }
 
     private func folderPicker(selection: Binding<String>, suggestions: [String], none: String?, label: String = "Folder") -> some View {
@@ -79,19 +129,29 @@ struct SetupView: View {
     }
 
     private func save() {
-        let choices = SetupChoices(
+        let existing = model.config
+        var choices = SetupChoices(
             tablet: tablet,
             useViwoodsCloud: tablet.hasCloudSource && useViwoodsCloud,
             exportFolder: exportFolder.isEmpty ? nil : exportFolder,
             obsidianVault: vault.isEmpty ? nil : vault,
-            appleNotesAccount: appleNotes ? .some(nil) : nil,
+            appleNotesAccount: appleNotes ? .some(existing?.destinations.compactMap { if case .appleNotes(let n) = $0 { return n.account } else { return nil } }.first ?? nil) : nil,
             appleCalendar: appleCalendar,
             appleReminders: appleReminders,
             reviewStack: reviewStack,
             shareWithPhone: shareWithPhone
         )
+        choices.kindleMail = existing?.kindleMail != nil
+        choices.dailyNotes = !vault.isEmpty && dailyNotes
+        choices.weeklyDigest = !vault.isEmpty && weeklyDigest
+        choices.notifyProblems = notifyProblems
+        choices.notifyNewNotes = notifyNewNotes
+        if remind, reviewStack {
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: reminderTime)
+            choices.reviewReminder = String(format: "%02d:%02d", parts.hour ?? 9, parts.minute ?? 0)
+        }
         do {
-            try ConfigStore.save(try choices.config(), to: model.runner.configURL)
+            try ConfigStore.save(try choices.config(merging: existing), to: model.runner.configURL)
             model.reload()
             dismiss()
         } catch let failure {

@@ -4,15 +4,22 @@
       "id": "viwoods",
       "device": "Viwoods AiPaper",
       "path": "~/Library/CloudStorage/GoogleDrive-you@example.com/My Drive/Viwoods",
-      "fileTypes": ["pdf"]
+      "fileTypes": [
+        "pdf"
+      ]
     }
   ],
   "viwoodsCloud": {
     "id": "viwoods-cloud",
     "device": "Viwoods AiPaper",
-    "apps": ["paper", "meeting", "memo"],
+    "apps": [
+      "paper",
+      "meeting",
+      "memo"
+    ],
     "daily": true,
-    "dailyMonths": 12
+    "dailyMonths": 12,
+    "recognizeInkOnly": true
   },
   "google": {
     "clientId": "YOUR-CLIENT-ID.apps.googleusercontent.com",
@@ -35,7 +42,11 @@
       "vaultPath": "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Vault",
       "folder": "Ink",
       "copyOriginal": true,
-      "tags": ["ink"]
+      "tags": [
+        "ink"
+      ],
+      "dailyNotes": false,
+      "weeklyDigest": true
     },
     {
       "kind": "appleNotes",
@@ -54,7 +65,11 @@
       "id": "review",
       "port": 7788,
       "dailyLimit": 25,
-      "resurfaceDays": [3, 14, 60],
+      "resurfaceDays": [
+        3,
+        14,
+        60
+      ],
       "shareWithPhone": false
     },
     {
@@ -82,7 +97,7 @@
     {
       "kind": "appleReminders",
       "id": "apple-reminders",
-      "list": "Ink · {device}"
+      "list": "Ink \u00b7 {device}"
     },
     {
       "kind": "notion",
@@ -117,11 +132,24 @@
     "device": "Mac"
   },
   "recognition": {
-    "languages": ["en-US"],
+    "languages": [
+      "en-US"
+    ],
     "usesLanguageCorrection": true,
     "renderScale": 2,
-    "maxPixelDimension": 3000
+    "maxPixelDimension": 3000,
+    "vocabulary": [
+      "Erin",
+      "Ensemble"
+    ],
+    "concurrency": 4
   },
   "rescanIntervalSeconds": 300,
-  "settleSeconds": 5
+  "settleSeconds": 5,
+  "notifications": {
+    "problems": true,
+    "newNotes": false,
+    "reviewReminder": "09:00"
+  },
+  "checkForUpdates": true
 }
