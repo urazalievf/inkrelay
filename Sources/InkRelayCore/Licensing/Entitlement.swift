@@ -33,8 +33,8 @@ public struct Entitlement: Equatable {
     public func summary(now: Date = Date()) -> String {
         switch basis {
         case .license(let license):
-            if let expires = license.expiresAt {
-                return "Pro, licensed to \(license.name) until \(expires.formatted(date: .abbreviated, time: .omitted))"
+            if let until = license.expiryText(style: .abbreviated) {
+                return "Pro, licensed to \(license.name) until \(until)"
             }
             return "Pro, licensed to \(license.name)"
         case .trial(let endsAt):
@@ -100,7 +100,7 @@ public struct EntitlementStore {
         guard let data = try? Data(contentsOf: licenseURL) else { return nil }
         let file = try JSONDecoder().decode(LicenseFile.self, from: data)
         let license = try verify(file.key)
-        guard license.isValid(at: now) else { throw LicenseError.expired(license.expiresAt ?? now) }
+        guard license.isValid(at: now) else { throw LicenseError.expired(license.expiryText() ?? "") }
         return license
     }
 
@@ -113,7 +113,7 @@ public struct EntitlementStore {
     @discardableResult
     public func enter(_ key: String, now: Date = Date()) throws -> License {
         let license = try verify(key)
-        guard license.isValid(at: now) else { throw LicenseError.expired(license.expiresAt ?? now) }
+        guard license.isValid(at: now) else { throw LicenseError.expired(license.expiryText() ?? "") }
         try FileManager.default.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(LicenseFile(key: key.filter { !$0.isWhitespace }))
         try data.write(to: licenseURL, options: .atomic)

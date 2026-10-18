@@ -96,6 +96,24 @@ final class LicensingTests: XCTestCase {
         XCTAssertFalse(store.current(now: later).isPro, "an expired license falls back to the trial or free")
     }
 
+    func testAnExpiryDateCoversThatWholeDayWhereverThePersonIs() throws {
+        let license = License(name: "Ada", email: "a@x", issuedAt: now, expiresOn: "2027-12-31")
+        for zone in ["America/Chicago", "Asia/Tokyo", "Pacific/Kiritimati", "Pacific/Pago_Pago"] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: zone)!
+            let lastMinute = calendar.date(from: DateComponents(year: 2027, month: 12, day: 31, hour: 23, minute: 59))!
+            let nextMorning = calendar.date(from: DateComponents(year: 2028, month: 1, day: 1, hour: 0, minute: 1))!
+            XCTAssertTrue(license.isValid(at: lastMinute, calendar: calendar), zone)
+            XCTAssertFalse(license.isValid(at: nextMorning, calendar: calendar), zone)
+            XCTAssertTrue(license.expiryText(calendar: calendar)?.contains("31") == true, "shows the stated day in \(zone)")
+        }
+        let signed = try LicenseKey.sign(license, with: signingKey)
+        let decoded = try LicenseKey.verify(signed, publicKey: signingKey.publicKey)
+        XCTAssertEqual(decoded.expiresOn, "2027-12-31")
+        XCTAssertTrue(decoded.expires)
+        XCTAssertFalse(License(name: "B", email: "b@x", issuedAt: now).expires)
+    }
+
     func testProFeaturesAreNamedForPeople() {
         let config = RelayConfig(
             sources: [SourceConfig(id: "drive", device: "Tablet", path: "/tmp/x", recognizer: .claude)],

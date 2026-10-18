@@ -105,7 +105,7 @@ final class BarModel: ObservableObject {
             if !agentRunning { runner.syncNow() }
             let thanks = NSAlert()
             thanks.messageText = "Thanks, \(license.name)."
-            thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiresAt.map { " until \($0.formatted(date: .long, time: .omitted))" } ?? "") + "."
+            thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + "."
             thanks.runModal()
         } catch {
             let failed = NSAlert(error: error)

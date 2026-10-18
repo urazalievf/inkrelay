@@ -595,7 +595,7 @@ case "license":
         guard arguments.count >= 2 else { fail("Usage: inkrelay license enter INK1.…") }
         do {
             let license = try store.enter(arguments.dropFirst().joined())
-            print("Thanks, \(license.name). InkRelay is Pro on this Mac" + (license.expiresAt.map { " until \($0.formatted(date: .long, time: .omitted))" } ?? "") + ".")
+            print("Thanks, \(license.name). InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + ".")
         } catch {
             fail(error.localizedDescription)
         }
