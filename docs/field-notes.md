@@ -21,6 +21,15 @@ What was learned by running InkRelay against real data and real apps. Numbers ar
 - Pulling the layer added one download per page the first time (≈18 s for 24 items against ≈40 s for the first pull in 0.6.0, on the same account; the cloud was warm).
 - Five printed words on five pages, read with `concurrency: 3`, came back in page order every run.
 
+## Learning from corrections (0.9.0)
+
+- A correction is a word in the person's edited block that wasn't in what InkRelay wrote. Case changes ("erin" → "Erin") don't count as new words; the title, the embed and the page headings are stripped first.
+- Vision rates its guesses alike, so the only reliable signal that a word was misread is a person fixing it. Hence learning from edits rather than from confidence.
+
+## Viwoods apps (0.9.0)
+
+- `inkrelay viwoods list` on the owner's account: Paper has four empty folders (Analyzing, Writing, Sketching, Thinking) and three notebooks, which is the "Paper 8" on the home screen. Meeting, Learning and Knowledge Base list nothing through `resourceSync/getPage`; the home screen's "Knowledge Base 3" is the app's three tabs. So there is no Learning or Knowledge Base item to look at yet; their `…Sync/get` shape is unknown.
+
 ## Blank pages
 
 Share of pixels darker than 150 of 255:

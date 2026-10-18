@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.8.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.9.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -128,6 +128,7 @@ What arrives:
 - **Paper and Meeting notebooks** become one PDF each, in the folders you use on the tablet, under `<cache>/Paper/…` and `<cache>/Meeting/…`. The PDF holds the rendered page images the cloud stores, so it looks exactly like the tablet. Password-protected notebooks are skipped and reported.
 - **Memos** become `<cache>/Memo/<name>.pdf`.
 - **Ink only**: each notebook page's ink layer is pulled beside the rendered page and recognition reads that, so the template's "Name" and "Date …" stay out of your notes. The PDF keeps the full page. Memos and planner pages have no separate ink layer. `"recognizeInkOnly": false` turns it off.
+- **What's there**: `inkrelay viwoods list` shows every app's folders and items (Learning and Knowledge Base too, which aren't pulled yet).
 - **Daily planner**: each day with handwritten Tasks or Notes pages becomes `<cache>/Daily/<yyyy-MM-dd>.pdf`, which Obsidian and Notes receive like any notebook. Typed to-dos go straight to Apple Calendar.
 - The cache is `~/Library/Application Support/InkRelay/viwoods` unless `cachePath` says otherwise, and it is a source of its own: notes land under `Ink/viwoods-cloud/…` in Obsidian.
 
@@ -243,7 +244,12 @@ Google needs an OAuth client of your own while InkRelay is in development:
 
 Vision reads pages on the Mac, `recognition.concurrency` pages at a time (by core count, up to 4). `recognition.vocabulary` lists words Vision should expect, such as names, products and places; they win over the dictionary when the ink is close, which is the difference between "Erin" and "erin" or "Ensemble" and "Enseunble". `scripts/measure-pages.swift` shows what Vision reads from any PDF and how sure it is.
 
+- **It learns from your corrections.** Fix a misread word inside InkRelay's block of an Obsidian note, and the next time that page changes on the tablet the word is learned before the block is rewritten: it goes into `vocabulary.json` beside the config and Vision expects it from then on. `inkrelay vocabulary` lists, adds and removes words.
+- **Templates stay out.** Viwoods Cloud and Supernote notebooks are read from their ink layer alone. For any folder source, `"template": "~/Templates/cornell.png"` names a picture (or one-page PDF) of the blank template, and its lines and labels are taken out of each page before recognition.
+
 ## AI transcription (optional)
+
+Three ways to keep it cheap: `"aiFolders": ["Daily"]` on a source sends only those folders to Claude (the planner, where titles matter) and lets Vision read the rest; `"aiMonthlyBudgetUSD": 2` caps one source inside the overall `ai.monthlyBudgetUSD`; `ai.batchSize` (default 4) sends several pages per request.
 
 Vision is free and never sends anything anywhere, but it struggles with cursive and dense pages. For a source that needs better reading, set `"recognizer": "claude"` on it (or on `viwoodsCloud`). **Its page images are then sent to Anthropic's API**, one request per page, and Claude returns the text with paragraphs, lists and checkboxes rebuilt, plus a suggested title and tags that land in Obsidian's frontmatter as `suggested_title` and `suggested_tags`. Every other source stays on Vision.
 

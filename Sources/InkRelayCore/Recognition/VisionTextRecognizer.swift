@@ -4,13 +4,20 @@ import Vision
 /// On-device handwriting and text recognition with Apple's Vision framework. Nothing leaves the Mac.
 public struct VisionTextRecognizer: TextRecognizer {
     public var config: RecognitionConfig
+    /// Words learned from corrections, read fresh for every page.
+    public var learned: LearnedVocabulary?
 
-    public init(config: RecognitionConfig = RecognitionConfig()) {
+    public init(config: RecognitionConfig = RecognitionConfig(), learned: LearnedVocabulary? = nil) {
         self.config = config
+        self.learned = learned
     }
 
     public func recognize(fileAt url: URL) throws -> [RecognizedPage] {
-        let images = try PageRenderer.images(for: url, scale: config.renderScale, maxPixelDimension: config.maxPixelDimension)
+        try recognize(images: try PageRenderer.images(for: url, scale: config.renderScale, maxPixelDimension: config.maxPixelDimension))
+    }
+
+    /// Rendered pages, already in order.
+    public func recognize(images: [CGImage]) throws -> [RecognizedPage] {
         guard !images.isEmpty else { return [] }
         // Pages are independent, so a notebook is read `concurrency` pages at a time, in order of page number.
         let workers = max(1, min(config.concurrency, images.count))
@@ -35,7 +42,8 @@ public struct VisionTextRecognizer: TextRecognizer {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = config.usesLanguageCorrection
-        if !config.vocabulary.isEmpty { request.customWords = config.vocabulary }
+        let words = config.vocabulary + (learned?.all ?? [])
+        if !words.isEmpty { request.customWords = words }
         if config.languages.isEmpty {
             request.automaticallyDetectsLanguage = true
         } else {

@@ -13,6 +13,7 @@ public struct ViwoodsRootFolder: Decodable, Equatable {
 public enum ViwoodsApp: Int, CaseIterable {
     case paper = 1
     case meeting = 2
+    case learning = 3
     case knowledgeBase = 4
     case memo = 6
 
@@ -21,6 +22,7 @@ public enum ViwoodsApp: Int, CaseIterable {
         case "paper": self = .paper
         case "meeting": self = .meeting
         case "memo": self = .memo
+        case "learning": self = .learning
         case "knowledgebase", "knowledge base": self = .knowledgeBase
         default: return nil
         }
@@ -31,8 +33,20 @@ public enum ViwoodsApp: Int, CaseIterable {
         switch self {
         case .paper: return "Paper"
         case .meeting: return "Meeting"
+        case .learning: return "Learning"
         case .knowledgeBase: return "Knowledge Base"
         case .memo: return "Memo"
+        }
+    }
+
+    /// The endpoint that returns one item's content.
+    public var syncPath: String {
+        switch self {
+        case .paper: return "api/v1/paperSync/get"
+        case .meeting: return "api/v1/meetingSync/get"
+        case .learning: return "api/v1/learningSync/get"
+        case .knowledgeBase: return "api/v1/knowledgeBaseSync/get"
+        case .memo: return "api/v1/memoSync/get"
         }
     }
 }

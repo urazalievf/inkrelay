@@ -23,6 +23,8 @@ Settled choices and the reasons for them. Change one only when the reason no lon
 - **Pro is a license key checked offline; the trial is a date in a file.** Ed25519 keys signed by the owner's private key (never in the repo), verified against the public key in the app. No server, nothing phones home. Free is what a Mac does alone (folders, Obsidian, Apple apps); Pro is the cloud sources, the cloud destinations, AI transcription and the review stack. When Pro pauses, nothing is deleted and syncing resumes from where it stopped: the pending mechanism already does that for free.
 - **Quiet on success, loud on failure.** Notifications default to problems only; new-note and review-reminder notifications are opt-in.
 - **Recognition reads the ink layer when there is one.** Viwoods Cloud serves it per page; the PDF keeps the full page so people still see the template. Measured on real notebooks: the template's "Name" and "Date …" lines disappear from the text.
+- **AI transcription is narrowed, not widened.** `aiFolders` and per-source caps exist so people can afford Claude where it matters (the planner, where titles are read) and keep Vision for the rest. The default stays Vision everywhere.
+- **Corrections are learned at the last moment they'd be lost.** A word typed into InkRelay's block is learned when the page changes on the tablet, right before the block is rewritten. No periodic scan of the vault.
 - **Daily notes follow Obsidian's own settings.** Folder and date format come from `.obsidian/daily-notes.json`; the block has its own markers and never touches the rest of the daily note. Off by default: writing into someone's journal is their call.
 
 ## Apple platforms

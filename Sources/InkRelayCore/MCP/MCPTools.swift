@@ -238,7 +238,12 @@ extension MCPServer {
             },
             "destinations": config.destinations.map { ["id": $0.id, "kind": $0.kind] },
             "notes_searchable": archive.all().count,
+            "plan": EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current(now: now()).summary(now: now()),
         ]
+        let paused = ProFeatures.used(in: config)
+        if !EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current(now: now()).isPro, !paused.isEmpty {
+            output["paused_pro_features"] = paused
+        }
         if let lastSync { output["last_sync"] = Self.iso(lastSync) }
         if let (stack, store) = try? reviewStack() {
             output["review_cards_due"] = (try? store.stack(now: now(), limit: stack.dailyLimit).due) ?? 0

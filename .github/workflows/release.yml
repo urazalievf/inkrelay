@@ -91,3 +91,24 @@ jobs:
       - name: Remove the signing keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+
+  # The iPhone and iPad app to TestFlight, with the same App Store Connect key. Skipped until the app record
+  # exists in App Store Connect and TESTFLIGHT is set to "on" in the repository variables.
+  testflight:
+    name: iPhone and iPad to TestFlight
+    if: vars.TESTFLIGHT == 'on'
+    needs: release
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+      NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Archive and upload
+        run: |
+          echo "${{ secrets.NOTARY_KEY_P8_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/AuthKey_$NOTARY_KEY_ID.p8"
+          NOTARY_KEY_P8="$RUNNER_TEMP/AuthKey_$NOTARY_KEY_ID.p8" scripts/build-ios.sh --archive
+          rm "$RUNNER_TEMP/AuthKey_$NOTARY_KEY_ID.p8"

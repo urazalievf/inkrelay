@@ -9,15 +9,18 @@ public struct AITranscriptionConfig: Codable, Equatable {
     public var monthlyBudgetUSD: Double
     /// Let the API retry a declined page on Anthropic's recommended fallback model.
     public var serverFallback: Bool
+    /// Pages sent in one request. More means fewer requests and less prompt overhead; one keeps answers short.
+    public var batchSize: Int
 
-    public init(model: String = "claude-opus-5-5", effort: String = "medium", monthlyBudgetUSD: Double = 5, serverFallback: Bool = true) {
+    public init(model: String = "claude-opus-5-5", effort: String = "medium", monthlyBudgetUSD: Double = 5, serverFallback: Bool = true, batchSize: Int = 4) {
         self.model = model
         self.effort = effort
         self.monthlyBudgetUSD = monthlyBudgetUSD
         self.serverFallback = serverFallback
+        self.batchSize = batchSize
     }
 
-    private enum CodingKeys: String, CodingKey { case model, effort, monthlyBudgetUSD, serverFallback }
+    private enum CodingKeys: String, CodingKey { case model, effort, monthlyBudgetUSD, serverFallback, batchSize }
 
     public init(from decoder: Decoder) throws {
         let defaults = AITranscriptionConfig()
@@ -26,6 +29,7 @@ public struct AITranscriptionConfig: Codable, Equatable {
         effort = try container.decodeIfPresent(String.self, forKey: .effort) ?? defaults.effort
         monthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .monthlyBudgetUSD) ?? defaults.monthlyBudgetUSD
         serverFallback = try container.decodeIfPresent(Bool.self, forKey: .serverFallback) ?? defaults.serverFallback
+        batchSize = try container.decodeIfPresent(Int.self, forKey: .batchSize) ?? defaults.batchSize
     }
 
     func validate() throws {
@@ -33,6 +37,7 @@ public struct AITranscriptionConfig: Codable, Equatable {
             throw ConfigError.invalid("ai.effort must be low, medium, high, xhigh or max.")
         }
         guard monthlyBudgetUSD >= 0 else { throw ConfigError.invalid("ai.monthlyBudgetUSD can't be negative.") }
+        guard (1...8).contains(batchSize) else { throw ConfigError.invalid("ai.batchSize must be between 1 and 8.") }
     }
 }
 
@@ -64,6 +69,8 @@ struct SpendingLedger: Codable, Equatable {
     var month: String
     var spentUSD: Double
     var pages: Int
+    /// Spend by source id, for per-source caps.
+    var bySource: [String: Double]?
 }
 
 /// Reads handwriting with Claude: each page image goes to the Messages API, which returns the
@@ -88,6 +95,8 @@ public final class ClaudeTextRecognizer: TextRecognizer {
     private let environment: [String: String]
     /// Pages that Vision read instead, with the reason, for the sync log.
     public private(set) var fallbacks: [String] = []
+    /// The source whose export is being read, set by the engine, for its own budget.
+    public var currentSource: (id: String, budgetUSD: Double?)?
 
     public init(
         config: AITranscriptionConfig,
@@ -123,18 +132,26 @@ public final class ClaudeTextRecognizer: TextRecognizer {
             return try (1...images.count).map { try vision($0, "no Anthropic API key; run `inkrelay ai login`") }
         }
         let title = url.deletingPathExtension().lastPathComponent
-        return try images.enumerated().map { index, image in
-            let number = index + 1
-            guard hasBudget() else { return try vision(number, "monthly AI budget of $\(config.monthlyBudgetUSD) reached") }
+        var results: [RecognizedPage] = []
+        var index = 0
+        let size = max(1, min(config.batchSize, 8))
+        while index < images.count {
+            let batch = Array(images[index..<min(index + size, images.count)])
+            let numbers = Array((index + 1)...(index + batch.count))
+            index += batch.count
+            if let overBudget = budgetProblem(pages: batch.count) {
+                for number in numbers { results.append(try vision(number, overBudget)) }
+                continue
+            }
             do {
-                let result = try transcribe(image, page: number, of: images.count, title: title, apiKey: apiKey)
-                return result
+                results += try transcribe(batch, numbers: numbers, of: images.count, title: title, apiKey: apiKey)
             } catch let error as TranscriptionError {
-                return try vision(number, error.description)
+                for number in numbers { results.append(try vision(number, error.description)) }
             } catch {
-                return try vision(number, error.localizedDescription)
+                for number in numbers { results.append(try vision(number, error.localizedDescription)) }
             }
         }
+        return results
     }
 
     /// Hands over the pages Vision had to read since the last call.
@@ -164,16 +181,31 @@ public final class ClaudeTextRecognizer: TextRecognizer {
         return stored
     }
 
-    /// Room for one more page at the worst case, so the cap is never overshot by a page.
-    func hasBudget() -> Bool {
-        let worstCase = ModelPricing.cost(model: config.model, inputTokens: Self.estimatedInputTokens, outputTokens: Self.estimatedOutputTokens)
-        return ledger().spentUSD + worstCase <= config.monthlyBudgetUSD
+    /// Room for these pages at the worst case, so neither cap is overshot by a request.
+    func hasBudget(pages: Int = 1) -> Bool { budgetProblem(pages: pages) == nil }
+
+    /// Why the next request can't go out, or nil.
+    func budgetProblem(pages: Int) -> String? {
+        let worstCase = ModelPricing.cost(model: config.model, inputTokens: Self.estimatedInputTokens, outputTokens: Self.estimatedOutputTokens) * Double(pages)
+        let current = ledger()
+        if current.spentUSD + worstCase > config.monthlyBudgetUSD {
+            return "monthly AI budget of $\(config.monthlyBudgetUSD) reached"
+        }
+        if let source = currentSource, let budget = source.budgetUSD, (current.bySource?[source.id] ?? 0) + worstCase > budget {
+            return "monthly AI budget of $\(budget) for \(source.id) reached"
+        }
+        return nil
     }
 
-    private func record(cost: Double) {
+    private func record(cost: Double, pages: Int) {
         var current = ledger()
         current.spentUSD += cost
-        current.pages += 1
+        current.pages += pages
+        if let source = currentSource {
+            var bySource = current.bySource ?? [:]
+            bySource[source.id, default: 0] += cost
+            current.bySource = bySource
+        }
         try? ledgerFile.save(current)
     }
 
@@ -195,46 +227,64 @@ public final class ClaudeTextRecognizer: TextRecognizer {
     words, or none if the page has no clear topic. A blank page has empty text.
     """
 
+    /// One entry per page sent, in the same order, so a batch comes back as a list.
     static let schema: [String: Any] = [
         "type": "object",
         "properties": [
-            "text": ["type": "string"],
-            "title": ["type": "string"],
-            "tags": ["type": "array", "items": ["type": "string"]],
+            "pages": [
+                "type": "array",
+                "items": [
+                    "type": "object",
+                    "properties": [
+                        "page": ["type": "integer"],
+                        "text": ["type": "string"],
+                        "title": ["type": "string"],
+                        "tags": ["type": "array", "items": ["type": "string"]],
+                    ],
+                    "required": ["page", "text", "title", "tags"],
+                    "additionalProperties": false,
+                ],
+            ],
         ],
-        "required": ["text", "title", "tags"],
+        "required": ["pages"],
         "additionalProperties": false,
     ]
 
-    func requestBody(_ image: Data, page: Int, of pages: Int, title: String) -> [String: Any] {
+    func requestBody(_ images: [Data], numbers: [Int], of pages: Int, title: String) -> [String: Any] {
+        var content: [[String: Any]] = []
+        for (image, number) in zip(images, numbers) {
+            content.append(["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": image.base64EncodedString()]])
+            content.append(["type": "text", "text": "Page \(number) of \(pages) of the notebook \"\(title)\"."])
+        }
+        if images.count > 1 {
+            content.append(["type": "text", "text": "Transcribe each page above as one entry in pages, with its page number."])
+        }
         var body: [String: Any] = [
             "model": config.model,
-            "max_tokens": 16_000,
+            "max_tokens": min(16_000 * images.count, 64_000),
             "system": Self.systemPrompt,
             "output_config": ["effort": config.effort, "format": ["type": "json_schema", "schema": Self.schema]],
-            "messages": [[
-                "role": "user",
-                "content": [
-                    ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": image.base64EncodedString()]],
-                    ["type": "text", "text": "Page \(page) of \(pages) of the notebook \"\(title)\"."],
-                ],
-            ]],
+            "messages": [["role": "user", "content": content]],
         ]
         if usesServerFallback { body["fallbacks"] = "default" }
         return body
     }
 
+    func requestBody(_ image: Data, page: Int, of pages: Int, title: String) -> [String: Any] {
+        requestBody([image], numbers: [page], of: pages, title: title)
+    }
+
     var usesServerFallback: Bool { config.serverFallback && ModelPricing.serverFallbackModels.contains(config.model) }
 
-    private func transcribe(_ image: Data, page: Int, of pages: Int, title: String, apiKey: String) throws -> RecognizedPage {
+    private func transcribe(_ images: [Data], numbers: [Int], of pages: Int, title: String, apiKey: String) throws -> [RecognizedPage] {
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
-        request.timeoutInterval = 300
+        request.timeoutInterval = 300 + 120 * Double(images.count - 1)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         if usesServerFallback { request.setValue(Self.fallbackBeta, forHTTPHeaderField: "anthropic-beta") }
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(image, page: page, of: pages, title: title))
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(images, numbers: numbers, of: pages, title: title))
 
         let (data, response) = try transport.send(request)
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
@@ -245,19 +295,26 @@ public final class ClaudeTextRecognizer: TextRecognizer {
         let usage = object["usage"] as? [String: Any] ?? [:]
         let input = (usage["input_tokens"] as? Int ?? 0) + (usage["cache_creation_input_tokens"] as? Int ?? 0) + (usage["cache_read_input_tokens"] as? Int ?? 0)
         let output = usage["output_tokens"] as? Int ?? 0
-        record(cost: ModelPricing.cost(model: object["model"] as? String ?? config.model, inputTokens: input, outputTokens: output))
+        record(cost: ModelPricing.cost(model: object["model"] as? String ?? config.model, inputTokens: input, outputTokens: output), pages: images.count)
 
         if object["stop_reason"] as? String == "refusal" { throw TranscriptionError.declined }
         if object["stop_reason"] as? String == "max_tokens" { throw TranscriptionError.truncated }
         let content = object["content"] as? [[String: Any]] ?? []
         guard let text = content.first(where: { $0["type"] as? String == "text" })?["text"] as? String,
               let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
-              let transcription = json["text"] as? String else {
+              let entries = json["pages"] as? [[String: Any]] else {
             throw TranscriptionError.unreadableReply
         }
-        let suggested = (json["title"] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
-        let tags = (json["tags"] as? [String] ?? []).map { $0.lowercased().trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        return RecognizedPage(number: page, text: transcription, suggestedTitle: suggested, tags: Array(tags.prefix(5)))
+        // Matched by page number, then by position, so a model that miscounts still lines up.
+        return try numbers.enumerated().map { position, number in
+            guard let entry = entries.first(where: { $0["page"] as? Int == number }) ?? (entries.indices.contains(position) ? entries[position] : nil),
+                  let transcription = entry["text"] as? String else {
+                throw TranscriptionError.unreadableReply
+            }
+            let suggested = (entry["title"] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+            let tags = (entry["tags"] as? [String] ?? []).map { $0.lowercased().trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return RecognizedPage(number: number, text: transcription, suggestedTitle: suggested, tags: Array(tags.prefix(5)))
+        }
     }
 }
 

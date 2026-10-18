@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// One pass over every source: find new or changed exports, recognize them once,
@@ -23,6 +24,8 @@ public final class RelayEngine {
     private let entitlement: Entitlement
     /// Destination ids left out of this pass because they need Pro.
     private let pausedDestinationIDs: Set<String>
+    /// Words learned from corrections in Obsidian, shared with the Vision recognizer.
+    private let learned: LearnedVocabulary?
     private var activeDestinations: [NoteDestination] { destinations.filter { !pausedDestinationIDs.contains($0.id) } }
 
     public init(
@@ -36,6 +39,7 @@ public final class RelayEngine {
         kindle: KindleMailPuller? = nil,
         reviewShare: ReviewPublisher? = nil,
         entitlement: Entitlement = .pro,
+        learned: LearnedVocabulary? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -49,6 +53,7 @@ public final class RelayEngine {
         self.kindle = kindle
         self.reviewShare = reviewShare
         self.entitlement = entitlement
+        self.learned = learned
         self.fileManager = fileManager
         self.now = now
         pausedDestinationIDs = entitlement.isPro ? [] : Set(config.destinations.filter(ProFeatures.isPro).map(\.id))
@@ -76,7 +81,8 @@ public final class RelayEngine {
             let client = ViwoodsClient(credentials: FileCredentialStore(url: Self.tokenURL(besideState: stateURL)))
             puller = try ViwoodsCloudPuller(config: cloud, client: client, plans: DestinationFactory.plans(in: destinations))
         }
-        let vision = VisionTextRecognizer(config: config.recognition)
+        let learned = LearnedVocabulary(url: stateURL.deletingLastPathComponent().appendingPathComponent("vocabulary.json"))
+        let vision = VisionTextRecognizer(config: config.recognition, learned: learned)
         let ai: TextRecognizer? = config.allSources.contains { $0.recognizer == .claude }
             ? ClaudeTextRecognizer(config: config.ai ?? AITranscriptionConfig(), supportDirectory: stateURL.deletingLastPathComponent(), fallback: vision)
             : nil
@@ -90,7 +96,8 @@ public final class RelayEngine {
             ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
             kindle: config.kindleMail.map { KindleMailPuller(config: $0) },
             reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent()),
-            entitlement: EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current()
+            entitlement: EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current(),
+            learned: learned
         )
     }
 
@@ -248,8 +255,10 @@ public final class RelayEngine {
 
             // Native notebooks (Supernote .note) become a PDF first; everything downstream reads that.
             let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
-            // Viwoods Cloud keeps an ink-only copy beside the page; reading that leaves the template's text out.
-            let forReading = inkOnlyURL(for: file, source: source) ?? readable
+            // Viwoods Cloud keeps an ink-only copy beside the page, and Supernote notebooks can leave their template
+            // layer out; reading those keeps the template's text out of the note.
+            let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: file.url, key: key, cache: convertedDirectory) : nil
+            let forReading = inkOnlyURL(for: file, source: source) ?? supernoteInk ?? readable
             let note = InkNote(
                 title: file.url.deletingPathExtension().lastPathComponent,
                 sourceID: source.id,
@@ -258,7 +267,7 @@ public final class RelayEngine {
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try (source.recognizer == .claude && entitlement.isPro ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: forReading)
+                pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source)
             )
 
             if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {
@@ -268,6 +277,7 @@ public final class RelayEngine {
                 return
             }
 
+            learnCorrections(for: key, record: record, into: &report)
             try? notes.upsert(note, key: key, at: now())
             var deliveredAll = true
             var filedInNotes = false
@@ -309,6 +319,43 @@ public final class RelayEngine {
             }
         } catch {
             report.failures.append(.init(item: item, destinationID: nil, message: error.localizedDescription))
+        }
+    }
+
+    /// Claude for the folders the source sends there, otherwise Vision, with the template taken out first when
+    /// the source names one.
+    private func recognizePages(of url: URL, relativePath: String, source: SourceConfig) throws -> [RecognizedPage] {
+        if entitlement.isPro, source.usesAI(for: relativePath), let ai = aiRecognizer {
+            (ai as? ClaudeTextRecognizer)?.currentSource = (source.id, source.aiMonthlyBudgetUSD)
+            return try ai.recognize(fileAt: url)
+        }
+        if let templateURL = source.templateURL, let vision = recognizer as? VisionTextRecognizer {
+            let settings = vision.config
+            let images = try PageRenderer.images(for: url, scale: settings.renderScale, maxPixelDimension: settings.maxPixelDimension)
+            let template = try TemplateSubtractor.templateImage(at: templateURL, scale: settings.renderScale, maxPixelDimension: settings.maxPixelDimension)
+            var masks: [String: TemplateSubtractor.Mask] = [:]
+            let cleaned = images.map { image -> CGImage in
+                let size = "\(image.width)x\(image.height)"
+                let mask = masks[size] ?? TemplateSubtractor.Mask(template: template, width: image.width, height: image.height)
+                masks[size] = mask
+                return TemplateSubtractor.clean(image, mask: mask)
+            }
+            return try vision.recognize(images: cleaned)
+        }
+        return try recognizer.recognize(fileAt: url)
+    }
+
+    /// Before the archive and the vault copy are overwritten: words the person typed into InkRelay's block of the
+    /// Obsidian note that weren't in what InkRelay wrote are corrections, and Vision is told to expect them.
+    private func learnCorrections(for key: String, record: FileRecord, into report: inout SyncReport) {
+        guard let learned, let previous = notes.entry(forKey: key) else { return }
+        for case .obsidian(let obsidian) in config.destinations {
+            guard let external = record.destinations[obsidian.id]?.externalID, !external.isEmpty,
+                  let markdown = try? String(contentsOf: obsidian.vaultURL.appendingPathComponent(external), encoding: .utf8),
+                  let edited = VocabularyLearner.managedText(of: markdown) else { continue }
+            let original = previous.pages.map(\.text).joined(separator: "\n")
+            let words = VocabularyLearner.newWords(edited: edited, original: original, known: config.recognition.vocabulary + learned.all)
+            report.learned += learned.add(words)
         }
     }
 
@@ -387,6 +434,8 @@ public struct SyncReport: Equatable {
     public var filedElsewhere = 0
     /// Exports with nothing written in them yet, left out of every destination.
     public var blank = 0
+    /// Words learned this pass from corrections made in Obsidian.
+    public var learned: [String] = []
     /// Things worth knowing that aren't failures.
     public var warnings: [String] = []
     /// What the Viwoods Cloud pull did before the folders were scanned, when one is configured.
@@ -400,6 +449,7 @@ public struct SyncReport: Equatable {
         if removed > 0 { text += ", \(removed) removed" }
         if filedElsewhere > 0 { text += ", \(filedElsewhere) already in Notes from another device" }
         if blank > 0 { text += ", \(blank) blank" }
+        if !learned.isEmpty { text += ", learned \(learned.count) word\(learned.count == 1 ? "" : "s")" }
         if deferred > 0 { text += ", \(deferred) still being written" }
         if !failures.isEmpty { text += ", \(failures.count) failed" }
         if let pull { text = pull.summary + "; " + text }

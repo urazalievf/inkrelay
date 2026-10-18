@@ -14,11 +14,25 @@ public enum ExportConverter {
         return output
     }
 
+    /// The notebook's ink without its template, for recognition, or nil for exports that have no layers.
+    public static func inkOnlyURL(for url: URL, key: String, cache: URL) throws -> URL? {
+        guard nativeTypes.contains(url.pathExtension.lowercased()) else { return nil }
+        let output = inkURL(for: key, cache: cache)
+        try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try SupernoteNote(data: Data(contentsOf: url)).writePDF(to: output, inkOnly: true)
+        return output
+    }
+
     static func cachedURL(for key: String, cache: URL) -> URL {
         cache.appendingPathComponent((key as NSString).deletingPathExtension + ".pdf")
     }
 
+    static func inkURL(for key: String, cache: URL) -> URL {
+        cache.appendingPathComponent(".ink", isDirectory: true).appendingPathComponent((key as NSString).deletingPathExtension + ".pdf")
+    }
+
     static func discard(key: String, cache: URL) {
         try? FileManager.default.removeItem(at: cachedURL(for: key, cache: cache))
+        try? FileManager.default.removeItem(at: inkURL(for: key, cache: cache))
     }
 }
