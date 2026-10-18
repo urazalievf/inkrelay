@@ -73,9 +73,24 @@ struct MenuContent: View {
             .padding(12)
             Divider()
         }
-        if !model.snapshot.problems.isEmpty {
+        if let paused = model.pausedPanel {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(paused)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Enter License…") { model.enterLicense() }
+                        .buttonStyle(.borderedProminent)
+                    Button("Buy Pro…") { model.buyPro() }
+                }
+            }
+            .padding(12)
+            Divider()
+        }
+        let problems = model.snapshot.problems.filter { !RelayEngine.isPausedNotice($0) }
+        if !problems.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(model.snapshot.problems.prefix(3), id: \.self) { problem in
+                ForEach(problems.prefix(3), id: \.self) { problem in
                     Label(problem, systemImage: "exclamationmark.circle")
                         .font(.caption)
                         .lineLimit(2)

@@ -120,7 +120,7 @@ final class LicensingTests: XCTestCase {
             destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v")), .notion(.init(id: "notion", parentPageId: "p")), .reviewStack(.init(id: "review"))],
             viwoodsCloud: ViwoodsCloudConfig()
         )
-        XCTAssertEqual(ProFeatures.used(in: config), ["Viwoods Cloud", "AI transcription", "notion", "review stack"])
+        XCTAssertEqual(ProFeatures.used(in: config), ["Viwoods Cloud", "AI transcription", "Notion", "review stack"], "destinations by kind, not id")
         XCTAssertFalse(ProFeatures.isPro(.appleCalendar(.init(id: "cal"))))
     }
 
@@ -143,6 +143,41 @@ final class LicensingTests: XCTestCase {
         XCTAssertNil(store.licenseProblem(now: now))
         try Data(#"{"key":"INK1.broken.key"}"#.utf8).write(to: folder.url.appendingPathComponent("license.json"))
         XCTAssertNotNil(store.licenseProblem(now: now))
+    }
+
+    func testARejectedKeySaysWhyEverywhere() throws {
+        let store = store
+        _ = store.trialStart(now: now)
+        let later = Calendar.current.date(byAdding: .day, value: 30, to: now)!
+        let licenseURL = folder.url.appendingPathComponent("license.json")
+
+        // Expired.
+        try store.enter(try key(expires: nil), now: now)
+        let expiring = try LicenseKey.sign(License(id: "e", name: "Ada", email: "a@x", issuedAt: now, expiresOn: "2026-01-01"), with: signingKey)
+        try JSONEncoder().encode(EntitlementStore.LicenseFile(key: expiring)).write(to: licenseURL)
+        let expired = store.current(now: later)
+        XCTAssertFalse(expired.isPro)
+        XCTAssertTrue(expired.rejection?.contains("expired on") == true, expired.rejection ?? "")
+        XCTAssertTrue(expired.summary(now: later).hasPrefix("Free; the key on file wasn't accepted"))
+
+        // Changed by hand.
+        var parts = try key().split(separator: ".").map(String.init)
+        parts[1] = LicenseKey.base64URL(Data(#"{"name":"Mallory"}"#.utf8))
+        try JSONEncoder().encode(EntitlementStore.LicenseFile(key: parts.joined(separator: "."))).write(to: licenseURL)
+        XCTAssertEqual(store.current(now: later).rejection, LicenseError.badSignature.errorDescription)
+
+        // Not JSON at all.
+        try Data("garbage".utf8).write(to: licenseURL)
+        XCTAssertTrue(store.current(now: later).rejection?.contains("can't be read") == true)
+
+        // A rejected key during the trial keeps the trial and its end date.
+        let during = store.current(now: now.addingTimeInterval(3600))
+        XCTAssertTrue(during.isPro)
+        XCTAssertNotNil(during.rejection)
+        XCTAssertEqual(during.trialDaysLeft(now: now.addingTimeInterval(3600)), 14)
+
+        let doctor = Doctor(config: RelayConfig(sources: [SourceConfig(id: "d", device: "d", path: folder.url.path)], destinations: [.obsidian(.init(id: "v", vaultPath: folder.url.path))]), supportDirectory: folder.url).planCheck()
+        XCTAssertEqual(doctor.status, .problem)
     }
 
     func testTheBundledPublicKeyIsSetBeforeRelease() throws {

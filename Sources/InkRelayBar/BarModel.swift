@@ -67,16 +67,39 @@ final class BarModel: ObservableObject {
     private func take(_ fresh: RelayRunner.Snapshot) {
         let previous = snapshot
         snapshot = fresh
+        let config = self.config
         let settings = config?.notifications ?? NotificationsConfig()
-        if settings.problems, fresh.problems != previous.problems {
-            Notifier.shared.problems(fresh.problems)
+        // The paused notice gets its own panel and its own notifications, so it isn't a "needs you" problem.
+        let problems = fresh.problems.filter { !RelayEngine.isPausedNotice($0) }
+        if settings.problems, problems != previous.problems.filter({ !RelayEngine.isPausedNotice($0) }) {
+            Notifier.shared.problems(problems)
         }
         if settings.newNotes, fresh.lastSync != previous.lastSync, fresh.lastSynced > 0 {
             Notifier.shared.newNotes(Array(fresh.recent.prefix(fresh.lastSynced).map(\.title)))
         }
+        let plan = entitlement
         if let time = settings.reminderTime, fresh.lastSync != previous.lastSync {
-            Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: fresh.reviewDue)
+            // While the review stack is paused nothing new reaches it, so there's nothing to be reminded of.
+            let stackPaused = !plan.isPro && config?.destinations.contains { if case .reviewStack = $0 { return true } else { return false } } == true
+            Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: stackPaused ? 0 : fresh.reviewDue)
         }
+        if fresh.lastSync != previous.lastSync, let config {
+            Notifier.shared.trial(daysLeft: plan.trialDaysLeft(), endedOn: plan.isPro ? nil : plan.trialEndedOn, parts: ProFeatures.used(in: config))
+        }
+    }
+
+    /// The panel shown while Pro parts are paused: what's paused and why, or nil.
+    var pausedPanel: String? {
+        let plan = entitlement
+        guard !plan.isPro, let config else { return nil }
+        let parts = ProFeatures.used(in: config)
+        guard !parts.isEmpty else { return nil }
+        let list = parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
+        if let rejection = plan.rejection {
+            return "Your license key wasn't accepted (\(rejection)). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe."
+        }
+        let when = plan.trialEndedOn.map { " ended \($0.formatted(date: .abbreviated, time: .omitted))" } ?? " is over"
+        return "Your Pro trial\(when). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe and syncing resumes where it stopped."
     }
 
     var config: RelayConfig? { try? ConfigStore.load(from: runner.configURL) }
