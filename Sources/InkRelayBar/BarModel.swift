@@ -48,7 +48,8 @@ final class BarModel: ObservableObject {
     /// Asked once; the menu's "Open at login" changes it later.
     func askToOpenAtLoginOnce() {
         let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: "askedOpenAtLogin"), !launchAtLogin, !needsSetup,
+        // The config on disk, not the snapshot, which lags a fresh save by a moment.
+        guard !defaults.bool(forKey: "askedOpenAtLogin"), !launchAtLogin, config != nil,
               Bundle.main.bundlePath.hasPrefix("/Applications/") else { return }
         defaults.set(true, forKey: "askedOpenAtLogin")
         let alert = NSAlert()

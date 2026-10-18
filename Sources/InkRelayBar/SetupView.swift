@@ -85,6 +85,7 @@ struct SetupView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480)
+        .navigationTitle(hasConfig ? "InkRelay Settings" : "Set Up InkRelay")
         .onAppear(perform: load)
     }
 
@@ -178,6 +179,11 @@ struct SetupView: View {
             try ConfigStore.replace(try choices.config(merging: existing), at: model.runner.configURL)
             model.reload()
             dismiss()
+            // The first run continues where the person expects: the Viwoods sign-in, or the open-at-login question.
+            let model = model
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if model.needsViwoodsSignIn { model.showViwoodsSignIn() } else { model.askToOpenAtLoginOnce() }
+            }
         } catch let failure {
             error = failure.localizedDescription
         }
