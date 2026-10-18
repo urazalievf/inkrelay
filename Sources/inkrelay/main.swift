@@ -147,6 +147,10 @@ case "setup":
                 // Supernote syncs a whole tree; its notebooks are in Note.
                 if tablet.name == "Supernote", FileManager.default.fileExists(atPath: (suggestion as NSString).expandingTildeInPath + "/Note") { suggestion += "/Note" }
                 choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: suggestion)
+                if !tablet.hasCloudSource {
+                    let planner = ask("Folder inside that holds day-planner pages named by date (such as Planner), or Return for none:")
+                    if !planner.isEmpty { choices.plannerFolder = planner }
+                }
             } else {
                 choices.exportFolder = ask("Folder path:")
             }
@@ -164,7 +168,8 @@ case "setup":
         }
         choices.appleNotesAccount = .some(account)
     }
-    choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource)
+    // A calendar only helps when there's a planner: Viwoods Cloud's, or a planner folder named above.
+    choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource || choices.plannerFolder != nil)
     choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
     choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
     if choices.appleNotesAccount != nil, SharedLedger.iCloudDriveFolder != nil {

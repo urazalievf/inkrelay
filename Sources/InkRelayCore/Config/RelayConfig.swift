@@ -162,6 +162,9 @@ public struct SourceConfig: Codable, Equatable {
     public var exclude: [String] = []
     /// Only these folders inside the source, when set.
     public var folders: [String] = []
+    /// Which folders hold day-planner pages named by date; they go to calendars as "Daily plan" and give their
+    /// tasks that day. `Daily` by default, as the Viwoods cache lays it out.
+    public var planner = PlannerSettings()
 
     public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"], recognizer: RecognizerKind = .vision) {
         self.id = id
@@ -171,7 +174,7 @@ public struct SourceConfig: Codable, Equatable {
         self.recognizer = recognizer
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer, aiFolders, aiMonthlyBudgetUSD, recognizeInkOnly, template, exclude, folders }
+    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer, aiFolders, aiMonthlyBudgetUSD, recognizeInkOnly, template, exclude, folders, planner }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -186,6 +189,7 @@ public struct SourceConfig: Codable, Equatable {
         template = try container.decodeIfPresent(String.self, forKey: .template)
         exclude = try container.decodeIfPresent([String].self, forKey: .exclude) ?? []
         folders = try container.decodeIfPresent([String].self, forKey: .folders) ?? []
+        planner = try container.decodeIfPresent(PlannerSettings.self, forKey: .planner) ?? PlannerSettings()
         if let budget = aiMonthlyBudgetUSD, budget < 0 { throw ConfigError.invalid("aiMonthlyBudgetUSD can't be negative.") }
     }
 
@@ -202,6 +206,14 @@ public struct SourceConfig: Codable, Equatable {
         try container.encodeIfPresent(template, forKey: .template)
         if !exclude.isEmpty { try container.encode(exclude, forKey: .exclude) }
         if !folders.isEmpty { try container.encode(folders, forKey: .folders) }
+        if planner != PlannerSettings() { try container.encode(planner, forKey: .planner) }
+    }
+
+    /// The day an export is for, when it sits in one of the planner folders and its name holds a date.
+    public func plannerDate(relativePath: String, title: String) -> String? {
+        let directory = (relativePath as NSString).deletingLastPathComponent
+        guard planner.folders.contains(where: { Self.isUnder(directory, folder: $0) }) else { return nil }
+        return PlannerDate.parse(fileName: title, format: planner.dateFormat)
     }
 
     /// Whether `relativePath` (a file or a folder) lies in `folder` or is it.

@@ -153,6 +153,16 @@ Two extras, off unless you turn them on (Settings… in the app, or the config):
 
 In both, open tasks are links to the checkbox in their own note (`[[note#^ink-…|Call the bank]]`), not second checkboxes, so each task exists once.
 
+## Planner pages from any tablet
+
+A page named by date in a source's planner folder is a planner page, whatever tablet wrote it: it goes to Apple, Google or Outlook Calendar as "Daily plan" for that day, its review card is titled by the day, its tasks get that day as their due date, and it lands in that day's Obsidian daily note. The folder is `Daily` by default, which is how the Viwoods Cloud cache is laid out; for a Supernote, reMarkable or Boox planner notebook, name its folder:
+
+```json
+{ "id": "supernote", "path": "~/Dropbox/Supernote/Note", "fileTypes": ["note"], "planner": { "folders": ["Planner"] } }
+```
+
+Names like `2026-10-17`, `20261017`, `2026_10_17`, `2026.10.17`, `17 Oct 2026`, `Oct 17, 2026` and `October 17th 2026` are read anywhere in the file name ("Planner 2026-10-17" works). Day-month-year in numbers is ambiguous, so `17.10.2026` is read only with `"dateFormat": "dd.MM.yyyy"`. Setup asks for the planner folder for tablets other than Viwoods, and turns Apple Calendar on by default only when there is one.
+
 ## Apple Calendar
 
 The `appleCalendar` destination takes only the Daily planner. A handwritten day page becomes an all-day event titled `Daily plan` with the full recognized text in the notes (with AI transcription on, its title for the page follows: `Daily plan: Gym and errands`). The first line of handwriting is too often misread to make a good title, and Vision is as sure of its misreadings as of the rest. Each typed to-do becomes an all-day event of its own, `☐ …` or `☑ …` by its state, with its priority in the notes. Events are updated in place when the page or to-do changes; one deleted in Calendar is recreated on the next change. The calendar named in the config is created if missing. macOS asks once to let `inkrelay` control Calendar.

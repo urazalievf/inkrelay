@@ -68,8 +68,8 @@ Every page InkRelay relays becomes a card: the page as written, the recognized t
 
 ## 7. Calendars, reminders and tasks
 
-- The Viwoods **Daily planner** goes to Apple Calendar (or Google or Outlook) as all-day events named "Daily plan", with the recognized text in the notes, and each typed to-do as its own event.
-- **Tasks you write** on any page, as `☐ …`, `[ ] …` or `TODO …`, become Apple Reminders. Ticking the box on the tablet completes the reminder. A date in the task ("by Friday", "March 3 at 3pm") becomes the due date.
+- The Viwoods **Daily planner** goes to Apple Calendar (or Google or Outlook) as all-day events named "Daily plan", with the recognized text in the notes, and each typed to-do as its own event. **Any tablet's planner** works the same way: put day pages named by date (`2026-10-17`, `17 Oct 2026`…) in a folder and name it as the source's planner folder (setup asks).
+- **Tasks you write** on any page, as `☐ …`, `[ ] …` or `TODO …`, become Obsidian checkboxes (tick them there and they stay ticked) and Apple Reminders. Ticking the box on the tablet completes the reminder. A date in the task ("by Friday", "March 3 at 3pm") becomes the due date.
 - Google, Microsoft and Notion need an account of your own and a few config lines; the README explains each.
 
 ## 8. Sending things to the tablet

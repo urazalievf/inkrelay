@@ -44,11 +44,16 @@ public struct PlannerEvent: Equatable {
         )
     }
 
-    /// Planner pages live under `Daily/` and are named by date.
+    /// The day a planner page is for: what the source's `planner` settings read from its name, or, for notes made
+    /// without them, the Viwoods cache's own layout (`Daily/<yyyy-MM-dd>`).
     public static func plannerDate(of note: InkNote) -> String? {
-        let parts = note.relativePath.split(separator: "/")
+        note.plannerDate ?? legacyPlannerDate(relativePath: note.relativePath, title: note.title)
+    }
+
+    public static func legacyPlannerDate(relativePath: String, title: String) -> String? {
+        let parts = relativePath.split(separator: "/")
         guard parts.count >= 2, parts[parts.count - 2] == "Daily" else { return nil }
-        return ViwoodsDate.normalize(note.title)
+        return ViwoodsDate.normalize(title)
     }
 
     static func firstLine(of text: String, limit: Int = 80) -> String {

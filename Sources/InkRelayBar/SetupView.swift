@@ -12,6 +12,7 @@ struct SetupView: View {
     @State private var tabletIndex = 0
     @State private var useViwoodsCloud = true
     @State private var exportFolder = ""
+    @State private var plannerFolder = ""
     @State private var vault = ""
     @State private var dailyNotes = false
     @State private var weeklyDigest = false
@@ -44,6 +45,9 @@ struct SetupView: View {
             }
             Section("Export folder") {
                 folderPicker(selection: $exportFolder, suggestions: detector.cloudFolders().map { detector.tilde($0.url) }, none: tablet.hasCloudSource && useViwoodsCloud ? "None" : nil)
+                if !exportFolder.isEmpty, !(tablet.hasCloudSource && useViwoodsCloud) {
+                    TextField("Planner folder (pages named by date)", text: $plannerFolder, prompt: Text("Daily"))
+                }
             }
             Section("Where notes go") {
                 folderPicker(selection: $vault, suggestions: detector.obsidianVaults().map(detector.tilde), none: "No Obsidian", label: "Obsidian vault")
@@ -119,6 +123,7 @@ struct SetupView: View {
         tabletIndex = TabletPreset.all.firstIndex { $0.name == choices.tablet.name } ?? 0
         useViwoodsCloud = choices.useViwoodsCloud
         exportFolder = choices.exportFolder ?? ""
+        plannerFolder = choices.plannerFolder ?? ""
         vault = choices.obsidianVault ?? ""
         dailyNotes = choices.dailyNotes
         weeklyDigest = choices.weeklyDigest
@@ -167,6 +172,7 @@ struct SetupView: View {
             shareWithPhone: shareWithPhone
         )
         choices.kindleMail = existing?.kindleMail != nil
+        choices.plannerFolder = plannerFolder.trimmingCharacters(in: .whitespaces).isEmpty ? nil : plannerFolder
         choices.dailyNotes = !vault.isEmpty && dailyNotes
         choices.weeklyDigest = !vault.isEmpty && weeklyDigest
         choices.notifyProblems = notifyProblems

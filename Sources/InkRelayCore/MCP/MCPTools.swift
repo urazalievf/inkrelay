@@ -118,7 +118,7 @@ extension MCPServer {
             let status = arguments["status"] as? String ?? "open"
             guard ["open", "done", "all"].contains(status) else { throw MCPToolError("status must be open, done or all.") }
             let tasks = server.notes(source: arguments["source"] as? String).flatMap { note -> [[String: Any]] in
-                let planner = note.relativePath.hasPrefix("Daily/") ? note.title : nil
+                let planner = note.plannerDate ?? PlannerEvent.legacyPlannerDate(relativePath: note.relativePath, title: note.title)
                 return TaskExtractor.tasks(in: note.text, itemKey: note.key, plannerDate: planner)
                     .filter { status == "all" || ($0.isDone == (status == "done")) }
                     .map { taskJSON($0).merging(["note_id": note.id, "note_title": note.title]) { $1 } }

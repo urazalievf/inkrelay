@@ -273,10 +273,12 @@ public final class RelayEngine {
                     let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
                     let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: file.url, key: key, cache: convertedDirectory) : nil
                     let forReading = inkOnlyURL(for: file, source: source) ?? supernoteInk ?? readable
+                    let title = file.url.deletingPathExtension().lastPathComponent
                     try notes.upsert(InkNote(
-                        title: file.url.deletingPathExtension().lastPathComponent, sourceID: source.id, device: source.device,
+                        title: title, sourceID: source.id, device: source.device,
                         originalURL: readable, relativePath: file.relativePath, modified: file.modified, contentHash: hash,
-                        pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source)
+                        pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source),
+                        plannerDate: source.plannerDate(relativePath: file.relativePath, title: title)
                     ), key: key, at: now())
                 }
                 report.unchanged += 1
@@ -297,7 +299,8 @@ public final class RelayEngine {
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source)
+                pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source),
+                plannerDate: source.plannerDate(relativePath: file.relativePath, title: file.url.deletingPathExtension().lastPathComponent)
             )
 
             if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {

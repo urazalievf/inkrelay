@@ -173,7 +173,7 @@ struct InkDigest {
         let directory = (note.relativePath as NSString).deletingLastPathComponent
         let parts = [folder, note.sourceID] + directory.split(separator: "/").map(String.init)
         let link = (parts.filter { !$0.isEmpty }.map(ObsidianDestination.safeFileName) + [ObsidianDestination.safeFileName(note.title)]).joined(separator: "/")
-        let plannerDate = note.relativePath.split(separator: "/").dropLast().last == "Daily" ? ViwoodsDate.normalize(note.title) : nil
+        let plannerDate = note.plannerDate ?? PlannerEvent.legacyPlannerDate(relativePath: note.relativePath, title: note.title)
         return Entry(note: note, link: link, isPlanner: plannerDate != nil, plannerDate: plannerDate)
     }
 
