@@ -162,14 +162,17 @@ public final class RelayRunner {
         snapshot.status = .syncing
         let report = engine.syncOnce()
         syncing = false
-        snapshot.lastSync = now()
-        snapshot.summary = report.summary
-        snapshot.lastSynced = report.synced
-        snapshot.problems = report.failures.map { failure in
+        // One snapshot for the whole pass, so nobody sees a new lastSync with the previous pass's counts.
+        var next = snapshot
+        next.lastSync = now()
+        next.summary = report.summary
+        next.lastSynced = report.synced
+        next.problems = report.failures.map { failure in
             failure.item + (failure.destinationID.map { " → \($0)" } ?? "") + ": " + failure.message
         } + report.warnings
-        snapshot.status = statusAfter(problems: report.failures.count)
-        refreshDetails()
+        next.status = statusAfter(problems: report.failures.count)
+        refreshDetails(&next)
+        snapshot = next
         if report.deferred > 0, let settle = config?.settleSeconds {
             queue.asyncAfter(deadline: .now() + .seconds(settle + 1)) { [weak self] in self?.sync(reason: "settled files") }
         }
@@ -185,6 +188,12 @@ public final class RelayRunner {
     }
 
     private func refreshDetails() {
+        var next = snapshot
+        refreshDetails(&next)
+        snapshot = next
+    }
+
+    private func refreshDetails(_ snapshot: inout Snapshot) {
         guard let config else { return }
         snapshot.recent = Self.recentNotes(state: (try? StateStore(url: stateURL))?.state ?? SyncState(), config: config)
         if let stack = Self.reviewStack(in: config) {

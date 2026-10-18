@@ -67,7 +67,8 @@ public struct ObsidianDestination: NoteDestination {
         if config.dailyNotes, let block = digest.dailyBlock(for: day, notes: all) {
             let settings = DailyNotesSettings.load(vault: vault)
             let target = vault.appendingPathComponent(settings.notePath(for: day, calendar: calendar) + ".md")
-            let existing = try? String(contentsOf: target, encoding: .utf8)
+            // A day InkRelay reaches first still gets the person's own template, as Obsidian would give it.
+            let existing = (try? String(contentsOf: target, encoding: .utf8)) ?? settings.newNoteText(vault: vault, for: day, now: Date(), calendar: calendar)
             let updated = ManagedBlock.replace(in: existing, with: block, start: InkDigest.dailyStart, end: InkDigest.dailyEnd)
             try? fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? Data(updated.utf8).write(to: target, options: .atomic)

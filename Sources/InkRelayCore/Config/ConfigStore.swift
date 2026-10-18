@@ -45,4 +45,15 @@ public enum ConfigStore {
             ]
         )
     }
+
+    /// Saves over an existing config, keeping the old file as `config.json.bak` first, so a Settings save that
+    /// replaces a config it couldn't read never loses what was there.
+    public static func replace(_ config: RelayConfig, at url: URL) throws {
+        if FileManager.default.fileExists(atPath: url.path) {
+            let backup = url.deletingPathExtension().appendingPathExtension("json.bak")
+            try? FileManager.default.removeItem(at: backup)
+            try FileManager.default.copyItem(at: url, to: backup)
+        }
+        try save(config, to: url)
+    }
 }

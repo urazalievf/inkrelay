@@ -17,7 +17,7 @@ public struct ReleaseInfo: Equatable {
 /// Asks the release feed for the newest version. Nothing about this Mac is sent: it's one GET with no body,
 /// no identifier and no cookies, once a day at most.
 public struct UpdateChecker {
-    public static let feed = URL(string: "https://api.github.com/repos/urazalievf/inkrelay/releases/latest")!
+    public static let feed = URL(string: "https://api.github.com/repos/urazalievf/inkrelay/releases?per_page=5")!
     /// Where people download by hand, when the feed has no release yet.
     public static let downloads = URL(string: "https://github.com/urazalievf/inkrelay/releases")!
 
@@ -29,21 +29,22 @@ public struct UpdateChecker {
         self.transport = transport
     }
 
-    /// The newest release, or nil when none has been published.
+    /// The newest published release, or nil when none has been published. A feed that can't be read (a private
+    /// or renamed repository answers 404) is an error, never "up to date".
     public func latest() throws -> ReleaseInfo? {
         var request = URLRequest(url: feedURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("InkRelay/\(InkRelayCore.version)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try transport.send(request)
-        if response.statusCode == 404 { return nil }
         guard response.statusCode == 200 else { throw UpdateError.feedUnavailable(response.statusCode) }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tag = object["tag_name"] as? String,
-              let page = (object["html_url"] as? String).flatMap(URL.init(string:)) else {
+        guard let list = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
             throw UpdateError.feedUnavailable(response.statusCode)
         }
-        if object["draft"] as? Bool == true || object["prerelease"] as? Bool == true { return nil }
-        return ReleaseInfo(version: tag.hasPrefix("v") ? String(tag.dropFirst()) : tag, url: page, notes: object["body"] as? String ?? "")
+        for object in list where object["draft"] as? Bool != true && object["prerelease"] as? Bool != true {
+            guard let tag = object["tag_name"] as? String, let page = (object["html_url"] as? String).flatMap(URL.init(string:)) else { continue }
+            return ReleaseInfo(version: tag.hasPrefix("v") ? String(tag.dropFirst()) : tag, url: page, notes: object["body"] as? String ?? "")
+        }
+        return nil
     }
 
     /// A release newer than `current`, or nil.
@@ -70,7 +71,10 @@ public enum UpdateError: Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .feedUnavailable(let status): return "The release feed answered \(status). Try again later, or look at \(UpdateChecker.downloads.absoluteString)."
+        case .feedUnavailable(let status):
+            return status == 404
+                ? "The release feed couldn't be read (404), so InkRelay can't tell whether it's up to date. Look at \(UpdateChecker.downloads.absoluteString)."
+                : "The release feed answered \(status). Try again later, or look at \(UpdateChecker.downloads.absoluteString)."
         }
     }
 }

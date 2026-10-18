@@ -51,6 +51,26 @@ final class ProGatingTests: XCTestCase {
         XCTAssertEqual(report.warnings, [])
     }
 
+    func testARunningEngineSeesAKeyEnteredLater() throws {
+        let vault = FakeDestination(id: "vault"), review = FakeDestination(id: "review")
+        var plan = Entitlement.free
+        let config = RelayConfig(
+            sources: [SourceConfig(id: "drive", device: "Tablet", path: exports.url.path)],
+            destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v")), .reviewStack(.init(id: "review"))],
+            settleSeconds: 0
+        )
+        let engine = RelayEngine(config: config, store: try StateStore(url: support.url.appendingPathComponent("state.json")),
+                                 recognizer: FakeRecognizer(), destinations: [vault, review], entitlementProvider: { plan })
+        XCTAssertEqual(engine.syncOnce().warnings.count, 1)
+        XCTAssertEqual(review.upserts.count, 0)
+
+        plan = .pro  // the key was entered from the terminal while this engine kept running
+        let report = engine.syncOnce()
+
+        XCTAssertEqual(report.warnings, [])
+        XCTAssertEqual(review.upserts.count, 1, "the paused destination catches up without a restart")
+    }
+
     func testFreeWithoutProPartsHasNoNotice() throws {
         let vault = FakeDestination(id: "vault")
         let config = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: exports.url.path)], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v"))], settleSeconds: 0)

@@ -101,7 +101,8 @@ final class BarModel: ObservableObject {
         do {
             let license = try EntitlementStore(supportDirectory: supportDirectory).enter(field.stringValue)
             objectWillChange.send()
-            runner.start()
+            // Every pass reads the plan again, so a sync now is enough; the agent, if it's the one syncing, catches up on its next pass.
+            if !agentRunning { runner.syncNow() }
             let thanks = NSAlert()
             thanks.messageText = "Thanks, \(license.name)."
             thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiresAt.map { " until \($0.formatted(date: .long, time: .omitted))" } ?? "") + "."

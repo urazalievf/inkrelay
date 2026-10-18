@@ -24,12 +24,16 @@ final class ObsidianDailyNotesTests: XCTestCase {
         XCTAssertEqual(MomentFormat.pattern("YYYY-MM-DD"), "yyyy-MM-dd")
         XCTAssertEqual(MomentFormat.pattern("YYYY/MM/DD"), "yyyy/MM/dd")
         XCTAssertEqual(MomentFormat.pattern("DD.MM.YYYY"), "dd.MM.yyyy")
-        XCTAssertEqual(MomentFormat.pattern("dddd, MMMM Do YYYY"), "EEEE, MMMM d yyyy")
+        XCTAssertEqual(MomentFormat.pattern("dddd, MMMM D YYYY"), "EEEE, MMMM d yyyy")
         XCTAssertEqual(MomentFormat.pattern("[Daily] YYYY-[W]WW"), "'Daily' yyyy-'W'ww")
         XCTAssertEqual(MomentFormat.pattern("GGGG-[W]WW"), "YYYY-'W'ww")
         let date = calendar.date(from: DateComponents(year: 2026, month: 10, day: 13, hour: 9))!
         XCTAssertEqual(MomentFormat.string(from: date, format: "YYYY-MM-DD", calendar: calendar), "2026-10-13")
         XCTAssertEqual(MomentFormat.string(from: date, format: "ddd, MMM D", calendar: calendar), "Tue, Oct 13")
+        XCTAssertEqual(MomentFormat.string(from: date, format: "MMMM Do, YYYY", calendar: calendar), "October 13th, 2026", "Obsidian's ordinal day")
+        for (day, text) in [(1, "1st"), (2, "2nd"), (3, "3rd"), (4, "4th"), (11, "11th"), (12, "12th"), (13, "13th"), (21, "21st"), (22, "22nd"), (23, "23rd"), (31, "31st")] {
+            XCTAssertEqual(MomentFormat.ordinal(day), text)
+        }
         XCTAssertEqual(DailyNotesSettings(folder: "Journal/Daily", format: "YYYY-MM-DD").notePath(for: date, calendar: calendar), "Journal/Daily/2026-10-13")
     }
 
@@ -48,7 +52,7 @@ final class ObsidianDailyNotesTests: XCTestCase {
 
     func testObsidiansOwnSettingsAreRead() throws {
         try vault.write(".obsidian/daily-notes.json", #"{"folder": "/Daily/", "format": "DD-MM-YYYY", "template": "t"}"#)
-        XCTAssertEqual(DailyNotesSettings.load(vault: vault.url), DailyNotesSettings(folder: "Daily", format: "DD-MM-YYYY"))
+        XCTAssertEqual(DailyNotesSettings.load(vault: vault.url), DailyNotesSettings(folder: "Daily", format: "DD-MM-YYYY", template: "t"))
         XCTAssertEqual(DailyNotesSettings.load(vault: support.url), DailyNotesSettings(), "defaults without the plugin file")
     }
 
@@ -57,6 +61,60 @@ final class ObsidianDailyNotesTests: XCTestCase {
         XCTAssertEqual(ManagedBlock.replace(in: nil, with: block, start: "START", end: "END"), "START\nnew\nEND\n")
         XCTAssertEqual(ManagedBlock.replace(in: "mine\n\nSTART\nold\nEND\n\nalso mine\n", with: block, start: "START", end: "END"), "mine\n\nSTART\nnew\nEND\n\nalso mine\n")
         XCTAssertEqual(ManagedBlock.replace(in: "# Tuesday\n\nmy thoughts\n", with: block, start: "START", end: "END"), "# Tuesday\n\nmy thoughts\n\nSTART\nnew\nEND\n")
+        // The end marker was deleted: the orphan start marker goes too, so later syncs never swallow what follows it.
+        let orphan = ManagedBlock.replace(in: "mine\nSTART\nold half\nmy new paragraph\n", with: block, start: "START", end: "END")
+        XCTAssertEqual(orphan, "mine\n\nold half\nmy new paragraph\n\nSTART\nnew\nEND\n")
+        XCTAssertEqual(ManagedBlock.replace(in: orphan, with: "START\nnewer\nEND", start: "START", end: "END"), "mine\n\nold half\nmy new paragraph\n\nSTART\nnewer\nEND\n")
+    }
+
+    func testANewDailyNoteStartsFromThePersonsTemplate() throws {
+        try vault.write(".obsidian/daily-notes.json", #"{"folder": "Journal", "format": "YYYY-MM-DD", "template": "Templates/Daily"}"#)
+        try vault.write("Templates/Daily.md", "# {{date:dddd, MMMM Do}}\n\nMade {{date}} at {{time}} for {{title}}\n\n## Log\n")
+        let settings = DailyNotesSettings.load(vault: vault.url)
+        XCTAssertEqual(settings.template, "Templates/Daily")
+        let tuesday = calendar.date(from: DateComponents(year: 2026, month: 10, day: 13, hour: 14))!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 10, day: 13, hour: 9, minute: 5))!
+        XCTAssertEqual(settings.newNoteText(vault: vault.url, for: tuesday, now: now, calendar: calendar),
+                       "# Tuesday, October 13th\n\nMade 2026-10-13 at 09:05 for 2026-10-13\n\n## Log\n")
+        XCTAssertNil(DailyNotesSettings().newNoteText(vault: vault.url, for: tuesday, now: now, calendar: calendar))
+
+        let archive = NoteArchive(directory: support.url.appendingPathComponent("archive"))
+        let export = support.url.appendingPathComponent("Temp.pdf")
+        try Data("pdf".utf8).write(to: export)
+        let note = InkNote(title: "Temp", sourceID: "viwoods-cloud", device: "Viwoods AiPaper", originalURL: export, relativePath: "Paper/Temp.pdf",
+                           modified: tuesday, contentHash: "abc", pages: [RecognizedPage(number: 1, text: "Migrate")])
+        try archive.upsert(note, key: "viwoods-cloud/Paper/Temp.pdf", at: tuesday)
+        let destination = ObsidianDestination(config: .init(id: "obsidian", vaultPath: vault.url.path, dailyNotes: true), archive: archive, calendar: calendar)
+        _ = try destination.upsert(note, previous: nil)
+        let daily = try String(contentsOf: vault.url.appendingPathComponent("Journal/2026-10-13.md"), encoding: .utf8)
+        XCTAssertTrue(daily.hasPrefix("# Tuesday, October 13th\n"), "the template came first")
+        XCTAssertTrue(daily.contains("## Log"))
+        XCTAssertTrue(daily.contains(InkDigest.dailyStart))
+    }
+
+    func testARenameDoesNotDoubleTheDigest() throws {
+        let exports = try TemporaryFolder()
+        defer { exports.remove() }
+        let export = try exports.write("Paper/Temp.pdf", "ink")
+        let config = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: exports.url.path)],
+                                 destinations: [.obsidian(.init(id: "obsidian", vaultPath: vault.url.path, weeklyDigest: true))], settleSeconds: 0)
+        let recognizer = FakeRecognizer()
+        recognizer.text = "☐ Renew passport"
+        func engine() throws -> RelayEngine {
+            RelayEngine(config: config, store: try StateStore(url: support.url.appendingPathComponent("state.json")), recognizer: recognizer,
+                        destinations: DestinationFactory.make(config.destinations, context: DestinationContext(supportDirectory: support.url)))
+        }
+        _ = try engine().syncOnce()
+        try FileManager.default.moveItem(at: export, to: exports.url.appendingPathComponent("Paper/Budget.pdf"))
+        let report = try engine().syncOnce()
+        XCTAssertEqual(report.renamed, 1)
+
+        let weekly = try XCTUnwrap(FileManager.default.enumerator(at: vault.url.appendingPathComponent("Ink/Weekly"), includingPropertiesForKeys: nil)?.allObjects.compactMap { $0 as? URL }.first { $0.pathExtension == "md" })
+        let text = try String(contentsOf: weekly, encoding: .utf8)
+        XCTAssertTrue(text.contains("[[Ink/drive/Paper/Budget|Budget]]"))
+        XCTAssertFalse(text.contains("Temp"), "the old name is gone from the digest")
+        XCTAssertTrue(text.contains("across 1 note**"), text)
+        XCTAssertEqual(text.components(separatedBy: "Renew passport").count, 2, "the task is listed once")
     }
 
     private func archived(title: String, path: String, text: String, modified: Date, pages: Int = 1) -> ArchivedNote {

@@ -5,8 +5,14 @@ enum ManagedBlock {
     /// `existing` with the block replaced, or the block appended; a missing file becomes just the block.
     static func replace(in existing: String?, with block: String, start: String, end: String) -> String {
         guard let existing, !existing.isEmpty else { return block + "\n" }
-        if let from = existing.range(of: start), let to = existing.range(of: end, range: from.upperBound..<existing.endIndex) {
-            return String(existing[..<from.lowerBound]) + block + String(existing[to.upperBound...])
+        if let from = existing.range(of: start) {
+            if let to = existing.range(of: end, range: from.upperBound..<existing.endIndex) {
+                return String(existing[..<from.lowerBound]) + block + String(existing[to.upperBound...])
+            }
+            // The end marker is gone: the start marker goes too, so nothing written after it is ever taken for the block.
+            var text = existing
+            text.removeSubrange(from)
+            return text.trimmingCharacters(in: .newlines) + "\n\n" + block + "\n"
         }
         return existing.trimmingCharacters(in: .newlines) + "\n\n" + block + "\n"
     }
@@ -17,10 +23,13 @@ enum ManagedBlock {
 public struct DailyNotesSettings: Equatable {
     public var folder: String
     public var format: String
+    /// Vault-relative path of the template Obsidian applies to a new daily note, with or without `.md`.
+    public var template: String?
 
-    public init(folder: String = "", format: String = "YYYY-MM-DD") {
+    public init(folder: String = "", format: String = "YYYY-MM-DD", template: String? = nil) {
         self.folder = folder
         self.format = format
+        self.template = template
     }
 
     public static func load(vault: URL) -> DailyNotesSettings {
@@ -31,7 +40,30 @@ public struct DailyNotesSettings: Equatable {
         var settings = DailyNotesSettings()
         if let folder = object["folder"] as? String { settings.folder = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
         if let format = object["format"] as? String, !format.isEmpty { settings.format = format }
+        if let template = object["template"] as? String, !template.trimmingCharacters(in: .whitespaces).isEmpty {
+            settings.template = template.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
         return settings
+    }
+
+    /// What Obsidian would put in a brand-new daily note: the template with `{{title}}`, `{{date}}`, `{{date:FORMAT}}`,
+    /// `{{time}}` and `{{time:FORMAT}}` filled in, or nothing when there's no template.
+    public func newNoteText(vault: URL, for date: Date, now: Date, calendar: Calendar = .current) -> String? {
+        guard let template else { return nil }
+        let path = template.hasSuffix(".md") ? template : template + ".md"
+        guard let text = try? String(contentsOf: vault.appendingPathComponent(path), encoding: .utf8) else { return nil }
+        let title = MomentFormat.string(from: date, format: format, calendar: calendar)
+        var output = text.replacingOccurrences(of: "{{title}}", with: title)
+        let pattern = try! NSRegularExpression(pattern: #"\{\{(date|time)(?::([^}]+))?\}\}"#)
+        let matches = pattern.matches(in: output, range: NSRange(output.startIndex..., in: output))
+        for match in matches.reversed() {
+            let kind = String(output[Range(match.range(at: 1), in: output)!])
+            let custom = Range(match.range(at: 2), in: output).map { String(output[$0]) }
+            let moment = custom ?? (kind == "date" ? "YYYY-MM-DD" : "HH:mm")
+            let value = MomentFormat.string(from: kind == "date" ? date : now, format: moment, calendar: calendar)
+            output.replaceSubrange(Range(match.range, in: output)!, with: value)
+        }
+        return output
     }
 
     /// Whether the vault has the Daily Notes plugin on. Obsidian writes `daily-notes.json` only once its settings
@@ -59,7 +91,7 @@ public enum MomentFormat {
     static let tokens: [(String, String)] = [
         ("YYYY", "yyyy"), ("YY", "yy"), ("GGGG", "YYYY"), ("GG", "YY"),
         ("MMMM", "MMMM"), ("MMM", "MMM"), ("MM", "MM"), ("M", "M"),
-        ("DDDD", "DDD"), ("DDD", "D"), ("DD", "dd"), ("Do", "d"), ("D", "d"),
+        ("DDDD", "DDD"), ("DDD", "D"), ("DD", "dd"), ("Do", "'\u{E000}'"), ("D", "d"),
         ("dddd", "EEEE"), ("ddd", "EEE"), ("dd", "EEEEEE"), ("d", "e"),
         ("WW", "ww"), ("W", "w"), ("ww", "ww"), ("w", "w"),
         ("HH", "HH"), ("H", "H"), ("hh", "hh"), ("h", "h"), ("mm", "mm"), ("m", "m"), ("ss", "ss"), ("s", "s"), ("A", "a"), ("a", "a"),
@@ -97,7 +129,25 @@ public enum MomentFormat {
         formatter.timeZone = calendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = pattern(format)
-        return formatter.string(from: date)
+        let text = formatter.string(from: date)
+        // `Do` (13th) has no DateFormatter pattern, so it's filled in afterwards.
+        guard text.contains("\u{E000}") else { return text }
+        return text.replacingOccurrences(of: "\u{E000}", with: ordinal(calendar.component(.day, from: date)))
+    }
+
+    static func ordinal(_ day: Int) -> String {
+        let suffix: String
+        switch day % 100 {
+        case 11, 12, 13: suffix = "th"
+        default:
+            switch day % 10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(day)\(suffix)"
     }
 }
 
