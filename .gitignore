@@ -32,3 +32,7 @@ xcuserdata/
 # InkRelay local runs
 config.json
 state.json
+
+# Per-install files InkRelay writes beside a config
+license.json
+trial.json
