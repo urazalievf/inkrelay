@@ -85,6 +85,13 @@ public struct Doctor {
                 } else {
                     checks.append(DoctorCheck(.ok, "Source \(source.id)", "\(files.count) export(s) in \(source.url.path)"))
                 }
+                // Supernote's sync root also holds books (Document) and its own PDF exports (EXPORT).
+                let stray = ["Document", "EXPORT"].filter { folder in files.contains { SourceConfig.isUnder($0.relativePath, folder: folder) } }
+                if !stray.isEmpty {
+                    let count = files.filter { file in stray.contains { SourceConfig.isUnder(file.relativePath, folder: $0) } }.count
+                    let list = stray.map { "\"\($0)\"" }.joined(separator: ", ")
+                    checks.append(DoctorCheck(.warning, "Source \(source.id)", "\(count) export(s) under \(stray.joined(separator: "/ and "))/, which are books and copies rather than notebooks. To leave them out, add \"exclude\": [\(list)] to this source."))
+                }
             } catch {
                 checks.append(DoctorCheck(.problem, "Source \(source.id)", error.localizedDescription))
             }

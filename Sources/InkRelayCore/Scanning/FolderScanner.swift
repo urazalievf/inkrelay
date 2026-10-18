@@ -19,7 +19,8 @@ public enum FolderScanner {
         }
 
         let types = Set(source.fileTypes.map { $0.lowercased() })
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
+        let filtered = !source.exclude.isEmpty || !source.folders.isEmpty
         // A folder macOS won't let InkRelay read still enumerates, as empty; the error handler is the only sign.
         var rootError: Error?
         guard let enumerator = fileManager.enumerator(
@@ -36,10 +37,15 @@ public enum FolderScanner {
 
         var files: [ScannedFile] = []
         for case let url as URL in enumerator {
+            if filtered, (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                if !source.entersFolder(relativePath(of: url.standardizedFileURL.resolvingSymlinksInPath(), in: root)) { enumerator.skipDescendants() }
+                continue
+            }
             guard types.contains(url.pathExtension.lowercased()) else { continue }
             let values = try url.resourceValues(forKeys: Set(keys))
             guard values.isRegularFile == true else { continue }
             let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+            if filtered, !source.includes(relativePath(of: resolved, in: root)) { continue }
             files.append(ScannedFile(
                 url: resolved,
                 relativePath: relativePath(of: resolved, in: root),

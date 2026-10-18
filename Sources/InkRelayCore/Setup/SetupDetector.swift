@@ -7,11 +7,14 @@ public struct TabletPreset: Equatable {
     public var exportHint: String
     /// Viwoods can skip the export folder entirely.
     public var hasCloudSource: Bool
+    /// Folders a new source for this tablet leaves out.
+    public var exclude: [String] = []
 
     public static let all: [TabletPreset] = [
         TabletPreset(name: "Viwoods AiPaper", fileTypes: ["pdf"], exportHint: "Turn on Viwoods Cloud on the tablet, or long-press the cloud-sync button → Settings → Google Drive, OneDrive or Dropbox, format PDF.", hasCloudSource: true),
         TabletPreset(name: "reMarkable", fileTypes: ["pdf"], exportHint: "Settings → Integrations → Google Drive, Dropbox or OneDrive, then share notebooks there as PDF.", hasCloudSource: false),
-        TabletPreset(name: "Supernote", fileTypes: ["pdf", "note"], exportHint: "Turn on Settings → Sync with Dropbox, Google Drive or OneDrive and pick its Note folder: InkRelay reads the .note notebooks themselves, no PDF export needed.", hasCloudSource: false),
+        TabletPreset(name: "Supernote", fileTypes: ["pdf", "note"], exportHint: "Turn on Settings → Sync with Dropbox, Google Drive or OneDrive and pick its Note folder: InkRelay reads the .note notebooks themselves, no PDF export needed.", hasCloudSource: false,
+                     exclude: ["Document", "EXPORT", "INBOX", "SCREENSHOT", "MyStyle"]),
         TabletPreset(name: "Boox", fileTypes: ["pdf", "png"], exportHint: "Share or auto-export notes as PDF or PNG to a cloud drive.", hasCloudSource: false),
         TabletPreset(name: "Kindle Scribe", fileTypes: ["pdf"], exportHint: "Share a notebook → Send to email: InkRelay can pick the PDF up from Mail. Or save the PDFs into a folder.", hasCloudSource: false),
         TabletPreset(name: "Other tablet", fileTypes: ["pdf"], exportHint: "Export PDFs into a folder on this Mac or in a synced cloud drive.", hasCloudSource: false),
@@ -170,7 +173,9 @@ public struct SetupChoices: Equatable {
                 sources[0].path = exportFolder
             } else {
                 let id = ObsidianDestination.safeFileName(tablet.name.lowercased().replacingOccurrences(of: " ", with: "-"))
-                sources.append(SourceConfig(id: id, device: tablet.name, path: exportFolder, fileTypes: tablet.fileTypes))
+                var source = SourceConfig(id: id, device: tablet.name, path: exportFolder, fileTypes: tablet.fileTypes)
+                source.exclude = tablet.exclude
+                sources.append(source)
             }
         } else if !sources.isEmpty {
             sources.removeFirst()

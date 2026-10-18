@@ -172,7 +172,10 @@ public final class RelayEngine {
                 continue
             }
             let present = Set(files.map { SyncState.key(sourceID: source.id, relativePath: $0.relativePath) })
-            let missing = store.keys(forSource: source.id).filter { !present.contains($0) }
+            // Exports in a folder the source now leaves out stay tracked, so excluding a folder never deletes notes.
+            let missing = store.keys(forSource: source.id).filter { key in
+                !present.contains(key) && source.includes(String(key.dropFirst(source.id.count + 1)))
+            }
             // A tracked export that vanished while an identical one appeared elsewhere was renamed or moved.
             var renameCandidates: [String: String] = [:]
             for key in missing {

@@ -143,7 +143,10 @@ case "setup":
         if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud || choices.kindleMail ? "No export folder" : nil) {
             if chosen < clouds.count {
                 let base = detector.tilde(clouds[chosen].url)
-                choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: base + "/" + tablet.name.split(separator: " ").first!)
+                var suggestion = base + "/" + tablet.name.split(separator: " ").first!
+                // Supernote syncs a whole tree; its notebooks are in Note.
+                if tablet.name == "Supernote", FileManager.default.fileExists(atPath: (suggestion as NSString).expandingTildeInPath + "/Note") { suggestion += "/Note" }
+                choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: suggestion)
             } else {
                 choices.exportFolder = ask("Folder path:")
             }

@@ -77,6 +77,24 @@ final class RelayEngineTests: XCTestCase {
         XCTAssertEqual(vault.upserts.last?.previous?.externalID, "vault:One.pdf")
     }
 
+    func testExcludingAFolderLaterNeverDeletesItsNotes() throws {
+        try exports.write("Document/Book.pdf", "book")
+        try exports.write("Note/Plan.pdf", "plan")
+        _ = try makeEngine(onDelete: ["vault": .delete]).syncOnce()
+        XCTAssertEqual(vault.upserts.count, 2)
+
+        // The person adds an exclusion; the book is now out of the source, but its note stays.
+        var source = SourceConfig(id: "viwoods", device: "Viwoods AiPaper", path: exports.url.path)
+        source.exclude = ["Document"]
+        let config = RelayConfig(sources: [source], destinations: [.appleNotes(.init(id: "vault")), .appleNotes(.init(id: "notes"))], onDelete: ["vault": .delete], settleSeconds: 0)
+        let engine = RelayEngine(config: config, store: try StateStore(url: support.url.appendingPathComponent("state.json")), recognizer: recognizer, destinations: [vault, notes])
+        let report = engine.syncOnce()
+
+        XCTAssertEqual(report.removed, 0)
+        XCTAssertEqual(vault.removals.count, 0)
+        XCTAssertEqual(report.scanned, 1)
+    }
+
     func testBlankExportsWaitForInk() throws {
         let file = try exports.write("Memo/Memo 1.pdf", "empty")
         recognizer.blank = true

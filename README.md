@@ -101,6 +101,8 @@ When the trial ends without a license, the Pro parts pause: each sync says so in
 
 Supernote can sync its Note folder to Dropbox, Google Drive or OneDrive by itself (Settings → Sync), but it syncs the notebooks in its own `.note` format, not PDFs. InkRelay reads those directly: add `"note"` to the source's `fileTypes` (setup does it when you pick Supernote) and point the source at that folder. Each notebook is turned into a PDF, page by page with all its visible layers, before recognition, so every destination gets the pages as you see them on the device. `inkrelay convert notebook.note notebook.pdf` does the same for one file.
 
+Supernote's sync folder also holds `Document` (books and PDFs you annotate), `EXPORT`, `INBOX`, `SCREENSHOT` and `MyStyle`. A source made by setup for a Supernote leaves those out with `"exclude"`, and setup suggests the `Note` folder itself when it exists. Any source can take `"exclude": ["Folder", "Other/Sub"]` to leave folders out, or `"folders": ["Note"]` to read only those; excluding a folder later never deletes the notes already made from it. `inkrelay doctor` warns when a source picks up exports under `Document` or `EXPORT`.
+
 Password-protected notebooks and the oldest A5 format (before firmware C.053) aren't supported.
 
 ## Kindle Scribe
