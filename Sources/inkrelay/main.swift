@@ -260,7 +260,7 @@ case "watch":
         let calendars = DestinationFactory.eventWriters(in: DestinationFactory.make(config.destinations, context: context))
         let server = ReviewServer(store: ReviewStore(directory: context.reviewDirectory), config: stack, calendars: calendars)
         do {
-            log("Review stack at \(try server.start())")
+            log("Review stack at \(try server.start().withoutFragment)")
             reviewServer = server
         } catch {
             log("Review stack unavailable: \(error.localizedDescription)")
@@ -574,16 +574,17 @@ case "review":
         do {
             url = try server.start()
         } catch {
-            // `inkrelay watch` may already be serving it on the configured port.
+            // `inkrelay watch` or the app may already be serving it on the configured port, with its own key.
             let running = URL(string: "http://127.0.0.1:\(stack.port)")!
             if subcommand == "open" {
-                print("The stack is already being served at \(running.absoluteString) (by `inkrelay watch`?). Opening it.")
-                openInBrowser(running)
+                print("The stack is already being served at \(running.absoluteString) (by `inkrelay watch` or the app). Opening it.")
+                let key = (try? String(contentsOf: ReviewServer.keyURL(in: store), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                openInBrowser(ReviewServer.pageURL(base: running, key: key))
                 exit(0)
             }
             fail(error.localizedDescription)
         }
-        print("Review stack at \(url.absoluteString). Press Ctrl-C to stop.")
+        print("Review stack at \(url.withoutFragment.absoluteString). Press Ctrl-C to stop.")
         if subcommand == "open" { openInBrowser(url) }
         withExtendedLifetime(server) { dispatchMain() }
 

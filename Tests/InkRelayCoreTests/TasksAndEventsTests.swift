@@ -152,11 +152,17 @@ final class TasksAndEventsTests: XCTestCase {
         XCTAssertTrue(card.subtitle.hasPrefix("Suggested event · Wed, Mar 3, 3:00 PM"))
 
         let calendar = RecordingCalendar()
-        let request = HTTPRequest(method: "POST", path: "/api/cards/\(card.id)/accept", headers: ["host": "127.0.0.1:7788", "x-inkrelay": "1"])
-        XCTAssertEqual(ReviewServer(store: store, config: .init(id: "stack"), now: { clock }).route(request).status, 409, "no calendar configured")
+        let bare = ReviewServer(store: store, config: .init(id: "stack"), now: { clock })
+        func accept(_ server: ReviewServer) -> HTTPRequest {
+            HTTPRequest(method: "POST", path: "/api/cards/\(card.id)/accept", headers: ["host": "127.0.0.1:7788", "x-inkrelay": server.key])
+        }
+        XCTAssertEqual(bare.route(accept(bare)).status, 409, "no calendar configured")
         XCTAssertTrue(calendar.added.isEmpty)
 
-        XCTAssertEqual(ReviewServer(store: store, config: .init(id: "stack"), calendars: [calendar], now: { clock }).route(request).status, 200)
+        let withCalendar = ReviewServer(store: store, config: .init(id: "stack"), calendars: [calendar], now: { clock })
+        XCTAssertEqual(withCalendar.route(HTTPRequest(method: "POST", path: "/api/cards/\(card.id)/accept", headers: ["host": "127.0.0.1:7788", "x-inkrelay": "1"])).status, 403)
+        XCTAssertTrue(calendar.added.isEmpty, "nothing reaches the calendar without the key")
+        XCTAssertEqual(withCalendar.route(accept(withCalendar)).status, 200)
         XCTAssertEqual(calendar.added.map(\.title), ["Dentist March 3, 2027 at 3pm"])
         XCTAssertEqual(try store.load().cards[card.id]?.status, .done)
     }

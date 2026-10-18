@@ -210,3 +210,12 @@ public enum LocalHTTPServerError: Error, LocalizedError, Equatable {
         }
     }
 }
+
+extension URL {
+    /// The address without its `#…` part, for logs.
+    public var withoutFragment: URL {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false), components.fragment != nil else { return self }
+        components.fragment = nil
+        return components.url ?? self
+    }
+}

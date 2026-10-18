@@ -175,8 +175,10 @@ final class ReviewStackTests: XCTestCase {
         ReviewServer(store: store, config: .init(id: "stack", resurfaceDays: resurface), now: { [unowned self] in self.clock })
     }
 
-    private func get(_ path: String, host: String = "127.0.0.1:7788") -> HTTPRequest {
-        HTTPRequest(method: "GET", path: path, headers: ["host": host])
+    private func get(_ path: String, host: String = "127.0.0.1:7788", key: String? = nil, query: [String: String] = [:]) -> HTTPRequest {
+        var headers = ["host": host]
+        if let key { headers["x-inkrelay"] = key }
+        return HTTPRequest(method: "GET", path: path, query: query, headers: headers)
     }
 
     func testServesThePageTheStackAndImages() throws {
@@ -186,8 +188,12 @@ final class ReviewStackTests: XCTestCase {
         let page = server.route(get("/"))
         XCTAssertEqual(page.status, 200)
         XCTAssertTrue(String(decoding: page.body, as: UTF8.self).contains("<title>Ink Stack</title>"))
+        XCTAssertEqual(page.headers["X-Frame-Options"], "DENY")
+        XCTAssertEqual(page.headers["Content-Security-Policy"], "frame-ancestors 'none'")
 
-        let stack = server.route(get("/api/stack"))
+        XCTAssertEqual(server.route(get("/api/stack")).status, 403, "no key, no cards")
+        XCTAssertEqual(server.route(get("/api/stack", key: "1")).status, 403, "the old constant header no longer works")
+        let stack = server.route(get("/api/stack", key: server.key))
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: stack.body) as? [String: Any])
         let cards = try XCTUnwrap(json["cards"] as? [[String: Any]])
         XCTAssertEqual(json["due"] as? Int, 2)
@@ -195,7 +201,8 @@ final class ReviewStackTests: XCTestCase {
         let imagePath = try XCTUnwrap(cards.first?["image"] as? String)
         XCTAssertTrue(imagePath.hasPrefix("/images/"))
 
-        let image = server.route(get(String(imagePath.split(separator: "?")[0])))
+        XCTAssertEqual(server.route(get(String(imagePath.split(separator: "?")[0]))).status, 403, "images need the key too")
+        let image = server.route(get(String(imagePath.split(separator: "?")[0]), query: ["k": server.key]))
         XCTAssertEqual(image.status, 200)
         XCTAssertEqual(image.contentType, "image/jpeg")
         XCTAssertEqual(image.body, Data("ink-1".utf8))
@@ -206,12 +213,13 @@ final class ReviewStackTests: XCTestCase {
         let id = try todaysStack()[0].id
         let server = server()
 
-        XCTAssertEqual(server.route(get("/api/stack", host: "evil.example:7788")).status, 403, "DNS rebinding")
-        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/cards/\(id)/done", headers: ["host": "localhost:7788"])).status, 403, "no X-InkRelay header")
-        XCTAssertEqual(server.route(get("/images/../stack.json")).status, 404)
-        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/cards/0000000000000000/done", headers: ["host": "[::1]:7788", "x-inkrelay": "1"])).status, 404)
+        XCTAssertEqual(server.route(get("/api/stack", host: "evil.example:7788", key: server.key)).status, 403, "DNS rebinding")
+        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/cards/\(id)/done", headers: ["host": "localhost:7788"])).status, 403, "no key")
+        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/cards/\(id)/done", headers: ["host": "localhost:7788", "x-inkrelay": "1"])).status, 403, "a wrong key")
+        XCTAssertEqual(server.route(get("/images/../stack.json", query: ["k": server.key])).status, 404)
+        XCTAssertEqual(server.route(HTTPRequest(method: "POST", path: "/api/cards/0000000000000000/done", headers: ["host": "[::1]:7788", "x-inkrelay": server.key])).status, 404)
 
-        let done = server.route(HTTPRequest(method: "POST", path: "/api/cards/\(id)/done", headers: ["host": "127.0.0.1:7788", "x-inkrelay": "1"]))
+        let done = server.route(HTTPRequest(method: "POST", path: "/api/cards/\(id)/done", headers: ["host": "127.0.0.1:7788", "x-inkrelay": server.key]))
         XCTAssertEqual(done.status, 200)
         XCTAssertEqual(try store.load().cards[id]?.status, .done)
     }
@@ -219,13 +227,20 @@ final class ReviewStackTests: XCTestCase {
     func testServesOverRealLoopbackHTTP() throws {
         _ = try destination().upsert(twoPageNote(), previous: nil)
         let server = server()
-        let base = try server.start(port: 0)
+        let page = try server.start(port: 0)
         defer { server.stop() }
+        let base = page.withoutFragment
+        XCTAssertEqual(page.fragment, "k=" + server.key, "the key travels in the fragment, which browsers never send")
+        let keyFile = ReviewServer.keyURL(in: store)
+        XCTAssertEqual(try String(contentsOf: keyFile, encoding: .utf8), server.key)
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: keyFile.path)[.posixPermissions] as? Int, 0o600)
 
         let fetched = expectation(description: "stack fetched")
         var status = 0
         var due: Int?
-        URLSession.shared.dataTask(with: base.appendingPathComponent("api/stack")) { data, response, _ in
+        var request = URLRequest(url: base.appendingPathComponent("api/stack"))
+        request.setValue(server.key, forHTTPHeaderField: "X-InkRelay")
+        URLSession.shared.dataTask(with: request) { data, response, _ in
             status = (response as? HTTPURLResponse)?.statusCode ?? 0
             due = (data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any])?["due"] as? Int
             fetched.fulfill()

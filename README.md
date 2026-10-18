@@ -184,7 +184,7 @@ Add a `reviewStack` destination and every page InkRelay relays becomes a card. W
 - Empty pages get no card.
 - `"shareWithPhone": true` puts the stack in the iPhone and iPad app too (see below). `setup` turns it on when you say you'll use InkRelay on a phone.
 
-The page listens on 127.0.0.1 only, refuses requests whose Host isn't local, and actions need a custom header, so other websites can't read or change your stack. Cards and their images live in `review/` next to the config.
+The page listens on 127.0.0.1 only and refuses requests whose Host isn't local. Every launch makes a new key, handed to the page in its address's `#` fragment (which browsers never send) and required on every API call and page image, so neither other websites nor other apps or users on the Mac can read or change your stack; the page also refuses to be framed. Open it from the menu or with `inkrelay review open`, which carry the key. It's kept, owner-only, in `review/.key`. Cards and their images live in `review/` next to the config.
 
 ## Tasks, reminders and suggested events
 
