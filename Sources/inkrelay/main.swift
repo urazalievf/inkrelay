@@ -26,7 +26,7 @@ Usage:
   inkrelay license enter KEY        Save a Pro license key
   inkrelay license remove           Go back to the free plan (or the trial)
   inkrelay update check             Look for a newer InkRelay
-  inkrelay diagnostics [PATH]       Write a zip for a bug report (no secrets, no note text)
+  inkrelay diagnostics [PATH] [--apps]  Write a zip for a bug report (no secrets, no note text); --apps also checks Notes, Calendar, Reminders
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
   inkrelay convert NOTE PDF          Turn a Supernote .note notebook into a PDF
   inkrelay mcp                      Serve InkRelay to AI assistants over MCP (stdio)
@@ -295,8 +295,13 @@ case "watch":
 
 case "status":
     let config = loadConfig()
-    let state = (try? StateStore(url: stateURL))?.state ?? SyncState()
+    let readable = StateStore.readable(at: stateURL)
+    let state = (try? readable.get()) ?? SyncState()
     print("Config: \(configURL.path)")
+    if case .failure(let error) = readable { print("! state.json can't be read: \(error.localizedDescription). Every sync fails until it's fixed or deleted (deleting re-sends everything).") }
+    if let last = LastSync.load(besideState: stateURL) {
+        print("Last sync: \(last.at.formatted(date: .abbreviated, time: .shortened)) — \(last.summary)")
+    }
     print("Sources:")
     for source in config.allSources {
         let exists = FileManager.default.fileExists(atPath: source.url.path)
@@ -646,9 +651,10 @@ case "update":
 
 case "diagnostics":
     let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay", isDirectory: true)
-    let target = arguments.first.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+    let includeApps = arguments.contains("--apps")
+    let target = arguments.first(where: { !$0.hasPrefix("--") }).map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
         ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").appendingPathComponent(Diagnostics.suggestedName())
-    let data = Diagnostics.bundle(configURL: configURL, supportDirectory: supportDirectory, logDirectory: logs)
+    let data = Diagnostics.bundle(configURL: configURL, supportDirectory: supportDirectory, logDirectory: logs, includeApps: includeApps)
     do {
         try data.write(to: target, options: .atomic)
         print("Wrote \(target.path) (\(data.count / 1024) KB). It holds versions, doctor's checks, the config without secrets, state counts and recent logs; no note text, tokens or keys.")

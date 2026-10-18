@@ -69,4 +69,31 @@ final class UpdateAndDiagnosticsTests: XCTestCase {
         XCTAssertFalse(text.contains("Dear diary"), "note text never leaves the Mac")
         XCTAssertTrue(text.contains("Plan: Pro trial"))
     }
+
+    func testDiagnosticsSayWhyConfigAndStateDidntLoadAndCarryNoPersonalDetails() throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let logs = folder.url.appendingPathComponent("logs", isDirectory: true)
+        let home = InkRelayCore.home.path
+        try folder.write("logs/inkrelay.log", "[t] Synced: read \(home)/Library/CloudStorage/GoogleDrive-someone@gmail.com/My Drive/x.pdf")
+
+        // A config that decodes but doesn't validate.
+        try folder.write("config.json", #"{"sources":[{"id":"a","device":"d","path":"/tmp"}],"destinations":[{"kind":"obsidian","id":"o","vaultPath":"/tmp"}],"rescanIntervalSeconds":20}"#)
+        var text = String(decoding: Diagnostics.bundle(configURL: folder.url.appendingPathComponent("config.json"), supportDirectory: folder.url, logDirectory: logs, secrets: MemorySecretStore([:])), as: UTF8.self)
+        XCTAssertTrue(text.contains("The config didn't load: rescanIntervalSeconds must be at least 30."), "the reason, not just that it failed")
+
+        // A good config with a Notion destination and a broken state file.
+        try folder.write("config.json", """
+        {"sources":[{"id":"a","device":"d","path":"/tmp"}],
+         "destinations":[{"kind":"obsidian","id":"o","vaultPath":"/tmp"},{"kind":"notion","id":"n","parentPageId":"p"},{"kind":"appleNotes","id":"notes","account":"someone@icloud.com"}],
+         "sendTargets":[{"kind":"kindle","id":"k","address":"me_123@kindle.com"}]}
+        """)
+        try folder.write("state.json", "{")
+        text = String(decoding: Diagnostics.bundle(configURL: folder.url.appendingPathComponent("config.json"), supportDirectory: folder.url, logDirectory: logs, secrets: MemorySecretStore([:])), as: UTF8.self)
+        XCTAssertTrue(text.contains("state.json can't be read"), "not \"0 tracked\"")
+        XCTAssertTrue(text.contains("Notion"), "sign-ins are checked, offline here")
+        XCTAssertFalse(text.contains("someone@gmail.com") || text.contains("someone@icloud.com") || text.contains("me_123@kindle.com"), "no email survives")
+        XCTAssertFalse(text.contains(home), "no home path, which carries the username")
+        XCTAssertTrue(text.contains("~/Library/CloudStorage/GoogleDrive-<account>/My Drive"))
+    }
 }

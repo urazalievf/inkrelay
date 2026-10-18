@@ -26,7 +26,7 @@ final class BarModel: ObservableObject {
     }
 
     init(configURL: URL? = nil) {
-        runner = RelayRunner(configURL: configURL ?? Self.launchConfigURL)
+        runner = RelayRunner(configURL: configURL ?? Self.launchConfigURL, log: SyncLog())
         runner.onChange = { [weak self] snapshot in
             Task { @MainActor in self?.take(snapshot) }
         }
@@ -222,7 +222,7 @@ final class BarModel: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay", isDirectory: true)
-        let data = Diagnostics.bundle(configURL: runner.configURL, supportDirectory: supportDirectory, logDirectory: logs)
+        let data = Diagnostics.bundle(configURL: runner.configURL, supportDirectory: supportDirectory, logDirectory: logs, includeApps: true)
         do {
             try data.write(to: url, options: .atomic)
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -322,8 +322,8 @@ final class BarModel: ObservableObject {
     }
 
     func openLog() {
-        let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay")
-        NSWorkspace.shared.open(log)
+        let log = SyncLog.defaultURL
+        NSWorkspace.shared.open(FileManager.default.fileExists(atPath: log.path) ? log : log.deletingLastPathComponent())
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {

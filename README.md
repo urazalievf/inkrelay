@@ -283,7 +283,8 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 
 - **Notifications** (menu bar app): a problem that wasn't there before, such as an expired Viwoods sign-in or a denied permission, gets one notification, not one per sync. `notifications.newNotes` adds a short note when pages sync. `notifications.reviewReminder` (`"09:00"`) posts "N cards to review" once a day. All of it is in Settings… too.
 - **Updates**: the app looks for a newer release once a day and shows it in the menu; **Check for Updates…** does it now. `inkrelay update check` from the terminal. Nothing about your Mac is sent; it's one request to the release feed. A feed that can't be read says so rather than "up to date". `"checkForUpdates": false` turns it off.
-- **Bug reports**: **Export Diagnostics…** (or `inkrelay diagnostics`) writes one zip with versions, `doctor`'s checks, your config with every secret replaced, counts from the sync state and the last few hundred log lines. No note text, tokens or keys.
+- **Sync log**: the app writes every pass to `~/Library/Logs/InkRelay/inkrelay.log` (when, why, the summary, each warning and failure); **Open Logs** opens it. Every process that syncs also leaves the last pass in `last-sync.json` beside the config, which `inkrelay status` and the MCP server report.
+- **Bug reports**: **Export Diagnostics…** (or `inkrelay diagnostics [--apps]`) writes one zip with versions, `doctor`'s checks including sign-ins (and, from the app or with `--apps`, whether Notes, Calendar and Reminders allow InkRelay), why a config or state file didn't load, your config with every secret and address replaced, counts from the sync state, the last pass and the last few hundred log lines. The home folder, email addresses, cloud account names and the licensee's name are taken out. No note text, tokens or keys.
 
 ## iPhone and iPad
 

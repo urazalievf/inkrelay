@@ -154,7 +154,9 @@ public final class RelayEngine {
         }
         try? store.reload()
         refreshEntitlement()
-        return pass()
+        let report = pass()
+        LastSync(report: report, at: now()).save(besideState: store.url)
+        return report
     }
 
     private func pass() -> SyncReport {

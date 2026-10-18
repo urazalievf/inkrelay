@@ -59,13 +59,17 @@ public final class RelayRunner {
     private var paused = false
     private var syncing = false
     private var syncAgain = false
+    /// Where each pass is written down, when set. The app sets it; tests and the agent don't.
+    private let log: SyncLog?
 
     public init(
         configURL: URL = InkRelayCore.defaultConfigURL,
         startsReviewServer: Bool = true,
+        log: SyncLog? = nil,
         now: @escaping () -> Date = Date.init,
         makeEngine: @escaping (RelayConfig, URL) throws -> RelayEngine = { try RelayEngine.live(config: $0, stateURL: $1) }
     ) {
+        self.log = log
         self.configURL = configURL
         self.startsReviewServer = startsReviewServer
         self.now = now
@@ -161,6 +165,7 @@ public final class RelayRunner {
         syncing = true
         snapshot.status = .syncing
         let report = engine.syncOnce()
+        log?.append(reason: reason, report: report, at: now())
         syncing = false
         // One snapshot for the whole pass, so nobody sees a new lastSync with the previous pass's counts.
         var next = snapshot

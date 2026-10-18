@@ -223,7 +223,8 @@ extension MCPServer {
 
     func status() throws -> [String: Any] {
         let config = try config()
-        let state = (try? StateStore(url: stateURL))?.state ?? SyncState()
+        let readable = StateStore.readable(at: stateURL)
+        let state = (try? readable.get()) ?? SyncState()
         let lastSync = state.files.values.flatMap { $0.destinations.values.map(\.syncedAt) }.max()
         var output: [String: Any] = [
             "version": InkRelayCore.version,
@@ -244,6 +245,10 @@ extension MCPServer {
         let paused = ProFeatures.used(in: config)
         if !entitlement.isPro, !paused.isEmpty { output["paused_pro_features"] = paused }
         if let lastSync { output["last_sync"] = Self.iso(lastSync) }
+        if case .failure(let error) = readable { output["state_error"] = "state.json can't be read: \(error.localizedDescription)" }
+        if let last = LastSync.load(besideState: stateURL) {
+            output["last_pass"] = ["at": Self.iso(last.at), "summary": last.summary, "failures": last.failures, "warnings": last.warnings]
+        }
         if let (stack, store) = try? reviewStack() {
             output["review_cards_due"] = (try? store.stack(now: now(), limit: stack.dailyLimit).due) ?? 0
         }
