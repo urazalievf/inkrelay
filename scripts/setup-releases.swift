@@ -199,8 +199,11 @@ if identity == nil {
     if createDeveloperID(token: token, work: work) { identity = developerIdentity() }
     guard identity != nil else {
         fail("""
-        Apple only lets the account holder create Developer ID certificates, and not through every key.
-        Create it in Xcode instead (one click): Xcode → Settings → Accounts → your team → Manage Certificates → + → Developer ID Application.
+        Apple doesn't let API keys create Developer ID certificates; only the Account Holder can, on the website or in Xcode:
+          • developer.apple.com/account/resources/certificates/add → Developer ID Application → G2 Sub-CA → upload a CSR
+            (openssl req -new -newkey rsa:2048 -nodes -keyout developer-id.key -out developer-id.csr -subj "/CN=Developer ID"),
+            download the .cer, and import key and certificate into the login keychain; or
+          • Xcode → Settings → Accounts → your team → Manage Certificates → + → Developer ID Application.
         Then run this again.
         """)
     }
