@@ -11,8 +11,13 @@ command -v xcodegen >/dev/null || { echo "Install XcodeGen first: brew install x
 (cd iOS && xcodegen generate --spec project.yml --quiet)
 if [[ "${1:-}" == "--archive" ]]; then
     : "${NOTARY_KEY_P8:?path to the App Store Connect .p8}" "${NOTARY_KEY_ID:?}" "${NOTARY_ISSUER_ID:?}"
+    # The iPhone app shows MAJOR.MINOR.PATCH; the FIX number is its build number, so a bug-fix release uploads a new build.
+    VERSION=$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/InkRelayCore/InkRelayCore.swift)
+    IFS=. read -r MAJOR MINOR PATCH FIX <<< "$VERSION"
+    SHORT="$MAJOR.$MINOR.$PATCH"; FIX="${FIX:-0}"
     ARCHIVE=.build/ios/InkRelayMobile.xcarchive
     xcodebuild -project iOS/InkRelayMobile.xcodeproj -scheme InkRelayMobile -configuration Release \
+        MARKETING_VERSION="$SHORT" CURRENT_PROJECT_VERSION="$FIX" \
         -destination "generic/platform=iOS" -archivePath "$ARCHIVE" -derivedDataPath .build/ios \
         -allowProvisioningUpdates -authenticationKeyPath "$NOTARY_KEY_P8" -authenticationKeyID "$NOTARY_KEY_ID" -authenticationKeyIssuerID "$NOTARY_ISSUER_ID" \
         archive -quiet

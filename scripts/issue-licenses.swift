@@ -1,9 +1,11 @@
 // Issues Pro keys for paid orders from a Lemon Squeezy store and emails them through Mail, keeping the
 // signing key on this Mac. Run it after a sale, or from a daily launchd job.
 //
-//   swift scripts/issue-licenses.swift --store 12345             dry run: lists orders that still need a key
-//   swift scripts/issue-licenses.swift --store 12345 --send      issues and emails them
-//   swift scripts/issue-licenses.swift --order 987 --send        one order
+//   swift scripts/issue-licenses.swift --store 12345 --product 777          dry run: paid orders of that product without a key
+//   swift scripts/issue-licenses.swift --store 12345 --product 777 --send   issues and emails them
+//   swift scripts/issue-licenses.swift --order 987 --send                   one order
+//
+// Only orders of the given product count, and test-mode orders never do (add --include-test to try the flow).
 //
 // Needs the store's API key in the environment as LEMONSQUEEZY_API_KEY (Settings → API in Lemon Squeezy),
 // and `scripts/make-license.swift --init` done once. Orders already handled are listed in
@@ -31,10 +33,12 @@ let makeLicense = repository.appendingPathComponent("scripts/make-license.swift"
 guard let apiKey = ProcessInfo.processInfo.environment["LEMONSQUEEZY_API_KEY"], !apiKey.isEmpty else {
     fail("Set LEMONSQUEEZY_API_KEY in the environment (Lemon Squeezy → Settings → API).")
 }
-guard option("--store") != nil || option("--order") != nil else {
-    print("Usage: swift scripts/issue-licenses.swift --store ID [--send]   or   --order ID [--send]")
+guard (option("--store") != nil && option("--product") != nil) || option("--order") != nil else {
+    print("Usage: swift scripts/issue-licenses.swift --store ID --product ID [--send]   or   --order ID [--send]")
     exit(1)
 }
+let wantedProduct = option("--product")
+let includeTest = CommandLine.arguments.contains("--include-test")
 
 struct Order {
     var id: String
@@ -42,7 +46,9 @@ struct Order {
     var email: String
     var name: String
     var product: String
+    var productID: String
     var paid: Bool
+    var test: Bool
 }
 
 func get(_ path: String) throws -> [String: Any] {
@@ -71,7 +77,9 @@ func order(from item: [String: Any]) -> Order? {
         email: attributes["user_email"] as? String ?? "",
         name: attributes["user_name"] as? String ?? "",
         product: first["product_name"] as? String ?? "",
-        paid: attributes["status"] as? String == "paid"
+        productID: (first["product_id"] as? Int).map(String.init) ?? (first["product_id"] as? String ?? ""),
+        paid: attributes["status"] as? String == "paid",
+        test: attributes["test_mode"] as? Bool == true
     )
 }
 
@@ -91,7 +99,11 @@ if let single = option("--order") {
 }
 
 let issued = (try? JSONSerialization.jsonObject(with: Data(contentsOf: issuedURL)) as? [String: String]) ?? [:]
-let pending = orders.filter { $0.paid && !$0.email.isEmpty && issued[$0.id] == nil }
+let pending = orders.filter { item in
+    item.paid && !item.email.isEmpty && issued[item.id] == nil
+        && (wantedProduct == nil || item.productID == wantedProduct)
+        && (includeTest || !item.test)
+}
 print("\(orders.count) order(s), \(pending.count) paid and still without a key.")
 guard !pending.isEmpty else { exit(0) }
 

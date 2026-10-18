@@ -8,16 +8,27 @@ public final class LearnedVocabulary {
 
     public let url: URL
     private let lock = NSLock()
-    private var words: [String]
+    private var words: [String] = []
+    private var loadedModification: Date?
 
     public init(url: URL) {
         self.url = url
+        reload()
+    }
+
+    /// Other processes (`inkrelay vocabulary add`, the app, the agent) write the same file, so every read and
+    /// every change starts from what's on disk.
+    private func reload() {
+        let modified = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? nil
+        guard modified != loadedModification || words.isEmpty else { return }
         words = (try? JSONDecoder().decode([String].self, from: Data(contentsOf: url))) ?? []
+        loadedModification = modified
     }
 
     public var all: [String] {
         lock.lock()
         defer { lock.unlock() }
+        reload()
         return words
     }
 
@@ -26,6 +37,7 @@ public final class LearnedVocabulary {
     public func add(_ candidates: [String]) -> [String] {
         lock.lock()
         defer { lock.unlock() }
+        reload()
         let known = Set(words.map { $0.lowercased() })
         var added: [String] = []
         for word in candidates where !known.contains(word.lowercased()) && !added.contains(where: { $0.lowercased() == word.lowercased() }) {
@@ -41,6 +53,7 @@ public final class LearnedVocabulary {
     public func remove(_ word: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        reload()
         let before = words.count
         words.removeAll { $0.lowercased() == word.lowercased() }
         if words.count != before { save() }
@@ -52,6 +65,7 @@ public final class LearnedVocabulary {
         encoder.outputFormatting = [.prettyPrinted]
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? encoder.encode(words).write(to: url, options: .atomic)
+        loadedModification = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? nil
     }
 }
 

@@ -8,16 +8,30 @@ import Foundation
 public enum TemplateSubtractor {
     static let darkThreshold: UInt8 = 160
 
-    /// The template rendered once at the page's size, as a mask of dark pixels.
+    /// The template rendered once at the page's size, as a mask of dark pixels. A template in the other
+    /// orientation is turned to match; one whose shape still doesn't fit the page gives a mask that does nothing,
+    /// since stretching it would whiten handwriting instead of lines.
     public struct Mask {
         let width: Int
         let height: Int
         let dark: [Bool]
+        /// False when the template doesn't fit this page size; `clean` then leaves the page alone.
+        public let applies: Bool
 
         public init(template: CGImage, width: Int, height: Int) {
             self.width = width
             self.height = height
-            let gray = TemplateSubtractor.grayPixels(template, width: width, height: height)
+            let turned = (template.width > template.height) != (width > height) && template.width != template.height
+            let templateWidth = turned ? template.height : template.width
+            let templateHeight = turned ? template.width : template.height
+            let aspectOff = abs(Double(templateWidth) / Double(templateHeight) - Double(width) / Double(height)) / (Double(width) / Double(height))
+            guard aspectOff <= 0.03 else {
+                dark = []
+                applies = false
+                return
+            }
+            applies = true
+            let gray = TemplateSubtractor.grayPixels(template, width: width, height: height, rotated: turned)
             var dark = [Bool](repeating: false, count: width * height)
             for y in 0..<height {
                 for x in 0..<width where gray[y * width + x] < TemplateSubtractor.darkThreshold {
@@ -35,7 +49,7 @@ public enum TemplateSubtractor {
 
     /// The page with the template's pixels whitened. Pages of another size are left alone.
     public static func clean(_ page: CGImage, mask: Mask) -> CGImage {
-        guard page.width == mask.width, page.height == mask.height else { return page }
+        guard mask.applies, page.width == mask.width, page.height == mask.height else { return page }
         var gray = grayPixels(page, width: mask.width, height: mask.height)
         for index in gray.indices where mask.dark[index] { gray[index] = 255 }
         guard let provider = CGDataProvider(data: Data(gray) as CFData),
@@ -45,7 +59,7 @@ public enum TemplateSubtractor {
         return image
     }
 
-    static func grayPixels(_ image: CGImage, width: Int, height: Int) -> [UInt8] {
+    static func grayPixels(_ image: CGImage, width: Int, height: Int, rotated: Bool = false) -> [UInt8] {
         var pixels = [UInt8](repeating: 255, count: width * height)
         pixels.withUnsafeMutableBytes { buffer in
             guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
@@ -53,7 +67,14 @@ public enum TemplateSubtractor {
             context.setFillColor(gray: 1, alpha: 1)
             context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             context.interpolationQuality = .high
-            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            if rotated {
+                // A quarter turn: the template's long side lies along the page's long side.
+                context.translateBy(x: CGFloat(width), y: 0)
+                context.rotate(by: .pi / 2)
+                context.draw(image, in: CGRect(x: 0, y: 0, width: height, height: width))
+            } else {
+                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            }
         }
         return pixels
     }

@@ -131,6 +131,23 @@ final class ClaudeTextRecognizerTests: XCTestCase {
         XCTAssertEqual(try capped.recognize(fileAt: file).first?.text, "Q4 planning\n\n- ship the stack")
     }
 
+    func testABatchShrinksToWhatTheBudgetStillAllows() throws {
+        answer(input: 3000, output: 500)
+        // Worst case is about $0.064 a page: $0.15 is room for two at once. They cost far less than the worst
+        // case, so the third still fits afterwards, on its own.
+        let claude = recognizer(AITranscriptionConfig(monthlyBudgetUSD: 0.15, batchSize: 4), pages: 3)
+        let pages = try claude.recognize(fileAt: file)
+        XCTAssertEqual(pages.map(\.text), Array(repeating: "Q4 planning\n\n- ship the stack", count: 3))
+        let requests = transport.requests(to: "v1/messages")
+        XCTAssertEqual(requests.count, 2, "two pages, then one; not four refused")
+        func images(_ index: Int) throws -> Int {
+            let content = try XCTUnwrap(((requests[index].body["messages"] as? [[String: Any]])?.first?["content"]) as? [[String: Any]])
+            return content.filter { $0["type"] as? String == "image" }.count
+        }
+        XCTAssertEqual(try images(0), 2)
+        XCTAssertEqual(try images(1), 1)
+    }
+
     func testWithoutAKeyNothingIsSentAndVisionReadsEverything() throws {
         secrets.secrets = [:]
         let pages = try recognizer(pages: 2).recognize(fileAt: file)

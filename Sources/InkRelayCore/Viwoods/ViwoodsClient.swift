@@ -61,7 +61,7 @@ public final class ViwoodsClient {
     }
 
     public func memo(uuid: String) throws -> ViwoodsMemo {
-        try decodeBlob(try call("api/v1/memoSync/get", ["uuid": .string(uuid)]))
+        try decodeBlob(try call(ViwoodsApp.memo.syncPath, ["uuid": .string(uuid)]))
     }
 
     /// Days with planner content in a month given as `yyyy-MM`.

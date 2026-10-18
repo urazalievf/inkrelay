@@ -34,6 +34,18 @@ public struct DailyNotesSettings: Equatable {
         return settings
     }
 
+    /// Whether the vault has the Daily Notes plugin on. Obsidian writes `daily-notes.json` only once its settings
+    /// leave their defaults, so `core-plugins.json` (a list in older vaults, a name-to-bool map in newer ones) is
+    /// what says the plugin is enabled.
+    public static func isEnabled(vault: URL) -> Bool {
+        if FileManager.default.fileExists(atPath: vault.appendingPathComponent(".obsidian/daily-notes.json").path) { return true }
+        guard let data = try? Data(contentsOf: vault.appendingPathComponent(".obsidian/core-plugins.json")),
+              let object = try? JSONSerialization.jsonObject(with: data) else { return false }
+        if let list = object as? [String] { return list.contains("daily-notes") }
+        if let map = object as? [String: Any] { return map["daily-notes"] as? Bool == true }
+        return false
+    }
+
     /// Vault-relative path of the daily note for a day, without `.md`.
     public func notePath(for date: Date, calendar: Calendar = .current) -> String {
         let name = MomentFormat.string(from: date, format: format, calendar: calendar)

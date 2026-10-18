@@ -26,6 +26,9 @@ public final class RelayEngine {
     private let pausedDestinationIDs: Set<String>
     /// Words learned from corrections in Obsidian, shared with the Vision recognizer.
     private let learned: LearnedVocabulary?
+    /// Rendered templates and their masks, by template path and page size, for the life of the engine.
+    private var templates: [String: CGImage] = [:]
+    private var templateMasks: [String: TemplateSubtractor.Mask] = [:]
     private var activeDestinations: [NoteDestination] { destinations.filter { !pausedDestinationIDs.contains($0.id) } }
 
     public init(
@@ -206,7 +209,7 @@ public final class RelayEngine {
         // Notes synced before the archive existed get archived once, read with Vision so it costs nothing.
         let needsArchive = previous.map { notes.entry(forKey: key)?.contentHash != $0.contentHash } ?? false
         if let known = previous, known.looksUnchanged(file), pending(for: known.contentHash, in: known).isEmpty,
-           !needsArchive || source.recognizer == .claude {
+           !needsArchive || source.usesAI(for: file.relativePath) {
             if known.missingSince != nil { try? store.set(FileRecord(size: known.size, modified: known.modified, contentHash: known.contentHash, destinations: known.destinations), for: key) }
             report.unchanged += 1
             return
@@ -233,6 +236,8 @@ public final class RelayEngine {
                 contentHash: hash,
                 destinations: previous?.destinations ?? [:]
             )
+            // Learn corrections first, so the changed page is read with them.
+            learnCorrections(for: key, record: record, into: &report)
             // A rename goes to every destination that holds the note, so it moves instead of staying behind.
             let pendingNow = pending(for: hash, in: record)
             let targets = renamedFrom == nil ? pendingNow : activeDestinations.filter { destination in
@@ -241,12 +246,14 @@ public final class RelayEngine {
             guard !targets.isEmpty else {
                 // Touched but not changed: remember the new date so the next pass skips the read.
                 try store.set(record, for: key)
-                if notes.entry(forKey: key)?.contentHash != hash, source.recognizer != .claude {
+                if notes.entry(forKey: key)?.contentHash != hash, !source.usesAI(for: file.relativePath) {
                     let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
+                    let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: file.url, key: key, cache: convertedDirectory) : nil
+                    let forReading = inkOnlyURL(for: file, source: source) ?? supernoteInk ?? readable
                     try notes.upsert(InkNote(
                         title: file.url.deletingPathExtension().lastPathComponent, sourceID: source.id, device: source.device,
                         originalURL: readable, relativePath: file.relativePath, modified: file.modified, contentHash: hash,
-                        pages: try recognizer.recognize(fileAt: readable)
+                        pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source)
                     ), key: key, at: now())
                 }
                 report.unchanged += 1
@@ -277,7 +284,6 @@ public final class RelayEngine {
                 return
             }
 
-            learnCorrections(for: key, record: record, into: &report)
             try? notes.upsert(note, key: key, at: now())
             var deliveredAll = true
             var filedInNotes = false
@@ -332,12 +338,18 @@ public final class RelayEngine {
         if let templateURL = source.templateURL, let vision = recognizer as? VisionTextRecognizer {
             let settings = vision.config
             let images = try PageRenderer.images(for: url, scale: settings.renderScale, maxPixelDimension: settings.maxPixelDimension)
-            let template = try TemplateSubtractor.templateImage(at: templateURL, scale: settings.renderScale, maxPixelDimension: settings.maxPixelDimension)
-            var masks: [String: TemplateSubtractor.Mask] = [:]
+            let templateKey = templateURL.path + "@\(settings.renderScale)"
+            let template: CGImage
+            if let cached = templates[templateKey] {
+                template = cached
+            } else {
+                template = try TemplateSubtractor.templateImage(at: templateURL, scale: settings.renderScale, maxPixelDimension: settings.maxPixelDimension)
+                templates[templateKey] = template
+            }
             let cleaned = images.map { image -> CGImage in
-                let size = "\(image.width)x\(image.height)"
-                let mask = masks[size] ?? TemplateSubtractor.Mask(template: template, width: image.width, height: image.height)
-                masks[size] = mask
+                let maskKey = templateKey + "/\(image.width)x\(image.height)"
+                let mask = templateMasks[maskKey] ?? TemplateSubtractor.Mask(template: template, width: image.width, height: image.height)
+                templateMasks[maskKey] = mask
                 return TemplateSubtractor.clean(image, mask: mask)
             }
             return try vision.recognize(images: cleaned)
@@ -350,7 +362,9 @@ public final class RelayEngine {
     private func learnCorrections(for key: String, record: FileRecord, into report: inout SyncReport) {
         guard let learned, let previous = notes.entry(forKey: key) else { return }
         for case .obsidian(let obsidian) in config.destinations {
-            guard let external = record.destinations[obsidian.id]?.externalID, !external.isEmpty,
+            // Only a vault copy of the archived version is comparable; a lagging copy would teach old misreads.
+            guard let delivered = record.destinations[obsidian.id], delivered.contentHash == previous.contentHash,
+                  let external = Optional(delivered.externalID), !external.isEmpty,
                   let markdown = try? String(contentsOf: obsidian.vaultURL.appendingPathComponent(external), encoding: .utf8),
                   let edited = VocabularyLearner.managedText(of: markdown) else { continue }
             let original = previous.pages.map(\.text).joined(separator: "\n")

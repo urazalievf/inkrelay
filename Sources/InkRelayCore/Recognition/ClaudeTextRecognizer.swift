@@ -136,13 +136,16 @@ public final class ClaudeTextRecognizer: TextRecognizer {
         var index = 0
         let size = max(1, min(config.batchSize, 8))
         while index < images.count {
-            let batch = Array(images[index..<min(index + size, images.count)])
-            let numbers = Array((index + 1)...(index + batch.count))
-            index += batch.count
-            if let overBudget = budgetProblem(pages: batch.count) {
-                for number in numbers { results.append(try vision(number, overBudget)) }
+            // A batch is as big as the budget still allows, so the last few dollars read the last few pages.
+            let affordable = pagesAffordable()
+            guard affordable > 0 else {
+                index += 1
+                results.append(try vision(index, budgetProblem(pages: 1) ?? "monthly AI budget reached"))
                 continue
             }
+            let batch = Array(images[index..<min(index + min(size, affordable), images.count)])
+            let numbers = Array((index + 1)...(index + batch.count))
+            index += batch.count
             do {
                 results += try transcribe(batch, numbers: numbers, of: images.count, title: title, apiKey: apiKey)
             } catch let error as TranscriptionError {
@@ -181,12 +184,23 @@ public final class ClaudeTextRecognizer: TextRecognizer {
         return stored
     }
 
-    /// Room for these pages at the worst case, so neither cap is overshot by a request.
-    func hasBudget(pages: Int = 1) -> Bool { budgetProblem(pages: pages) == nil }
+    var worstCasePerPage: Double {
+        ModelPricing.cost(model: config.model, inputTokens: Self.estimatedInputTokens, outputTokens: Self.estimatedOutputTokens)
+    }
+
+    /// How many more pages fit under both caps at the worst case, so neither is overshot by a request.
+    func pagesAffordable() -> Int {
+        let current = ledger()
+        var remaining = config.monthlyBudgetUSD - current.spentUSD
+        if let source = currentSource, let budget = source.budgetUSD {
+            remaining = min(remaining, budget - (current.bySource?[source.id] ?? 0))
+        }
+        return max(Int((remaining / worstCasePerPage).rounded(.down)), 0)
+    }
 
     /// Why the next request can't go out, or nil.
     func budgetProblem(pages: Int) -> String? {
-        let worstCase = ModelPricing.cost(model: config.model, inputTokens: Self.estimatedInputTokens, outputTokens: Self.estimatedOutputTokens) * Double(pages)
+        let worstCase = worstCasePerPage * Double(pages)
         let current = ledger()
         if current.spentUSD + worstCase > config.monthlyBudgetUSD {
             return "monthly AI budget of $\(config.monthlyBudgetUSD) reached"
