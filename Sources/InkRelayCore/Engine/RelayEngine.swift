@@ -248,6 +248,8 @@ public final class RelayEngine {
 
             // Native notebooks (Supernote .note) become a PDF first; everything downstream reads that.
             let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
+            // Viwoods Cloud keeps an ink-only copy beside the page; reading that leaves the template's text out.
+            let forReading = inkOnlyURL(for: file, source: source) ?? readable
             let note = InkNote(
                 title: file.url.deletingPathExtension().lastPathComponent,
                 sourceID: source.id,
@@ -256,7 +258,7 @@ public final class RelayEngine {
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try (source.recognizer == .claude && entitlement.isPro ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
+                pages: try (source.recognizer == .claude && entitlement.isPro ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: forReading)
             )
 
             if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {
@@ -308,6 +310,12 @@ public final class RelayEngine {
         } catch {
             report.failures.append(.init(item: item, destinationID: nil, message: error.localizedDescription))
         }
+    }
+
+    private func inkOnlyURL(for file: ScannedFile, source: SourceConfig) -> URL? {
+        guard let cloud = config.viwoodsCloud, cloud.id == source.id, cloud.recognizeInkOnly else { return nil }
+        let url = cloud.inkURL(for: file.relativePath)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
     }
 
     /// PDFs made from native notebooks, next to the sync state.
