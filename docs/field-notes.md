@@ -15,6 +15,12 @@ What was learned by running InkRelay against real data and real apps. Numbers ar
 - **Template text is recognized as content.** Paper templates print "Name" and "Date 10/02/2025 01:43 PM", and they show up in the note text. The cloud's `mainBmp_` layer has the ink without the template and is the obvious next thing to try.
 - **Scripts:** Vision sometimes returns Cyrillic letters ("те") for Latin handwriting even with `en-US` set.
 
+## Ink layer (0.8.0)
+
+- Viwoods Cloud's `mainBmp_<page>.png` is the ink alone on a transparent background; composed on white it recognizes cleanly. On the owner's three Paper notebooks, the template lines ("Name", "Date 11/05/2025 03:22 PM") vanished from the recognized text; the handwriting itself read about the same. Memos and planner pages have no separate layer.
+- Pulling the layer added one download per page the first time (≈18 s for 24 items against ≈40 s for the first pull in 0.6.0, on the same account; the cloud was warm).
+- Five printed words on five pages, read with `concurrency: 3`, came back in page order every run.
+
 ## Blank pages
 
 Share of pixels darker than 150 of 255:
@@ -30,6 +36,10 @@ Share of pixels darker than 150 of 255:
 
 - **The rule:** blank means no recognized text and coverage under 0.0001.
 - **How it's measured:** at half size with nearest-neighbour sampling, so thin strokes stay dark. A smoothed downscale washes them out.
+
+## The owner's vault
+
+- On October 16 the owner moved InkRelay's `Ink` folder inside their vault to `Resources/Inbox/Ink` (a PARA layout). They changed the config's `folder` to match, so updates reach the moved notes instead of recreating `Ink/` at the root. Obsidian's note paths in the state (`externalID`) still say `Ink/…`; the destination computes the new path from the config and merges with what's there, so nothing had to be rewritten.
 
 ## Viwoods Cloud data
 

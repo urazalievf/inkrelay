@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.7.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.8.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -91,6 +91,12 @@ Tips:
 - In the cloud app, mark the export folder **Available offline**. Otherwise every new export downloads on first read.
 - Set the tablet to export **PDF**, not its own notebook format.
 
+## Free and Pro
+
+Everything a Mac can do on its own is free: export folders from any tablet, Obsidian, Apple Notes, Apple Calendar and Apple Reminders. Pro adds Viwoods Cloud, Kindle Scribe by email, Google Calendar and Docs, Outlook Calendar and OneNote, Notion, AI transcription, and the review stack on the Mac and the phone. Every install starts with a 14-day Pro trial.
+
+When the trial ends without a license, the Pro parts pause: each sync says so in one line, nothing is deleted, and the moment a key is entered they catch up from where they stopped. Enter a key with **Enter License…** in the InkRelay menu or `inkrelay license enter INK1.…`; `inkrelay license` shows the plan. Keys are checked on the Mac against the publisher's public key, so InkRelay never contacts a server about them.
+
 ## Supernote
 
 Supernote can sync its Note folder to Dropbox, Google Drive or OneDrive by itself (Settings → Sync), but it syncs the notebooks in its own `.note` format, not PDFs. InkRelay reads those directly: add `"note"` to the source's `fileTypes` (setup does it when you pick Supernote) and point the source at that folder. Each notebook is turned into a PDF, page by page with all its visible layers, before recognition, so every destination gets the pages as you see them on the device. `inkrelay convert notebook.note notebook.pdf` does the same for one file.
@@ -121,10 +127,18 @@ What arrives:
 
 - **Paper and Meeting notebooks** become one PDF each, in the folders you use on the tablet, under `<cache>/Paper/…` and `<cache>/Meeting/…`. The PDF holds the rendered page images the cloud stores, so it looks exactly like the tablet. Password-protected notebooks are skipped and reported.
 - **Memos** become `<cache>/Memo/<name>.pdf`.
+- **Ink only**: each notebook page's ink layer is pulled beside the rendered page and recognition reads that, so the template's "Name" and "Date …" stay out of your notes. The PDF keeps the full page. Memos and planner pages have no separate ink layer. `"recognizeInkOnly": false` turns it off.
 - **Daily planner**: each day with handwritten Tasks or Notes pages becomes `<cache>/Daily/<yyyy-MM-dd>.pdf`, which Obsidian and Notes receive like any notebook. Typed to-dos go straight to Apple Calendar.
 - The cache is `~/Library/Application Support/InkRelay/viwoods` unless `cachePath` says otherwise, and it is a source of its own: notes land under `Ink/viwoods-cloud/…` in Obsidian.
 
 The cloud is checked on every sync and, under `watch`, every `rescanIntervalSeconds`. Only changed notebooks are downloaded.
+
+## Obsidian
+
+Each export becomes `<vault>/Ink/<source>/<folder>/<title>.md` with the PDF beside it. Two extras, off unless you turn them on (Settings… in the app, or the config):
+
+- `"dailyNotes": true` keeps a block in your daily note, in the folder and date format Obsidian's Daily Notes plugin is set to, with the planner page for that day, the notes you wrote that day and the open tasks found in them. The block sits between `%% inkrelay:daily:start %%` and `%% inkrelay:daily:end %%`; everything else in the daily note is yours.
+- `"weeklyDigest": true` keeps `Ink/Weekly/<year>-W<week>.md`: the week's notes with page counts, its planner days, and every open task, rebuilt whenever a note from that week syncs.
 
 ## Apple Calendar
 
@@ -225,6 +239,10 @@ Google needs an OAuth client of your own while InkRelay is in development:
 .build/release/inkrelay notion login
 ```
 
+## Recognition
+
+Vision reads pages on the Mac, `recognition.concurrency` pages at a time (by core count, up to 4). `recognition.vocabulary` lists words Vision should expect, such as names, products and places; they win over the dictionary when the ink is close, which is the difference between "Erin" and "erin" or "Ensemble" and "Enseunble". `scripts/measure-pages.swift` shows what Vision reads from any PDF and how sure it is.
+
 ## AI transcription (optional)
 
 Vision is free and never sends anything anywhere, but it struggles with cursive and dense pages. For a source that needs better reading, set `"recognizer": "claude"` on it (or on `viwoodsCloud`). **Its page images are then sent to Anthropic's API**, one request per page, and Claude returns the text with paragraphs, lists and checkboxes rebuilt, plus a suggested title and tags that land in Obsidian's frontmatter as `suggested_title` and `suggested_tags`. Every other source stays on Vision.
@@ -246,6 +264,12 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 - Settings… sets everything up in a window when there's no config yet, with the same choices as `inkrelay setup`. Config and Logs open the files; Open at login uses macOS's login items, and the first launch from Applications asks once whether to turn it on.
 - If the command-line agent from `scripts/install-agent.sh` is running, the app waits and offers to stop it, so notes aren't synced twice.
 - The `inkrelay` command is inside the app at `InkRelay.app/Contents/Resources/inkrelay`.
+
+## Notifications, updates and bug reports
+
+- **Notifications** (menu bar app): a problem that wasn't there before, such as an expired Viwoods sign-in or a denied permission, gets one notification, not one per sync. `notifications.newNotes` adds a short note when pages sync. `notifications.reviewReminder` (`"09:00"`) posts "N cards to review" once a day. All of it is in Settings… too.
+- **Updates**: the app looks for a newer release once a day and shows it in the menu; **Check for Updates…** does it now. `inkrelay update check` from the terminal. Nothing about your Mac is sent; it's one request to the release feed. `"checkForUpdates": false` turns it off.
+- **Bug reports**: **Export Diagnostics…** (or `inkrelay diagnostics`) writes one zip with versions, `doctor`'s checks, your config with every secret replaced, counts from the sync state and the last few hundred log lines. No note text, tokens or keys.
 
 ## iPhone and iPad
 
