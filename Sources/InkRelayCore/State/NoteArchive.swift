@@ -25,6 +25,8 @@ public struct ArchivedNote: Codable, Equatable {
     public var archivedAt: Date
     public var contentHash: String
     public var pages: [Page]
+    /// `yyyy-MM-dd` for a planner page. Missing in entries archived before planner folders existed.
+    public var plannerDate: String?
 
     public var text: String { pages.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n\n") }
 }
@@ -49,7 +51,8 @@ public final class NoteArchive {
             id: Self.id(forKey: key), key: key, title: note.title, sourceID: note.sourceID, device: note.device,
             relativePath: note.relativePath, originalPath: note.originalURL.path, modified: note.modified, archivedAt: date,
             contentHash: note.contentHash,
-            pages: note.pages.map { ArchivedNote.Page(number: $0.number, text: $0.text, suggestedTitle: $0.suggestedTitle, tags: $0.tags) }
+            pages: note.pages.map { ArchivedNote.Page(number: $0.number, text: $0.text, suggestedTitle: $0.suggestedTitle, tags: $0.tags) },
+            plannerDate: PlannerEvent.plannerDate(of: note)
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

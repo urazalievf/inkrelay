@@ -112,6 +112,7 @@ final class TasksAndEventsTests: XCTestCase {
             AppleNotesDestination.createScript, AppleNotesDestination.updateScript,
             AppleNotesDestination.deleteScript, AppleNotesDestination.archiveScript,
             NotesRoundTrip.folderOfNoteScript, NotesRoundTrip.removeFoldersScript,
+            KindleMailPuller.listScript, KindleMailPuller.saveAttachmentScript,
         ]
         for script in scripts { XCTAssertFalse(script.contains("\\("), "an interpolation was left in the script") }
         let folder = try TemporaryFolder()
@@ -152,11 +153,17 @@ final class TasksAndEventsTests: XCTestCase {
         XCTAssertTrue(card.subtitle.hasPrefix("Suggested event · Wed, Mar 3, 3:00 PM"))
 
         let calendar = RecordingCalendar()
-        let request = HTTPRequest(method: "POST", path: "/api/cards/\(card.id)/accept", headers: ["host": "127.0.0.1:7788", "x-inkrelay": "1"])
-        XCTAssertEqual(ReviewServer(store: store, config: .init(id: "stack"), now: { clock }).route(request).status, 409, "no calendar configured")
+        let bare = ReviewServer(store: store, config: .init(id: "stack"), now: { clock })
+        func accept(_ server: ReviewServer) -> HTTPRequest {
+            HTTPRequest(method: "POST", path: "/api/cards/\(card.id)/accept", headers: ["host": "127.0.0.1:7788", "x-inkrelay": server.key])
+        }
+        XCTAssertEqual(bare.route(accept(bare)).status, 409, "no calendar configured")
         XCTAssertTrue(calendar.added.isEmpty)
 
-        XCTAssertEqual(ReviewServer(store: store, config: .init(id: "stack"), calendars: [calendar], now: { clock }).route(request).status, 200)
+        let withCalendar = ReviewServer(store: store, config: .init(id: "stack"), calendars: [calendar], now: { clock })
+        XCTAssertEqual(withCalendar.route(HTTPRequest(method: "POST", path: "/api/cards/\(card.id)/accept", headers: ["host": "127.0.0.1:7788", "x-inkrelay": "1"])).status, 403)
+        XCTAssertTrue(calendar.added.isEmpty, "nothing reaches the calendar without the key")
+        XCTAssertEqual(withCalendar.route(accept(withCalendar)).status, 200)
         XCTAssertEqual(calendar.added.map(\.title), ["Dentist March 3, 2027 at 3pm"])
         XCTAssertEqual(try store.load().cards[card.id]?.status, .done)
     }
@@ -180,5 +187,54 @@ final class TasksAndEventsTests: XCTestCase {
         let outlook = try XCTUnwrap(transport.requests(to: "v1.0/me/calendars/o-cal/events").first).body
         XCTAssertEqual(outlook["start"] as? [String: String], ["dateTime": EventTime.local(event.start, seconds: true), "timeZone": "America/Chicago"])
         XCTAssertNil(outlook["isAllDay"])
+    }
+
+    func testPlannerDatesAreReadFromTheUsualNames() {
+        for (name, date) in [
+            ("2026-10-17", "2026-10-17"), ("20261017", "2026-10-17"), ("2026_10_17", "2026-10-17"), ("2026.10.17", "2026-10-17"),
+            ("17 Oct 2026", "2026-10-17"), ("Oct 17, 2026", "2026-10-17"), ("October 17th 2026", "2026-10-17"),
+            ("Planner 2026-10-17", "2026-10-17"), ("2026-10-17 week 42", "2026-10-17"), ("2026-1-7", "2026-01-07"),
+        ] {
+            XCTAssertEqual(PlannerDate.parse(fileName: name), date, name)
+        }
+        for name in ["Meeting notes", "17.10.2026", "2026-02-30", "120261017", "Room 2026"] {
+            XCTAssertNil(PlannerDate.parse(fileName: name), name)
+        }
+        XCTAssertEqual(PlannerDate.parse(fileName: "17.10.2026", format: "dd.MM.yyyy"), "2026-10-17", "day-month-year only when the source says so")
+        XCTAssertNil(PlannerDate.parse(fileName: "2026-10-17", format: "dd.MM.yyyy"))
+    }
+
+    func testAPlannerFolderOfAnyTabletBecomesDailyPlans() throws {
+        let exports = try TemporaryFolder(), support = try TemporaryFolder()
+        defer { exports.remove(); support.remove() }
+        try exports.write("Planner/2026-10-17.pdf", "plan")
+        try exports.write("Notes/2026-10-17 ideas.pdf", "ideas")
+        var source = SourceConfig(id: "supernote", device: "Supernote", path: exports.url.path)
+        source.planner = PlannerSettings(folders: ["Planner"])
+        let config = RelayConfig(sources: [source], destinations: [.appleCalendar(.init(id: "cal"))], settleSeconds: 0)
+        let recognizer = FakeRecognizer()
+        recognizer.text = "☐ call Sam 4:30pm"
+        let runner = FakeScriptRunner()
+        runner.results = ["uid-1"]
+        let calendar = AppleCalendarDestination(config: .init(id: "cal"), runner: runner)
+        let engine = RelayEngine(config: config, store: try StateStore(url: support.url.appendingPathComponent("state.json")), recognizer: recognizer, destinations: [calendar])
+
+        _ = engine.syncOnce()
+
+        let creates = runner.calls.filter { $0.source == AppleCalendarDestination.createScript }
+        XCTAssertEqual(creates.count, 1, "only the planner page, not the note that happens to have a date in its name")
+        XCTAssertEqual(creates.first?.arguments[1], "Daily plan")
+        XCTAssertEqual(creates.first?.arguments[3], "2026-10-17")
+
+        let archived = NoteArchive(directory: support.url.appendingPathComponent("archive")).entry(forKey: "supernote/Planner/2026-10-17.pdf")
+        XCTAssertEqual(archived?.plannerDate, "2026-10-17")
+        let task = try XCTUnwrap(TaskExtractor.tasks(in: archived?.text ?? "", itemKey: "k", plannerDate: archived?.plannerDate).first)
+        XCTAssertTrue(task.dueHasTime)
+        let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: try XCTUnwrap(task.due))
+        XCTAssertEqual([parts.year, parts.month, parts.day, parts.hour, parts.minute], [2026, 10, 17, 16, 30], "the page's day, the written time")
+
+        // The Viwoods cache keeps working by its own layout, and so do archive entries made before this.
+        XCTAssertEqual(SourceConfig(id: "c", device: "d", path: "/x").plannerDate(relativePath: "Daily/2026-1-13.pdf", title: "2026-1-13"), "2026-01-13")
+        XCTAssertEqual(PlannerEvent.legacyPlannerDate(relativePath: "Daily/2026-01-13.pdf", title: "2026-01-13"), "2026-01-13")
     }
 }

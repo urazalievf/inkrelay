@@ -12,6 +12,7 @@ struct SetupView: View {
     @State private var tabletIndex = 0
     @State private var useViwoodsCloud = true
     @State private var exportFolder = ""
+    @State private var plannerFolder = ""
     @State private var vault = ""
     @State private var dailyNotes = false
     @State private var weeklyDigest = false
@@ -38,12 +39,15 @@ struct SetupView: View {
                     ForEach(TabletPreset.all.indices, id: \.self) { Text(TabletPreset.all[$0].name).tag($0) }
                 }
                 if tablet.hasCloudSource {
-                    Toggle("Read straight from Viwoods Cloud", isOn: $useViwoodsCloud)
+                    Toggle(isOn: $useViwoodsCloud) { proLabel("Read straight from Viwoods Cloud") }
                 }
                 Text(tablet.exportHint).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Section("Export folder") {
                 folderPicker(selection: $exportFolder, suggestions: detector.cloudFolders().map { detector.tilde($0.url) }, none: tablet.hasCloudSource && useViwoodsCloud ? "None" : nil)
+                if !exportFolder.isEmpty, !(tablet.hasCloudSource && useViwoodsCloud) {
+                    TextField("Planner folder (pages named by date)", text: $plannerFolder, prompt: Text("Daily"))
+                }
             }
             Section("Where notes go") {
                 folderPicker(selection: $vault, suggestions: detector.obsidianVaults().map(detector.tilde), none: "No Obsidian", label: "Obsidian vault")
@@ -54,7 +58,7 @@ struct SetupView: View {
                 Toggle("Apple Notes", isOn: $appleNotes)
                 Toggle("Apple Calendar (planner pages and to-dos)", isOn: $appleCalendar)
                 Toggle("Apple Reminders (tasks you write)", isOn: $appleReminders)
-                Toggle("Review stack (read later)", isOn: $reviewStack)
+                Toggle(isOn: $reviewStack) { proLabel("Review stack (read later)") }
                 if appleNotes || reviewStack, SharedLedger.iCloudDriveFolder != nil {
                     Toggle("Share with InkRelay on iPhone and iPad (iCloud Drive)", isOn: $shareWithPhone)
                 }
@@ -85,7 +89,22 @@ struct SetupView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480)
+        .navigationTitle(hasConfig ? "InkRelay Settings" : "Set Up InkRelay")
         .onAppear(perform: load)
+    }
+
+    /// A toggle's label with a small Pro tag, for the parts that need a license after the trial.
+    private func proLabel(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Text("PRO")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.secondary))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Pro")
+        }
     }
 
     private func load() {
@@ -104,6 +123,7 @@ struct SetupView: View {
         tabletIndex = TabletPreset.all.firstIndex { $0.name == choices.tablet.name } ?? 0
         useViwoodsCloud = choices.useViwoodsCloud
         exportFolder = choices.exportFolder ?? ""
+        plannerFolder = choices.plannerFolder ?? ""
         vault = choices.obsidianVault ?? ""
         dailyNotes = choices.dailyNotes
         weeklyDigest = choices.weeklyDigest
@@ -152,6 +172,7 @@ struct SetupView: View {
             shareWithPhone: shareWithPhone
         )
         choices.kindleMail = existing?.kindleMail != nil
+        choices.plannerFolder = plannerFolder.trimmingCharacters(in: .whitespaces).isEmpty ? nil : plannerFolder
         choices.dailyNotes = !vault.isEmpty && dailyNotes
         choices.weeklyDigest = !vault.isEmpty && weeklyDigest
         choices.notifyProblems = notifyProblems
@@ -164,6 +185,11 @@ struct SetupView: View {
             try ConfigStore.replace(try choices.config(merging: existing), at: model.runner.configURL)
             model.reload()
             dismiss()
+            // The first run continues where the person expects: the Viwoods sign-in, or the open-at-login question.
+            let model = model
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                if model.needsViwoodsSignIn { model.showViwoodsSignIn() } else { model.askToOpenAtLoginOnce() }
+            }
         } catch let failure {
             error = failure.localizedDescription
         }

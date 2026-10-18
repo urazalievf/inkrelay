@@ -58,6 +58,25 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         authorized { center.add(UNNotificationRequest(identifier: "review-reminder", content: content, trigger: trigger)) }
     }
 
+    /// Three days before the trial ends, on its last day, and once when it has ended: what will pause or did.
+    func trial(daysLeft: Int?, endedOn: Date?, parts: [String]) {
+        guard !parts.isEmpty else { return }
+        let list = parts.joined(separator: ", ")
+        if let endedOn {
+            let key = "notifiedTrialEnded"
+            guard defaults.object(forKey: key) == nil else { return }
+            defaults.set(endedOn.timeIntervalSince1970, forKey: key)
+            deliver(id: "trial", title: "Your InkRelay Pro trial ended", body: "\(list) paused. Your notes are safe; enter a license and syncing picks up where it stopped.")
+            return
+        }
+        guard let daysLeft, daysLeft == 3 || daysLeft <= 1 else { return }
+        let key = "notifiedTrial\(daysLeft <= 1 ? "Last" : "Three")"
+        guard !defaults.bool(forKey: key) else { return }
+        defaults.set(true, forKey: key)
+        let when = daysLeft <= 1 ? "ends today" : "ends in 3 days"
+        deliver(id: "trial", title: "Your InkRelay Pro trial \(when)", body: "After that \(list) pause until a license is entered. Everything else keeps syncing.")
+    }
+
     /// Once per version.
     func updateAvailable(_ release: ReleaseInfo) {
         guard defaults.string(forKey: "notifiedUpdate") != release.version else { return }

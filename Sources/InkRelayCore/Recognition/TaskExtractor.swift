@@ -74,6 +74,20 @@ public enum TaskExtractor {
         text.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ":-–")))
     }
 
+    /// The Obsidian block id for a task line: `ink-<key>`, with `-2`, `-3` for a repeat within the same note, in the
+    /// order the lines appear. The same text in the same note always gets the same id, ticked or not.
+    public static func blockID(for key: String, seen: inout [String: Int]) -> String {
+        let count = (seen[key] ?? 0) + 1
+        seen[key] = count
+        return "ink-" + key + (count > 1 ? "-\(count)" : "")
+    }
+
+    /// Each task in `text` with its block id, in order, as the note in Obsidian has them.
+    public static func tasksWithBlockIDs(in text: String, itemKey: String, plannerDate: String? = nil) -> [(task: ExtractedTask, blockID: String)] {
+        var seen: [String: Int] = [:]
+        return tasks(in: text, itemKey: itemKey, plannerDate: plannerDate).map { ($0, blockID(for: $0.key, seen: &seen)) }
+    }
+
     static func key(_ itemKey: String, _ text: String) -> String {
         let normalized = text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return SHA256.hash(data: Data("\(itemKey)|\(normalized)".utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()

@@ -41,4 +41,25 @@ final class FolderScannerTests: XCTestCase {
             XCTAssertTrue(error.localizedDescription.contains("\"boox\""))
         }
     }
+
+    func testExcludedAndIncludedFolders() throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        for path in ["Note/Plan.note", "Note/Work/Standup.note", "Document/Book.pdf", "EXPORT/Plan.pdf", "INBOX/x.pdf", "Top.pdf"] {
+            try folder.write(path, "x")
+        }
+        var source = SourceConfig(id: "supernote", device: "Supernote", path: folder.url.path, fileTypes: ["pdf", "note"])
+        source.exclude = ["Document", "EXPORT/", "INBOX"]
+        XCTAssertEqual(try FolderScanner.scan(source).map(\.relativePath), ["Note/Plan.note", "Note/Work/Standup.note", "Top.pdf"])
+
+        source.exclude = ["Note/Work"]
+        source.folders = ["Note"]
+        XCTAssertEqual(try FolderScanner.scan(source).map(\.relativePath), ["Note/Plan.note"])
+        XCTAssertFalse(source.includes("Top.pdf"))
+        XCTAssertTrue(source.entersFolder("Note"))
+        XCTAssertFalse(source.entersFolder("Document"))
+
+        let decoded = try JSONDecoder().decode(SourceConfig.self, from: JSONEncoder().encode(source))
+        XCTAssertEqual(decoded, source)
+    }
 }

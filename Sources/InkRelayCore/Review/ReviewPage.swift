@@ -86,12 +86,23 @@ enum ReviewPage {
     <div class="toast" id="toast" role="status"></div>
     <script>
     const state = { cards: [], index: 0, due: 0, done: 0, busy: false, expanded: false };
+    // The key arrives in the address's fragment once; it's kept for this tab and taken out of the address bar.
+    const key = (() => {
+      const match = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+      if (match) {
+        try { sessionStorage.setItem('inkrelay-key', match[1]); } catch (e) {}
+        history.replaceState(null, '', location.pathname);
+        return match[1];
+      }
+      try { return sessionStorage.getItem('inkrelay-key') || ''; } catch (e) { return ''; }
+    })();
     const $ = (id) => document.getElementById(id);
     const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
     async function load() {
       try {
-        const reply = await fetch('/api/stack', { cache: 'no-store' });
+        const reply = await fetch('/api/stack', { cache: 'no-store', headers: { 'X-InkRelay': key } });
+        if (reply.status === 403) { toast('Open the stack from the InkRelay menu to see it here.'); return; }
         const data = await reply.json();
         state.cards = data.cards; state.due = data.due; state.index = 0; state.done = 0;
         $('date').textContent = '· ' + data.date;
@@ -113,7 +124,7 @@ enum ReviewPage {
       node.setAttribute('aria-label', card.title);
       const paper = el('div', 'paper' + (card.kind !== 'page' ? ' todo' : ''));
       if (card.image) {
-        const img = el('img'); img.src = card.image; img.alt = 'Page: ' + card.title; img.decoding = 'async'; paper.append(img);
+        const img = el('img'); img.src = card.image + (card.image.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key); img.alt = 'Page: ' + card.title; img.decoding = 'async'; paper.append(img);
       } else {
         const line = el('div', 'todo-line');
         line.append(card.kind === 'event' ? el('span', 'event-mark', '◷') : el('span', 'todo-box'), el('span', null, card.text || card.title));
@@ -163,7 +174,7 @@ enum ReviewPage {
       const node = document.querySelector('.card');
       if (node) node.classList.add(action === 'done' ? 'leaving-done' : 'leaving-later');
       try {
-        const reply = await fetch(`/api/cards/${card.id}/${action}`, { method: 'POST', headers: { 'X-InkRelay': '1' } });
+        const reply = await fetch(`/api/cards/${card.id}/${action}`, { method: 'POST', headers: { 'X-InkRelay': key } });
         if (!reply.ok) { const why = await reply.json().catch(() => ({})); throw new Error(why.error || ''); }
         await new Promise((r) => setTimeout(r, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 160));
         state.cards.splice(state.index, 1); state.due = Math.max(0, state.due - 1); state.done += 1; state.expanded = false;

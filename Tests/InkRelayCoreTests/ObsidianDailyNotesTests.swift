@@ -115,6 +115,7 @@ final class ObsidianDailyNotesTests: XCTestCase {
         XCTAssertFalse(text.contains("Temp"), "the old name is gone from the digest")
         XCTAssertTrue(text.contains("across 1 note**"), text)
         XCTAssertEqual(text.components(separatedBy: "Renew passport").count, 2, "the task is listed once")
+        XCTAssertTrue(text.contains("[[Ink/drive/Paper/Budget#^ink-"), "linked under its new name")
     }
 
     private func archived(title: String, path: String, text: String, modified: Date, pages: Int = 1) -> ArchivedNote {
@@ -140,8 +141,11 @@ final class ObsidianDailyNotesTests: XCTestCase {
         XCTAssertTrue(block.contains("> Gym at 7"))
         XCTAssertTrue(block.contains("- [[Ink/viwoods-cloud/Paper/Temp|Temp]] (3 pages)"))
         XCTAssertFalse(block.contains("Old"))
-        XCTAssertTrue(block.contains("- [ ] Call the bank ([[Ink/viwoods-cloud/Daily/2026-10-13|2026-10-13]])"))
-        XCTAssertTrue(block.contains("- [ ] Renew passport ([[Ink/viwoods-cloud/Paper/Temp|Temp]])"))
+        let bank = "ink-" + TaskExtractor.key("viwoods-cloud/Daily/2026-10-13.pdf", "Call the bank")
+        let passport = "ink-" + TaskExtractor.key("viwoods-cloud/Paper/Temp.pdf", "Renew passport")
+        XCTAssertTrue(block.contains("- [[Ink/viwoods-cloud/Daily/2026-10-13#^\(bank)|Call the bank]] (2026-10-13)"), block)
+        XCTAssertTrue(block.contains("- [[Ink/viwoods-cloud/Paper/Temp#^\(passport)|Renew passport]] (Temp)"))
+        XCTAssertFalse(block.contains("- [ ]"), "a link to the task's own checkbox, never a second checkbox")
         XCTAssertFalse(block.contains("[ ] Paid rent"), "done tasks aren't listed as open; they still show in the page's text")
         XCTAssertNil(digest.dailyBlock(for: tuesday.addingTimeInterval(86_400 * 30), notes: notes))
     }
@@ -184,7 +188,7 @@ final class ObsidianDailyNotesTests: XCTestCase {
         let daily = try String(contentsOf: vault.url.appendingPathComponent("Journal/2026-10-13.md"), encoding: .utf8)
         XCTAssertTrue(daily.hasPrefix("# Tuesday\n\nMy own words.\n"), "the person's own text stays")
         XCTAssertTrue(daily.contains("- [[Ink/viwoods-cloud/Paper/Temp|Temp]] (1 page)"))
-        XCTAssertTrue(daily.contains("- [ ] Renew passport"))
+        XCTAssertTrue(daily.contains("|Renew passport]]"))
         let weekly = try String(contentsOf: vault.url.appendingPathComponent("Ink/Weekly/2026-W42.md"), encoding: .utf8)
         XCTAssertTrue(weekly.hasPrefix("# Week 42, 2026"))
         XCTAssertTrue(weekly.contains("[[Ink/viwoods-cloud/Paper/Temp|Temp]]"))

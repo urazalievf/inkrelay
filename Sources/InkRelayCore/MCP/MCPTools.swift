@@ -118,7 +118,7 @@ extension MCPServer {
             let status = arguments["status"] as? String ?? "open"
             guard ["open", "done", "all"].contains(status) else { throw MCPToolError("status must be open, done or all.") }
             let tasks = server.notes(source: arguments["source"] as? String).flatMap { note -> [[String: Any]] in
-                let planner = note.relativePath.hasPrefix("Daily/") ? note.title : nil
+                let planner = note.plannerDate ?? PlannerEvent.legacyPlannerDate(relativePath: note.relativePath, title: note.title)
                 return TaskExtractor.tasks(in: note.text, itemKey: note.key, plannerDate: planner)
                     .filter { status == "all" || ($0.isDone == (status == "done")) }
                     .map { taskJSON($0).merging(["note_id": note.id, "note_title": note.title]) { $1 } }
@@ -223,7 +223,8 @@ extension MCPServer {
 
     func status() throws -> [String: Any] {
         let config = try config()
-        let state = (try? StateStore(url: stateURL))?.state ?? SyncState()
+        let readable = StateStore.readable(at: stateURL)
+        let state = (try? readable.get()) ?? SyncState()
         let lastSync = state.files.values.flatMap { $0.destinations.values.map(\.syncedAt) }.max()
         var output: [String: Any] = [
             "version": InkRelayCore.version,
@@ -244,6 +245,10 @@ extension MCPServer {
         let paused = ProFeatures.used(in: config)
         if !entitlement.isPro, !paused.isEmpty { output["paused_pro_features"] = paused }
         if let lastSync { output["last_sync"] = Self.iso(lastSync) }
+        if case .failure(let error) = readable { output["state_error"] = "state.json can't be read: \(error.localizedDescription)" }
+        if let last = LastSync.load(besideState: stateURL) {
+            output["last_pass"] = ["at": Self.iso(last.at), "summary": last.summary, "failures": last.failures, "warnings": last.warnings]
+        }
         if let (stack, store) = try? reviewStack() {
             output["review_cards_due"] = (try? store.stack(now: now(), limit: stack.dailyLimit).due) ?? 0
         }

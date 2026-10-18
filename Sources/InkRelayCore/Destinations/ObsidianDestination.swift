@@ -166,7 +166,7 @@ public enum MarkdownRenderer {
         let suggestedTags = Array(Set(note.pages.flatMap(\.tags))).sorted()
         if !suggestedTags.isEmpty { managed.append(("suggested_tags", "[\(suggestedTags.map(yamlString).joined(separator: ", "))]")) }
         let tagsValue = tags.isEmpty ? nil : "[\(tags.map(yamlString).joined(separator: ", "))]"
-        let block = generatedBlock(note, embedPath: embedPath)
+        let block = generatedBlock(note, embedPath: embedPath, ticked: existing.map(tickedBlockIDs(in:)) ?? [])
 
         guard let existing, !existing.isEmpty else {
             if let tagsValue { managed.append(("tags", tagsValue)) }
@@ -196,7 +196,10 @@ public enum MarkdownRenderer {
         return frontmatter(lines) + (before.isEmpty ? "\n" : before) + block + (after.isEmpty ? "\n" : after)
     }
 
-    static func generatedBlock(_ note: InkNote, embedPath: String?) -> String {
+    /// Tasks written on the tablet (☐, [ ], TODO) become Obsidian checkboxes with a block id that stays the same
+    /// across syncs, so the Tasks plugin, Dataview and links from the daily note all see one task. A box ticked
+    /// in Obsidian (`ticked`) stays ticked when the page syncs again.
+    static func generatedBlock(_ note: InkNote, embedPath: String?, ticked: Set<String> = []) -> String {
         var lines = [startMarker, "# \(note.title)", ""]
         if let embedPath {
             lines += ["![[\(embedPath)]]", ""]
@@ -204,13 +207,32 @@ public enum MarkdownRenderer {
         if !NoteFormatting.hasText(note) {
             lines += ["_No text recognized._", ""]
         }
+        let itemKey = "\(note.sourceID)/\(note.relativePath)"
+        var seen: [String: Int] = [:]
         for page in note.pages {
             lines += ["## Page \(page.number)", ""]
             let text = page.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            lines += [text.isEmpty ? "_No text recognized on this page._" : text, ""]
+            guard !text.isEmpty else {
+                lines += ["_No text recognized on this page._", ""]
+                continue
+            }
+            let rendered = text.split(separator: "\n", omittingEmptySubsequences: false).map { raw -> String in
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                guard let (body, done) = TaskExtractor.strip(line), !body.isEmpty else { return String(raw) }
+                let id = TaskExtractor.blockID(for: TaskExtractor.key(itemKey, body), seen: &seen)
+                return "- [\(done || ticked.contains(id) ? "x" : " ")] \(body) ^\(id)"
+            }
+            lines += [rendered.joined(separator: "\n"), ""]
         }
         lines.append(endMarker)
         return lines.joined(separator: "\n")
+    }
+
+    /// Block ids of the checkboxes ticked in a note's InkRelay block.
+    static func tickedBlockIDs(in markdown: String) -> Set<String> {
+        let pattern = try! NSRegularExpression(pattern: #"(?m)^\s*- \[[xX]\] .*\^(ink-[0-9a-f]+(?:-\d+)?)\s*$"#)
+        let range = NSRange(markdown.startIndex..., in: markdown)
+        return Set(pattern.matches(in: markdown, range: range).compactMap { Range($0.range(at: 1), in: markdown).map { String(markdown[$0]) } })
     }
 
     static func frontmatter(_ lines: [String]) -> String {

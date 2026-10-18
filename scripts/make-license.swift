@@ -91,23 +91,22 @@ guard let name = option("--name"), let email = option("--email") else {
     exit(1)
 }
 
-var expires: Date?
+// The last day the key works, kept as a date: the whole of that day wherever the customer is.
+var expiresOn: String?
 if let text = option("--expires") {
-    // The key works through the whole of that day where the key is issued, not until midnight UTC.
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
-    formatter.timeZone = .current
-    guard let start = formatter.date(from: text),
-          let endOfDay = Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: start) else { fail("--expires takes YYYY-MM-DD.") }
-    expires = endOfDay
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    guard formatter.date(from: text) != nil, text.count == 10 else { fail("--expires takes YYYY-MM-DD.") }
+    expiresOn = text
 }
 
 // The same fields and order as `License` in InkRelayCore, so the app decodes what this signs.
 let id = String(UUID().uuidString.prefix(8)).lowercased()
 var payload: [String: Any] = ["id": id, "name": name, "email": email, "plan": "pro", "issuedAt": ISO8601DateFormatter().string(from: Date())]
-if let expires { payload["expiresAt"] = ISO8601DateFormatter().string(from: expires) }
+if let expiresOn { payload["expiresOn"] = expiresOn }
 let payloadData = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys, .withoutEscapingSlashes])
 let signature = try loadPrivateKey().signature(for: payloadData)
 let key = ["INK1", base64URL(payloadData), base64URL(signature)].joined(separator: ".")
 print(key)
-FileHandle.standardError.write(Data("• Issued \(id) to \(name) <\(email)>\(expires.map { ", expires \($0.formatted(date: .long, time: .omitted))" } ?? ", for keeps").\n".utf8))
+FileHandle.standardError.write(Data("• Issued \(id) to \(name) <\(email)>\(expiresOn.map { ", works through \($0)" } ?? ", for keeps").\n".utf8))

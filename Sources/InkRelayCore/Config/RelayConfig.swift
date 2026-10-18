@@ -158,6 +158,13 @@ public struct SourceConfig: Codable, Equatable {
     /// A PNG, JPEG or one-page PDF of the tablet's blank template; its lines and labels are taken out of each
     /// page before recognition, so they stop turning up as text.
     public var template: String?
+    /// Folders inside the source to leave out, such as Supernote's `Document` (books you annotate) and `EXPORT`.
+    public var exclude: [String] = []
+    /// Only these folders inside the source, when set.
+    public var folders: [String] = []
+    /// Which folders hold day-planner pages named by date; they go to calendars as "Daily plan" and give their
+    /// tasks that day. `Daily` by default, as the Viwoods cache lays it out.
+    public var planner = PlannerSettings()
 
     public init(id: String, device: String, path: String, fileTypes: [String] = ["pdf"], recognizer: RecognizerKind = .vision) {
         self.id = id
@@ -167,7 +174,7 @@ public struct SourceConfig: Codable, Equatable {
         self.recognizer = recognizer
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer, aiFolders, aiMonthlyBudgetUSD, recognizeInkOnly, template }
+    private enum CodingKeys: String, CodingKey { case id, device, path, fileTypes, recognizer, aiFolders, aiMonthlyBudgetUSD, recognizeInkOnly, template, exclude, folders, planner }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -180,6 +187,9 @@ public struct SourceConfig: Codable, Equatable {
         aiMonthlyBudgetUSD = try container.decodeIfPresent(Double.self, forKey: .aiMonthlyBudgetUSD)
         recognizeInkOnly = try container.decodeIfPresent(Bool.self, forKey: .recognizeInkOnly) ?? true
         template = try container.decodeIfPresent(String.self, forKey: .template)
+        exclude = try container.decodeIfPresent([String].self, forKey: .exclude) ?? []
+        folders = try container.decodeIfPresent([String].self, forKey: .folders) ?? []
+        planner = try container.decodeIfPresent(PlannerSettings.self, forKey: .planner) ?? PlannerSettings()
         if let budget = aiMonthlyBudgetUSD, budget < 0 { throw ConfigError.invalid("aiMonthlyBudgetUSD can't be negative.") }
     }
 
@@ -194,16 +204,45 @@ public struct SourceConfig: Codable, Equatable {
         try container.encodeIfPresent(aiMonthlyBudgetUSD, forKey: .aiMonthlyBudgetUSD)
         if !recognizeInkOnly { try container.encode(recognizeInkOnly, forKey: .recognizeInkOnly) }
         try container.encodeIfPresent(template, forKey: .template)
+        if !exclude.isEmpty { try container.encode(exclude, forKey: .exclude) }
+        if !folders.isEmpty { try container.encode(folders, forKey: .folders) }
+        if planner != PlannerSettings() { try container.encode(planner, forKey: .planner) }
+    }
+
+    /// The day an export is for, when it sits in one of the planner folders and its name holds a date.
+    public func plannerDate(relativePath: String, title: String) -> String? {
+        let directory = (relativePath as NSString).deletingLastPathComponent
+        guard planner.folders.contains(where: { Self.isUnder(directory, folder: $0) }) else { return nil }
+        return PlannerDate.parse(fileName: title, format: planner.dateFormat)
+    }
+
+    /// Whether `relativePath` (a file or a folder) lies in `folder` or is it.
+    static func isUnder(_ relativePath: String, folder: String) -> Bool {
+        let prefix = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !prefix.isEmpty else { return true }
+        return relativePath == prefix || relativePath.hasPrefix(prefix + "/")
+    }
+
+    /// Whether an export at this relative path belongs to the source, given `exclude` and `folders`.
+    public func includes(_ relativePath: String) -> Bool {
+        if exclude.contains(where: { Self.isUnder(relativePath, folder: $0) }) { return false }
+        guard !folders.isEmpty else { return true }
+        return folders.contains { Self.isUnder(relativePath, folder: $0) }
+    }
+
+    /// Whether the scanner should look inside this folder at all.
+    func entersFolder(_ relativePath: String) -> Bool {
+        if exclude.contains(where: { Self.isUnder(relativePath, folder: $0) }) { return false }
+        guard !folders.isEmpty else { return true }
+        // Inside an included folder, or on the way down to one.
+        return folders.contains { Self.isUnder(relativePath, folder: $0) || Self.isUnder($0.trimmingCharacters(in: CharacterSet(charactersIn: "/")), folder: relativePath) }
     }
 
     /// Whether an export at this relative path goes to Claude, given `recognizer` and `aiFolders`.
     public func usesAI(for relativePath: String) -> Bool {
         guard recognizer == .claude else { return false }
         guard !aiFolders.isEmpty else { return true }
-        return aiFolders.contains { folder in
-            let prefix = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            return relativePath.hasPrefix(prefix + "/") || relativePath == prefix
-        }
+        return aiFolders.contains { Self.isUnder(relativePath, folder: $0) }
     }
 
     public var templateURL: URL? { template.map { URL(fileURLWithPath: PathExpansion.expand($0)) } }

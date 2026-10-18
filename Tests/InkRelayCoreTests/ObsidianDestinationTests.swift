@@ -180,4 +180,34 @@ final class ObsidianDestinationTests: XCTestCase {
         let markdown = MarkdownRenderer.render(makeNote(pages: [RecognizedPage(number: 1, text: "  ")]), embedPath: nil, tags: [])
         XCTAssertTrue(markdown.contains("_No text recognized._"))
     }
+
+    func testTabletTasksBecomeCheckboxesWithStableIdsAndObsidianTicksSurvive() throws {
+        let vault = try TemporaryFolder()
+        defer { vault.remove() }
+        let export = vault.url.appendingPathComponent("x.pdf")
+        try Data("pdf".utf8).write(to: export)
+        func note(_ text: String) -> InkNote {
+            InkNote(title: "Plan", sourceID: "drive", device: "Tablet", originalURL: export, relativePath: "Paper/Plan.pdf",
+                    modified: Date(timeIntervalSince1970: 1_790_000_000), contentHash: UUID().uuidString, pages: [RecognizedPage(number: 1, text: text)])
+        }
+        let destination = ObsidianDestination(config: .init(id: "obsidian", vaultPath: vault.url.path, copyOriginal: false))
+        let path = try destination.upsert(note("Plan\n☐ Call the bank\n☑ Paid rent\nTODO renew passport\n☐ Call the bank"), previous: nil)
+        let url = vault.url.appendingPathComponent(path)
+        let first = try String(contentsOf: url, encoding: .utf8)
+
+        let bank = "ink-" + TaskExtractor.key("drive/Paper/Plan.pdf", "Call the bank")
+        XCTAssertTrue(first.contains("- [ ] Call the bank ^\(bank)\n"), first)
+        XCTAssertTrue(first.contains("- [ ] Call the bank ^\(bank)-2"), "a repeat in the same note gets its own id")
+        XCTAssertTrue(first.contains("- [x] Paid rent ^ink-"))
+        XCTAssertTrue(first.contains("- [ ] renew passport ^ink-"))
+        XCTAssertTrue(first.contains("\nPlan\n"), "ordinary lines stay as written")
+
+        // Ticked in Obsidian, then the page changes on the tablet: the tick stays, and so do the ids.
+        try Data(first.replacingOccurrences(of: "- [ ] Call the bank ^\(bank)\n", with: "- [x] Call the bank ^\(bank)\n").utf8).write(to: url)
+        _ = try destination.upsert(note("Plan\n☐ Call the bank\n☑ Paid rent\nTODO renew passport\n☐ Call the bank\nmore ink"), previous: nil)
+        let second = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(second.contains("- [x] Call the bank ^\(bank)\n"))
+        XCTAssertTrue(second.contains("- [ ] Call the bank ^\(bank)-2"))
+        XCTAssertTrue(second.contains("more ink"))
+    }
 }

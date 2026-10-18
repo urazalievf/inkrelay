@@ -96,14 +96,88 @@ final class LicensingTests: XCTestCase {
         XCTAssertFalse(store.current(now: later).isPro, "an expired license falls back to the trial or free")
     }
 
+    func testAnExpiryDateCoversThatWholeDayWhereverThePersonIs() throws {
+        let license = License(name: "Ada", email: "a@x", issuedAt: now, expiresOn: "2027-12-31")
+        for zone in ["America/Chicago", "Asia/Tokyo", "Pacific/Kiritimati", "Pacific/Pago_Pago"] {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: zone)!
+            let lastMinute = calendar.date(from: DateComponents(year: 2027, month: 12, day: 31, hour: 23, minute: 59))!
+            let nextMorning = calendar.date(from: DateComponents(year: 2028, month: 1, day: 1, hour: 0, minute: 1))!
+            XCTAssertTrue(license.isValid(at: lastMinute, calendar: calendar), zone)
+            XCTAssertFalse(license.isValid(at: nextMorning, calendar: calendar), zone)
+            XCTAssertTrue(license.expiryText(calendar: calendar)?.contains("31") == true, "shows the stated day in \(zone)")
+        }
+        let signed = try LicenseKey.sign(license, with: signingKey)
+        let decoded = try LicenseKey.verify(signed, publicKey: signingKey.publicKey)
+        XCTAssertEqual(decoded.expiresOn, "2027-12-31")
+        XCTAssertTrue(decoded.expires)
+        XCTAssertFalse(License(name: "B", email: "b@x", issuedAt: now).expires)
+    }
+
     func testProFeaturesAreNamedForPeople() {
         let config = RelayConfig(
             sources: [SourceConfig(id: "drive", device: "Tablet", path: "/tmp/x", recognizer: .claude)],
             destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v")), .notion(.init(id: "notion", parentPageId: "p")), .reviewStack(.init(id: "review"))],
             viwoodsCloud: ViwoodsCloudConfig()
         )
-        XCTAssertEqual(ProFeatures.used(in: config), ["Viwoods Cloud", "AI transcription", "notion", "review stack"])
+        XCTAssertEqual(ProFeatures.used(in: config), ["Viwoods Cloud", "AI transcription", "Notion", "review stack"], "destinations by kind, not id")
         XCTAssertFalse(ProFeatures.isPro(.appleCalendar(.init(id: "cal"))))
+    }
+
+    func testTheOutlookSaysWhatStopsOrThatNothingDoes() throws {
+        let freeOnly = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: "/tmp/x")], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v"))])
+        let withPro = RelayConfig(sources: [], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v")), .reviewStack(.init(id: "review"))], viwoodsCloud: ViwoodsCloudConfig())
+        let trial = Entitlement(plan: .pro, basis: .trial(endsAt: now))
+        XCTAssertEqual(ProFeatures.outlook(for: freeOnly, entitlement: trial), "Everything you use is in Free; nothing stops when the trial ends.")
+        XCTAssertEqual(ProFeatures.outlook(for: withPro, entitlement: trial), "After the trial: Viwoods Cloud, review stack pause.")
+        XCTAssertEqual(ProFeatures.outlook(for: withPro, entitlement: Entitlement(plan: .free, basis: .trialEnded(now))), "Paused: Viwoods Cloud, review stack.")
+        XCTAssertNil(ProFeatures.outlook(for: freeOnly, entitlement: Entitlement(plan: .free, basis: .trialEnded(now))))
+        let licensed = Entitlement(plan: .pro, basis: .license(License(name: "Ada", email: "a@x", issuedAt: now)))
+        XCTAssertNil(ProFeatures.outlook(for: withPro, entitlement: licensed))
+    }
+
+    func testAKeyOnFileThatDoesntCountSaysWhy() throws {
+        let store = store
+        XCTAssertNil(store.licenseProblem(now: now), "no file, no problem")
+        try store.enter(try key(expires: nil), now: now)
+        XCTAssertNil(store.licenseProblem(now: now))
+        try Data(#"{"key":"INK1.broken.key"}"#.utf8).write(to: folder.url.appendingPathComponent("license.json"))
+        XCTAssertNotNil(store.licenseProblem(now: now))
+    }
+
+    func testARejectedKeySaysWhyEverywhere() throws {
+        let store = store
+        _ = store.trialStart(now: now)
+        let later = Calendar.current.date(byAdding: .day, value: 30, to: now)!
+        let licenseURL = folder.url.appendingPathComponent("license.json")
+
+        // Expired.
+        try store.enter(try key(expires: nil), now: now)
+        let expiring = try LicenseKey.sign(License(id: "e", name: "Ada", email: "a@x", issuedAt: now, expiresOn: "2026-01-01"), with: signingKey)
+        try JSONEncoder().encode(EntitlementStore.LicenseFile(key: expiring)).write(to: licenseURL)
+        let expired = store.current(now: later)
+        XCTAssertFalse(expired.isPro)
+        XCTAssertTrue(expired.rejection?.contains("expired on") == true, expired.rejection ?? "")
+        XCTAssertTrue(expired.summary(now: later).hasPrefix("Free; the key on file wasn't accepted"))
+
+        // Changed by hand.
+        var parts = try key().split(separator: ".").map(String.init)
+        parts[1] = LicenseKey.base64URL(Data(#"{"name":"Mallory"}"#.utf8))
+        try JSONEncoder().encode(EntitlementStore.LicenseFile(key: parts.joined(separator: "."))).write(to: licenseURL)
+        XCTAssertEqual(store.current(now: later).rejection, LicenseError.badSignature.errorDescription)
+
+        // Not JSON at all.
+        try Data("garbage".utf8).write(to: licenseURL)
+        XCTAssertTrue(store.current(now: later).rejection?.contains("can't be read") == true)
+
+        // A rejected key during the trial keeps the trial and its end date.
+        let during = store.current(now: now.addingTimeInterval(3600))
+        XCTAssertTrue(during.isPro)
+        XCTAssertNotNil(during.rejection)
+        XCTAssertEqual(during.trialDaysLeft(now: now.addingTimeInterval(3600)), 14)
+
+        let doctor = Doctor(config: RelayConfig(sources: [SourceConfig(id: "d", device: "d", path: folder.url.path)], destinations: [.obsidian(.init(id: "v", vaultPath: folder.url.path))]), supportDirectory: folder.url).planCheck()
+        XCTAssertEqual(doctor.status, .problem)
     }
 
     func testTheBundledPublicKeyIsSetBeforeRelease() throws {

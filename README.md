@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.9.0.2: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.10.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -101,15 +101,23 @@ When the trial ends without a license, the Pro parts pause: each sync says so in
 
 Supernote can sync its Note folder to Dropbox, Google Drive or OneDrive by itself (Settings → Sync), but it syncs the notebooks in its own `.note` format, not PDFs. InkRelay reads those directly: add `"note"` to the source's `fileTypes` (setup does it when you pick Supernote) and point the source at that folder. Each notebook is turned into a PDF, page by page with all its visible layers, before recognition, so every destination gets the pages as you see them on the device. `inkrelay convert notebook.note notebook.pdf` does the same for one file.
 
+Supernote's sync folder also holds `Document` (books and PDFs you annotate), `EXPORT`, `INBOX`, `SCREENSHOT` and `MyStyle`. A source made by setup for a Supernote leaves those out with `"exclude"`, and setup suggests the `Note` folder itself when it exists. Any source can take `"exclude": ["Folder", "Other/Sub"]` to leave folders out, or `"folders": ["Note"]` to read only those; excluding a folder later never deletes the notes already made from it. `inkrelay doctor` warns when a source picks up exports under `Document` or `EXPORT`.
+
 Password-protected notebooks and the oldest A5 format (before firmware C.053) aren't supported.
 
 ## Kindle Scribe
 
-A Kindle Scribe shares a notebook by email: Share → Send to email sends a PDF (attached, or as a download link) from Amazon. With a `kindleMail` section in the config (setup adds it when you pick the Scribe), InkRelay asks Mail every 15 minutes for recent messages from Amazon that mention Kindle, saves each notebook's PDF into its own cache, and relays it like any other export. It reads nothing else, remembers which messages it has handled, and only follows links that turn out to be PDFs. macOS asks once to let InkRelay read Mail.
+A Kindle Scribe shares a notebook by email: Share → Send to email sends a PDF (attached, or as a download link) from Amazon. With a `kindleMail` section in the config (setup adds it when you pick the Scribe), InkRelay asks Mail every 15 minutes for recent messages from Amazon that mention Kindle, saves each notebook's PDF into its own cache, and relays it like any other export. It reads nothing else and remembers which messages it has handled. Only mail sent from an address at one of `senderDomains` counts (a display name proves nothing), only https links on `linkDomains` are followed, a redirect off those hosts doesn't count, a link must turn out to be a PDF, and anything over 100 MB is refused before it downloads. A Kindle-looking email from another domain, or a link to another host, is named in the sync report once, so a real one is easy to add. macOS asks once to let InkRelay read Mail.
 
 ```json
-"kindleMail": { "sender": "amazon", "lookbackDays": 14, "checkEveryMinutes": 15 }
+"kindleMail": {
+  "lookbackDays": 14, "checkEveryMinutes": 15,
+  "senderDomains": ["amazon.com", "kindle.com"],
+  "linkDomains": ["amazon.com", "amazonaws.com", "kindle.com", "a2z.com"]
+}
 ```
+
+These defaults haven't been checked against a real share email from every Amazon store yet; if yours comes from `amazon.co.uk` or links to another Amazon host, the sync report says what to add.
 
 ## Viwoods Cloud
 
@@ -136,10 +144,24 @@ The cloud is checked on every sync and, under `watch`, every `rescanIntervalSeco
 
 ## Obsidian
 
-Each export becomes `<vault>/Ink/<source>/<folder>/<title>.md` with the PDF beside it. Two extras, off unless you turn them on (Settings… in the app, or the config):
+Each export becomes `<vault>/Ink/<source>/<folder>/<title>.md` with the PDF beside it. Tasks written on the tablet (`☐ …`, `[ ] …`, `TODO …`) become Obsidian checkboxes, each with a block id (`^ink-…`) that stays the same across syncs, so the Tasks plugin and Dataview see them and links can point at them. Tick one in Obsidian and it stays ticked when the page syncs again.
+
+Two extras, off unless you turn them on (Settings… in the app, or the config):
 
 - `"dailyNotes": true` keeps a block in your daily note, in the folder and date format Obsidian's Daily Notes plugin is set to, with the planner page for that day, the notes you wrote that day and the open tasks found in them. The block sits between `%% inkrelay:daily:start %%` and `%% inkrelay:daily:end %%`; everything else in the daily note is yours.
 - `"weeklyDigest": true` keeps `Ink/Weekly/<year>-W<week>.md`: the week's notes with page counts, its planner days, and every open task, rebuilt whenever a note from that week syncs.
+
+In both, open tasks are links to the checkbox in their own note (`[[note#^ink-…|Call the bank]]`), not second checkboxes, so each task exists once.
+
+## Planner pages from any tablet
+
+A page named by date in a source's planner folder is a planner page, whatever tablet wrote it: it goes to Apple, Google or Outlook Calendar as "Daily plan" for that day, its review card is titled by the day, its tasks get that day as their due date, and it lands in that day's Obsidian daily note. The folder is `Daily` by default, which is how the Viwoods Cloud cache is laid out; for a Supernote, reMarkable or Boox planner notebook, name its folder:
+
+```json
+{ "id": "supernote", "path": "~/Dropbox/Supernote/Note", "fileTypes": ["note"], "planner": { "folders": ["Planner"] } }
+```
+
+Names like `2026-10-17`, `20261017`, `2026_10_17`, `2026.10.17`, `17 Oct 2026`, `Oct 17, 2026` and `October 17th 2026` are read anywhere in the file name ("Planner 2026-10-17" works). Day-month-year in numbers is ambiguous, so `17.10.2026` is read only with `"dateFormat": "dd.MM.yyyy"`. Setup asks for the planner folder for tablets other than Viwoods, and turns Apple Calendar on by default only when there is one.
 
 ## Apple Calendar
 
@@ -182,7 +204,7 @@ Add a `reviewStack` destination and every page InkRelay relays becomes a card. W
 - Empty pages get no card.
 - `"shareWithPhone": true` puts the stack in the iPhone and iPad app too (see below). `setup` turns it on when you say you'll use InkRelay on a phone.
 
-The page listens on 127.0.0.1 only, refuses requests whose Host isn't local, and actions need a custom header, so other websites can't read or change your stack. Cards and their images live in `review/` next to the config.
+The page listens on 127.0.0.1 only and refuses requests whose Host isn't local. Every launch makes a new key, handed to the page in its address's `#` fragment (which browsers never send) and required on every API call and page image, so neither other websites nor other apps or users on the Mac can read or change your stack; the page also refuses to be framed. Open it from the menu or with `inkrelay review open`, which carry the key. It's kept, owner-only, in `review/.key`. Cards and their images live in `review/` next to the config.
 
 ## Tasks, reminders and suggested events
 
@@ -275,7 +297,8 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 
 - **Notifications** (menu bar app): a problem that wasn't there before, such as an expired Viwoods sign-in or a denied permission, gets one notification, not one per sync. `notifications.newNotes` adds a short note when pages sync. `notifications.reviewReminder` (`"09:00"`) posts "N cards to review" once a day. All of it is in Settings… too.
 - **Updates**: the app looks for a newer release once a day and shows it in the menu; **Check for Updates…** does it now. `inkrelay update check` from the terminal. Nothing about your Mac is sent; it's one request to the release feed. A feed that can't be read says so rather than "up to date". `"checkForUpdates": false` turns it off.
-- **Bug reports**: **Export Diagnostics…** (or `inkrelay diagnostics`) writes one zip with versions, `doctor`'s checks, your config with every secret replaced, counts from the sync state and the last few hundred log lines. No note text, tokens or keys.
+- **Sync log**: the app writes every pass to `~/Library/Logs/InkRelay/inkrelay.log` (when, why, the summary, each warning and failure); **Open Logs** opens it. Every process that syncs also leaves the last pass in `last-sync.json` beside the config, which `inkrelay status` and the MCP server report.
+- **Bug reports**: **Export Diagnostics…** (or `inkrelay diagnostics [--apps]`) writes one zip with versions, `doctor`'s checks including sign-ins (and, from the app or with `--apps`, whether Notes, Calendar and Reminders allow InkRelay), why a config or state file didn't load, your config with every secret and address replaced, counts from the sync state, the last pass and the last few hundred log lines. The home folder, email addresses, cloud account names and the licensee's name are taken out. No note text, tokens or keys.
 
 ## iPhone and iPad
 

@@ -38,6 +38,8 @@ final class ProGatingTests: XCTestCase {
         XCTAssertEqual(report.warnings.count, 1)
         XCTAssertTrue(report.warnings[0].hasPrefix("Pro features paused since the trial ended"), report.warnings[0])
         XCTAssertTrue(report.warnings[0].contains("review stack"))
+        XCTAssertTrue(report.warnings[0].contains(LicensePublisher.purchaseText), "it says where a key comes from")
+        XCTAssertEqual(LicensePublisher.purchaseText, "hello@inkrelay.app")
     }
 
     func testEnteringALicenseLaterDeliversWhatWasPaused() throws {

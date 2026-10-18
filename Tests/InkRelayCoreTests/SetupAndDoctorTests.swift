@@ -168,4 +168,39 @@ final class SetupAndDoctorTests: XCTestCase {
         buggy.ignoreRecentlyDeleted = true
         XCTAssertEqual(NotesRoundTrip(runner: buggy).run().last?.status, .problem)
     }
+
+    func testDoctorExplainsSourcesThatFindNothingAndChecksTemplatesAndSendTargets() throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        try folder.write("pngs/a.png", "x")
+        try folder.write("pngs/b.png", "x")
+        try folder.write("pngs/c.note", "x")
+        try FileManager.default.createDirectory(at: folder.url.appendingPathComponent("empty"), withIntermediateDirectories: true)
+        let notAFolder = try folder.write("file.txt", "x")
+        var templated = SourceConfig(id: "templated", device: "d", path: folder.url.appendingPathComponent("pngs").path, fileTypes: ["png"])
+        templated.template = folder.url.appendingPathComponent("missing-template.png").path
+        let config = RelayConfig(
+            sources: [
+                SourceConfig(id: "wrong-types", device: "d", path: folder.url.appendingPathComponent("pngs").path),
+                SourceConfig(id: "empty", device: "d", path: folder.url.appendingPathComponent("empty").path),
+                SourceConfig(id: "file", device: "d", path: notAFolder.path),
+                templated,
+            ],
+            destinations: [.obsidian(.init(id: "vault", vaultPath: folder.url.path))],
+            sendTargets: [.folder(id: "later", path: folder.url.appendingPathComponent("not-yet").path), .folder(id: "here", path: folder.url.path)]
+        )
+
+        let checks = Doctor(config: config, supportDirectory: folder.url).checks(includeApps: false, accounts: false)
+        func check(_ title: String) -> DoctorCheck? { checks.first { $0.title == title } }
+
+        let wrong = try XCTUnwrap(check("Source wrong-types"))
+        XCTAssertEqual(wrong.status, .warning)
+        XCTAssertTrue(wrong.detail.contains("2 .png") && wrong.detail.contains("1 .note") && wrong.detail.contains("reads pdf"), wrong.detail)
+        XCTAssertTrue(try XCTUnwrap(check("Source empty")).detail.contains("Available offline"))
+        XCTAssertEqual(check("Source file")?.status, .problem, "a path that isn't a folder is a problem, not a green zero")
+        XCTAssertEqual(check("Source templated")?.status, .ok)
+        XCTAssertEqual(check("Template for templated")?.status, .problem)
+        XCTAssertEqual(check("Send target later")?.status, .warning)
+        XCTAssertEqual(check("Send target here")?.status, .ok)
+    }
 }

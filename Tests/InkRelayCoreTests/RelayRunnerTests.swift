@@ -100,4 +100,24 @@ final class RelayRunnerTests: XCTestCase {
         XCTAssertEqual(recent.map(\.title), ["B", "A"], "newest first, missing exports left out")
         XCTAssertEqual(recent.last?.openURL?.absoluteString, "obsidian://open?path=/Vault/Ink/s/Paper/A.md")
     }
+
+    func testEachPassIsLoggedAndRememberedBesideTheState() throws {
+        let logURL = folder.url.appendingPathComponent("logs/inkrelay.log")
+        let configURL = folder.url.appendingPathComponent("support/config.json")
+        try ConfigStore.save(try config(), to: configURL)
+        let runner = RelayRunner(configURL: configURL, startsReviewServer: false, log: SyncLog(url: logURL)) { [unowned self] config, stateURL in
+            RelayEngine(config: config, store: try StateStore(url: stateURL), recognizer: FakeRecognizer(), destinations: [self.destination])
+        }
+        runner.start()
+        runner.waitUntilIdle()
+        runner.stop()
+
+        let log = try String(contentsOf: logURL, encoding: .utf8)
+        XCTAssertTrue(log.contains("Synced (startup):"), log)
+        XCTAssertTrue(log.contains("1 synced"))
+        // The watcher may add a second pass for the file written before it started, so the last one says 0 or 1.
+        let last = try XCTUnwrap(LastSync.load(besideState: runner.stateURL))
+        XCTAssertEqual(last.scanned, 1)
+        XCTAssertEqual(last.failed, 0)
+    }
 }

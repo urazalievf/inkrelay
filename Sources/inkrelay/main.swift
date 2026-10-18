@@ -26,7 +26,7 @@ Usage:
   inkrelay license enter KEY        Save a Pro license key
   inkrelay license remove           Go back to the free plan (or the trial)
   inkrelay update check             Look for a newer InkRelay
-  inkrelay diagnostics [PATH]       Write a zip for a bug report (no secrets, no note text)
+  inkrelay diagnostics [PATH] [--apps]  Write a zip for a bug report (no secrets, no note text); --apps also checks Notes, Calendar, Reminders
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
   inkrelay convert NOTE PDF          Turn a Supernote .note notebook into a PDF
   inkrelay mcp                      Serve InkRelay to AI assistants over MCP (stdio)
@@ -143,7 +143,14 @@ case "setup":
         if let chosen = pick("Where does the tablet export to?", labels, allowOther: "Another folder", allowNone: choices.useViwoodsCloud || choices.kindleMail ? "No export folder" : nil) {
             if chosen < clouds.count {
                 let base = detector.tilde(clouds[chosen].url)
-                choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: base + "/" + tablet.name.split(separator: " ").first!)
+                var suggestion = base + "/" + tablet.name.split(separator: " ").first!
+                // Supernote syncs a whole tree; its notebooks are in Note.
+                if tablet.name == "Supernote", FileManager.default.fileExists(atPath: (suggestion as NSString).expandingTildeInPath + "/Note") { suggestion += "/Note" }
+                choices.exportFolder = ask("Folder inside it (the tablet's export folder):", default: suggestion)
+                if !tablet.hasCloudSource {
+                    let planner = ask("Folder inside that holds day-planner pages named by date (such as Planner), or Return for none:")
+                    if !planner.isEmpty { choices.plannerFolder = planner }
+                }
             } else {
                 choices.exportFolder = ask("Folder path:")
             }
@@ -161,7 +168,8 @@ case "setup":
         }
         choices.appleNotesAccount = .some(account)
     }
-    choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource)
+    // A calendar only helps when there's a planner: Viwoods Cloud's, or a planner folder named above.
+    choices.appleCalendar = yes("Put planner pages and to-dos in Apple Calendar?", default: tablet.hasCloudSource || choices.plannerFolder != nil)
     choices.appleReminders = yes("Turn written tasks (☐, [ ], TODO) into Apple Reminders?", default: true)
     choices.reviewStack = yes("Keep a read-later review stack of new pages?", default: true)
     if choices.appleNotesAccount != nil, SharedLedger.iCloudDriveFolder != nil {
@@ -257,7 +265,7 @@ case "watch":
         let calendars = DestinationFactory.eventWriters(in: DestinationFactory.make(config.destinations, context: context))
         let server = ReviewServer(store: ReviewStore(directory: context.reviewDirectory), config: stack, calendars: calendars)
         do {
-            log("Review stack at \(try server.start())")
+            log("Review stack at \(try server.start().withoutFragment)")
             reviewServer = server
         } catch {
             log("Review stack unavailable: \(error.localizedDescription)")
@@ -292,8 +300,13 @@ case "watch":
 
 case "status":
     let config = loadConfig()
-    let state = (try? StateStore(url: stateURL))?.state ?? SyncState()
+    let readable = StateStore.readable(at: stateURL)
+    let state = (try? readable.get()) ?? SyncState()
     print("Config: \(configURL.path)")
+    if case .failure(let error) = readable { print("! state.json can't be read: \(error.localizedDescription). Every sync fails until it's fixed or deleted (deleting re-sends everything).") }
+    if let last = LastSync.load(besideState: stateURL) {
+        print("Last sync: \(last.at.formatted(date: .abbreviated, time: .shortened)) — \(last.summary)")
+    }
     print("Sources:")
     for source in config.allSources {
         let exists = FileManager.default.fileExists(atPath: source.url.path)
@@ -571,16 +584,17 @@ case "review":
         do {
             url = try server.start()
         } catch {
-            // `inkrelay watch` may already be serving it on the configured port.
+            // `inkrelay watch` or the app may already be serving it on the configured port, with its own key.
             let running = URL(string: "http://127.0.0.1:\(stack.port)")!
             if subcommand == "open" {
-                print("The stack is already being served at \(running.absoluteString) (by `inkrelay watch`?). Opening it.")
-                openInBrowser(running)
+                print("The stack is already being served at \(running.absoluteString) (by `inkrelay watch` or the app). Opening it.")
+                let key = (try? String(contentsOf: ReviewServer.keyURL(in: store), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                openInBrowser(ReviewServer.pageURL(base: running, key: key))
                 exit(0)
             }
             fail(error.localizedDescription)
         }
-        print("Review stack at \(url.absoluteString). Press Ctrl-C to stop.")
+        print("Review stack at \(url.withoutFragment.absoluteString). Press Ctrl-C to stop.")
         if subcommand == "open" { openInBrowser(url) }
         withExtendedLifetime(server) { dispatchMain() }
 
@@ -595,7 +609,7 @@ case "license":
         guard arguments.count >= 2 else { fail("Usage: inkrelay license enter INK1.…") }
         do {
             let license = try store.enter(arguments.dropFirst().joined())
-            print("Thanks, \(license.name). InkRelay is Pro on this Mac" + (license.expiresAt.map { " until \($0.formatted(date: .long, time: .omitted))" } ?? "") + ".")
+            print("Thanks, \(license.name). InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + ".")
         } catch {
             fail(error.localizedDescription)
         }
@@ -605,10 +619,9 @@ case "license":
     case nil, "status":
         let entitlement = store.current()
         print(entitlement.summary())
-        if !entitlement.isPro, let config = try? ConfigStore.load(from: configURL) {
-            let used = ProFeatures.used(in: config)
-            if !used.isEmpty { print("Paused until a license is entered: \(used.joined(separator: ", ")).") }
-        }
+        if let outlook = ProFeatures.outlook(for: try? ConfigStore.load(from: configURL), entitlement: entitlement) { print(outlook) }
+        if case .license = entitlement.basis {} else { print("Buy a license at \(LicensePublisher.purchaseText), then: inkrelay license enter INK1.…") }
+        if let problem = store.licenseProblem() { print("The key on file wasn't accepted: \(problem)") }
     default:
         fail("Usage: inkrelay license [enter KEY | remove]")
     }
@@ -643,9 +656,10 @@ case "update":
 
 case "diagnostics":
     let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay", isDirectory: true)
-    let target = arguments.first.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+    let includeApps = arguments.contains("--apps")
+    let target = arguments.first(where: { !$0.hasPrefix("--") }).map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
         ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").appendingPathComponent(Diagnostics.suggestedName())
-    let data = Diagnostics.bundle(configURL: configURL, supportDirectory: supportDirectory, logDirectory: logs)
+    let data = Diagnostics.bundle(configURL: configURL, supportDirectory: supportDirectory, logDirectory: logs, includeApps: includeApps)
     do {
         try data.write(to: target, options: .atomic)
         print("Wrote \(target.path) (\(data.count / 1024) KB). It holds versions, doctor's checks, the config without secrets, state counts and recent logs; no note text, tokens or keys.")

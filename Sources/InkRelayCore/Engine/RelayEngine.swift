@@ -76,10 +76,18 @@ public final class RelayEngine {
         guard !entitlement.isPro else { return nil }
         let parts = ProFeatures.used(in: config)
         guard !parts.isEmpty else { return nil }
+        if let rejection = entitlement.rejection {
+            return "\(Self.pausedPrefix): \(parts.joined(separator: ", ")). The key on file wasn't accepted (\(rejection)); enter a new one with `inkrelay license enter KEY` or remove it with `inkrelay license remove`. Nothing is lost."
+        }
         let when: String
         if case .trialEnded(let date) = entitlement.basis { when = " since the trial ended \(date.formatted(date: .abbreviated, time: .omitted))" } else { when = "" }
-        return "Pro features paused\(when): \(parts.joined(separator: ", ")). Enter a license with `inkrelay license enter KEY` or in the InkRelay menu; nothing is lost, syncing resumes from here."
+        return "\(Self.pausedPrefix)\(when): \(parts.joined(separator: ", ")). Buy a license at \(LicensePublisher.purchaseText), then enter it in the InkRelay menu or with `inkrelay license enter KEY`; nothing is lost, syncing resumes from here."
     }
+
+    /// The start of the paused notice, so the app can show it as a panel rather than a problem.
+    public static let pausedPrefix = "Pro features paused"
+
+    public static func isPausedNotice(_ line: String) -> Bool { line.hasPrefix(pausedPrefix) }
 
     /// The production wiring: Vision for recognition, the destinations named in the config,
     /// and the Viwoods Cloud puller when the config has a `viwoodsCloud` section.
@@ -146,7 +154,9 @@ public final class RelayEngine {
         }
         try? store.reload()
         refreshEntitlement()
-        return pass()
+        let report = pass()
+        LastSync(report: report, at: now()).save(besideState: store.url)
+        return report
     }
 
     private func pass() -> SyncReport {
@@ -172,7 +182,10 @@ public final class RelayEngine {
                 continue
             }
             let present = Set(files.map { SyncState.key(sourceID: source.id, relativePath: $0.relativePath) })
-            let missing = store.keys(forSource: source.id).filter { !present.contains($0) }
+            // Exports in a folder the source now leaves out stay tracked, so excluding a folder never deletes notes.
+            let missing = store.keys(forSource: source.id).filter { key in
+                !present.contains(key) && source.includes(String(key.dropFirst(source.id.count + 1)))
+            }
             // A tracked export that vanished while an identical one appeared elsewhere was renamed or moved.
             var renameCandidates: [String: String] = [:]
             for key in missing {
@@ -260,10 +273,12 @@ public final class RelayEngine {
                     let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
                     let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: file.url, key: key, cache: convertedDirectory) : nil
                     let forReading = inkOnlyURL(for: file, source: source) ?? supernoteInk ?? readable
+                    let title = file.url.deletingPathExtension().lastPathComponent
                     try notes.upsert(InkNote(
-                        title: file.url.deletingPathExtension().lastPathComponent, sourceID: source.id, device: source.device,
+                        title: title, sourceID: source.id, device: source.device,
                         originalURL: readable, relativePath: file.relativePath, modified: file.modified, contentHash: hash,
-                        pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source)
+                        pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source),
+                        plannerDate: source.plannerDate(relativePath: file.relativePath, title: title)
                     ), key: key, at: now())
                 }
                 report.unchanged += 1
@@ -284,7 +299,8 @@ public final class RelayEngine {
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source)
+                pages: try recognizePages(of: forReading, relativePath: file.relativePath, source: source),
+                plannerDate: source.plannerDate(relativePath: file.relativePath, title: file.url.deletingPathExtension().lastPathComponent)
             )
 
             if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {

@@ -26,7 +26,7 @@ final class BarModel: ObservableObject {
     }
 
     init(configURL: URL? = nil) {
-        runner = RelayRunner(configURL: configURL ?? Self.launchConfigURL)
+        runner = RelayRunner(configURL: configURL ?? Self.launchConfigURL, log: SyncLog())
         runner.onChange = { [weak self] snapshot in
             Task { @MainActor in self?.take(snapshot) }
         }
@@ -48,7 +48,8 @@ final class BarModel: ObservableObject {
     /// Asked once; the menu's "Open at login" changes it later.
     func askToOpenAtLoginOnce() {
         let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: "askedOpenAtLogin"), !launchAtLogin, !needsSetup,
+        // The config on disk, not the snapshot, which lags a fresh save by a moment.
+        guard !defaults.bool(forKey: "askedOpenAtLogin"), !launchAtLogin, config != nil,
               Bundle.main.bundlePath.hasPrefix("/Applications/") else { return }
         defaults.set(true, forKey: "askedOpenAtLogin")
         let alert = NSAlert()
@@ -66,16 +67,39 @@ final class BarModel: ObservableObject {
     private func take(_ fresh: RelayRunner.Snapshot) {
         let previous = snapshot
         snapshot = fresh
+        let config = self.config
         let settings = config?.notifications ?? NotificationsConfig()
-        if settings.problems, fresh.problems != previous.problems {
-            Notifier.shared.problems(fresh.problems)
+        // The paused notice gets its own panel and its own notifications, so it isn't a "needs you" problem.
+        let problems = fresh.problems.filter { !RelayEngine.isPausedNotice($0) }
+        if settings.problems, problems != previous.problems.filter({ !RelayEngine.isPausedNotice($0) }) {
+            Notifier.shared.problems(problems)
         }
         if settings.newNotes, fresh.lastSync != previous.lastSync, fresh.lastSynced > 0 {
             Notifier.shared.newNotes(Array(fresh.recent.prefix(fresh.lastSynced).map(\.title)))
         }
+        let plan = entitlement
         if let time = settings.reminderTime, fresh.lastSync != previous.lastSync {
-            Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: fresh.reviewDue)
+            // While the review stack is paused nothing new reaches it, so there's nothing to be reminded of.
+            let stackPaused = !plan.isPro && config?.destinations.contains { if case .reviewStack = $0 { return true } else { return false } } == true
+            Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: stackPaused ? 0 : fresh.reviewDue)
         }
+        if fresh.lastSync != previous.lastSync, let config {
+            Notifier.shared.trial(daysLeft: plan.trialDaysLeft(), endedOn: plan.isPro ? nil : plan.trialEndedOn, parts: ProFeatures.used(in: config))
+        }
+    }
+
+    /// The panel shown while Pro parts are paused: what's paused and why, or nil.
+    var pausedPanel: String? {
+        let plan = entitlement
+        guard !plan.isPro, let config else { return nil }
+        let parts = ProFeatures.used(in: config)
+        guard !parts.isEmpty else { return nil }
+        let list = parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
+        if let rejection = plan.rejection {
+            return "Your license key wasn't accepted (\(rejection)). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe."
+        }
+        let when = plan.trialEndedOn.map { " ended \($0.formatted(date: .abbreviated, time: .omitted))" } ?? " is over"
+        return "Your Pro trial\(when). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe and syncing resumes where it stopped."
     }
 
     var config: RelayConfig? { try? ConfigStore.load(from: runner.configURL) }
@@ -86,18 +110,27 @@ final class BarModel: ObservableObject {
     var entitlement: Entitlement { EntitlementStore(supportDirectory: supportDirectory).current() }
 
     /// Asks for a key in a sheet-less alert, saves it, and restarts the engine so paused parts resume now.
-    func enterLicense() {
+    func enterLicense(prefill: String = "", problem: String? = nil) {
         let alert = NSAlert()
         alert.messageText = "Enter your InkRelay Pro license"
-        alert.informativeText = "Paste the key from your purchase email. It starts with INK1."
+        alert.informativeText = (problem.map { $0 + "\n\n" } ?? "") + "Paste the key from your purchase email. It starts with INK1."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
         field.placeholderString = "INK1.…"
+        field.stringValue = prefill
         alert.accessoryView = field
         alert.addButton(withTitle: "Enter")
         alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Buy Pro…")
         NSApp.activate(ignoringOtherApps: true)
         alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: break
+        case .alertThirdButtonReturn:
+            buyPro()
+            return
+        default:
+            return
+        }
         do {
             let license = try EntitlementStore(supportDirectory: supportDirectory).enter(field.stringValue)
             objectWillChange.send()
@@ -105,11 +138,27 @@ final class BarModel: ObservableObject {
             if !agentRunning { runner.syncNow() }
             let thanks = NSAlert()
             thanks.messageText = "Thanks, \(license.name)."
-            thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiresAt.map { " until \($0.formatted(date: .long, time: .omitted))" } ?? "") + "."
+            thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + "."
             thanks.runModal()
         } catch {
-            let failed = NSAlert(error: error)
-            failed.runModal()
+            // Back to the same alert with the pasted text, so a typo isn't a start-over.
+            enterLicense(prefill: field.stringValue, problem: error.localizedDescription)
+        }
+    }
+
+    func buyPro() {
+        NSWorkspace.shared.open(LicensePublisher.purchaseURL)
+    }
+
+    /// One line under the plan: what stops when the trial ends, or that nothing does.
+    var planOutlook: String? { ProFeatures.outlook(for: config, entitlement: entitlement) }
+
+    /// The Enter License button matters only when something the config uses needs Pro, or the trial is over.
+    var offersLicense: Bool {
+        switch entitlement.basis {
+        case .license: return false
+        case .trial: return !(config.map(ProFeatures.used(in:)) ?? []).isEmpty
+        case .trialEnded, .none: return true
         }
     }
 
@@ -173,7 +222,7 @@ final class BarModel: ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay", isDirectory: true)
-        let data = Diagnostics.bundle(configURL: runner.configURL, supportDirectory: supportDirectory, logDirectory: logs)
+        let data = Diagnostics.bundle(configURL: runner.configURL, supportDirectory: supportDirectory, logDirectory: logs, includeApps: true)
         do {
             try data.write(to: url, options: .atomic)
             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -273,8 +322,8 @@ final class BarModel: ObservableObject {
     }
 
     func openLog() {
-        let log = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay")
-        NSWorkspace.shared.open(log)
+        let log = SyncLog.defaultURL
+        NSWorkspace.shared.open(FileManager.default.fileExists(atPath: log.path) ? log : log.deletingLastPathComponent())
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {

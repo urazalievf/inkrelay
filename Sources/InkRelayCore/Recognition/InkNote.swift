@@ -12,6 +12,8 @@ public struct InkNote: Equatable {
     public var modified: Date
     public var contentHash: String
     public var pages: [RecognizedPage]
+    /// `yyyy-MM-dd` when this is a day-planner page, as the source's `planner` settings read it from the name.
+    public var plannerDate: String?
 
     public init(
         title: String,
@@ -21,7 +23,8 @@ public struct InkNote: Equatable {
         relativePath: String,
         modified: Date,
         contentHash: String,
-        pages: [RecognizedPage]
+        pages: [RecognizedPage],
+        plannerDate: String? = nil
     ) {
         self.title = title
         self.sourceID = sourceID
@@ -31,6 +34,7 @@ public struct InkNote: Equatable {
         self.modified = modified
         self.contentHash = contentHash
         self.pages = pages
+        self.plannerDate = plannerDate
     }
 }
 

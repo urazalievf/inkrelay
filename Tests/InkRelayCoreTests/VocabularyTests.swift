@@ -24,6 +24,12 @@ final class VocabularyTests: XCTestCase {
         XCTAssertEqual(VocabularyLearner.newWords(edited: original, original: original), [])
     }
 
+    func testCheckboxesAndBlockIdsAreNeverLearned() {
+        let original = "☐ Call the bank"
+        let edited = "- [ ] Call the bank ^ink-0a1b2c3d4e5f6a7b\n- [x] Call the bank ^ink-0a1b2c3d4e5f6a7b-2"
+        XCTAssertEqual(VocabularyLearner.newWords(edited: edited, original: original), [])
+    }
+
     func testManagedTextIsTheBlockBetweenTheMarkers() {
         let markdown = "mine\n" + MarkdownRenderer.startMarker + "\n# T\n\nhello\n" + MarkdownRenderer.endMarker + "\nalso mine\n"
         XCTAssertEqual(VocabularyLearner.managedText(of: markdown), "\n# T\n\nhello\n")

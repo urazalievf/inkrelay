@@ -95,10 +95,17 @@ public enum VocabularyLearner {
 
     /// Headings, embeds and InkRelay's own lines, which aren't the person's words.
     static func stripFurniture(_ text: String) -> String {
-        text.split(separator: "\n", omittingEmptySubsequences: false)
+        let blockID = try! NSRegularExpression(pattern: #"\s\^[A-Za-z0-9-]+\s*$"#)
+        return text.split(separator: "\n", omittingEmptySubsequences: false)
             .filter { line in
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 return !(trimmed.hasPrefix("#") || trimmed.hasPrefix("![[") || trimmed.hasPrefix("%%") || trimmed.hasPrefix("_No text"))
+            }
+            .map { line -> String in
+                // A checkbox's block id (^ink-…) and its "- [ ]" are InkRelay's, not the person's words.
+                var line = String(line)
+                line = blockID.stringByReplacingMatches(in: line, range: NSRange(line.startIndex..., in: line), withTemplate: "")
+                return line
             }
             .joined(separator: "\n")
     }
