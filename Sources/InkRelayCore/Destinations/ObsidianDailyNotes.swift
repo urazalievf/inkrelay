@@ -210,10 +210,7 @@ struct InkDigest {
             }
             lines.append("")
         }
-        let tasks = entries.flatMap { item in
-            TaskExtractor.tasks(in: item.note.text, itemKey: item.note.key, plannerDate: item.plannerDate).filter { !$0.isDone }
-                .map { "- [ ] \($0.text) ([[\(item.link)|\(item.note.title)]])" }
-        }
+        let tasks = entries.flatMap(openTaskLinks)
         if !tasks.isEmpty {
             lines.append("**Open tasks**")
             lines += tasks
@@ -231,10 +228,7 @@ struct InkDigest {
         let written = entries.filter { !$0.isPlanner }
         let planners = entries.filter(\.isPlanner)
         let pages = entries.reduce(0) { $0 + $1.note.pages.count }
-        let tasks = entries.flatMap { item in
-            TaskExtractor.tasks(in: item.note.text, itemKey: item.note.key, plannerDate: item.plannerDate).filter { !$0.isDone }
-                .map { "- [ ] \($0.text) ([[\(item.link)|\(item.note.title)]])" }
-        }
+        let tasks = entries.flatMap(openTaskLinks)
         let dayFormatter = DateFormatter()
         dayFormatter.calendar = calendar
         dayFormatter.locale = Locale(identifier: "en_US_POSIX")
@@ -265,6 +259,13 @@ struct InkDigest {
         }
         lines.append(Self.weeklyEnd)
         return lines.joined(separator: "\n")
+    }
+
+    /// One link per open task, to the checkbox in its own note, so a task is never listed as a second checkbox.
+    func openTaskLinks(_ item: Entry) -> [String] {
+        TaskExtractor.tasksWithBlockIDs(in: item.note.text, itemKey: item.note.key, plannerDate: item.plannerDate)
+            .filter { !$0.task.isDone }
+            .map { "- [[\(item.link)#^\($0.blockID)|\($0.task.text)]] (\(item.note.title))" }
     }
 
     /// `2026-W42`, ISO week numbering, Monday first.

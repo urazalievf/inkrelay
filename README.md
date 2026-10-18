@@ -144,10 +144,14 @@ The cloud is checked on every sync and, under `watch`, every `rescanIntervalSeco
 
 ## Obsidian
 
-Each export becomes `<vault>/Ink/<source>/<folder>/<title>.md` with the PDF beside it. Two extras, off unless you turn them on (Settings… in the app, or the config):
+Each export becomes `<vault>/Ink/<source>/<folder>/<title>.md` with the PDF beside it. Tasks written on the tablet (`☐ …`, `[ ] …`, `TODO …`) become Obsidian checkboxes, each with a block id (`^ink-…`) that stays the same across syncs, so the Tasks plugin and Dataview see them and links can point at them. Tick one in Obsidian and it stays ticked when the page syncs again.
+
+Two extras, off unless you turn them on (Settings… in the app, or the config):
 
 - `"dailyNotes": true` keeps a block in your daily note, in the folder and date format Obsidian's Daily Notes plugin is set to, with the planner page for that day, the notes you wrote that day and the open tasks found in them. The block sits between `%% inkrelay:daily:start %%` and `%% inkrelay:daily:end %%`; everything else in the daily note is yours.
 - `"weeklyDigest": true` keeps `Ink/Weekly/<year>-W<week>.md`: the week's notes with page counts, its planner days, and every open task, rebuilt whenever a note from that week syncs.
+
+In both, open tasks are links to the checkbox in their own note (`[[note#^ink-…|Call the bank]]`), not second checkboxes, so each task exists once.
 
 ## Apple Calendar
 
