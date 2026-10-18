@@ -28,7 +28,12 @@ swift scripts/setup-releases.swift ~/Downloads/AuthKey_XXXXXXXXXX.p8 <issuer-id>
 
 The script checks the key, uses the "Developer ID Application" certificate in your keychain or creates one through the API (a fresh key pair, imported into the login keychain), exports it with a random password (macOS asks you to allow the export), stores the six repository secrets with `gh secret set`, and with `--tag` tags the current version and pushes the tag. Nothing is printed or written to the repository. `--dry-run` only checks the key.
 
-If Apple won't create the certificate through the API (only the Account Holder can make Developer ID certificates), make it in Xcode → Settings → Accounts → team DT9JP293AM → Manage Certificates → + → **Developer ID Application**, and run the script again.
+Apple never lets an API key create a Developer ID certificate, even an Admin one ("This operation can only be performed by the Account Holder"). Make it as the Account Holder instead, then run the script again:
+
+- on the website: Certificates → **+** → **Developer ID Application** → **G2 Sub-CA** → upload a signing request made with `openssl req -new -newkey rsa:2048 -nodes -keyout developer-id.key -out developer-id.csr -subj "/CN=Developer ID"`, download the `.cer`, and import it with its key into the login keychain; or
+- in Xcode → Settings → Accounts → team DT9JP293AM → Manage Certificates → + → **Developer ID Application**.
+
+For this repository that's done: the certificate expires November 17, 2027, and the six secrets are set.
 
 ### By hand
 
