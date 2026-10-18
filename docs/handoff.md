@@ -1,6 +1,6 @@
 # Handoff: where things stand
 
-As of October 17, 2026, evening CT. Version 0.8.0 is on branch `pro-grade` in draft pull request #55, waiting for the owner. 0.7.0 is on `main`. The plan this round follows is [plan-1.0.md](plan-1.0.md).
+As of October 17, 2026, late evening CT. 0.8.0 is on `main` (PR #55). Version 0.9.0 is on branch `reads-better` in a draft pull request, waiting for the owner. The plan both rounds follow is [plan-1.0.md](plan-1.0.md).
 
 ## What's shipped
 
@@ -13,13 +13,14 @@ As of October 17, 2026, evening CT. Version 0.8.0 is on branch `pro-grade` in dr
 | 0.5.0 | #29 | Supernote `.note` files, Kindle Scribe by email, Mac and phone sharing one ledger (#17), MCP server |
 | 0.6.0 | #31 | Viwoods sign-in window in the app, one-command release setup, Apple Notes fixes found on real Notes (#2), cloud notes dated by when they were written |
 | 0.7.0 | #36 | Review stack on iPhone and iPad (#32), blank pages skipped (#33), planner events titled "Daily plan" (#34), app asks once to open at login (#35) |
-| 0.8.0 | #55 (draft) | Pro license and 14-day trial (#38), notifications (#39), update check (#40), diagnostics export (#41), parallel recognition and vocabulary (#42), ink-only recognition for Viwoods (#43), Obsidian daily notes and weekly digest (#44), Settings that reopen (#45), landing page 2.0 (#46), user guide (#47) |
+| 0.8.0 | #55 | Pro license and 14-day trial (#38), notifications (#39), update check (#40), diagnostics export (#41), parallel recognition and vocabulary (#42), ink-only recognition for Viwoods (#43), Obsidian daily notes and weekly digest (#44), Settings that reopen (#45), landing page 2.0 (#46), user guide (#47) |
+| 0.9.0 | draft PR | Planner-only AI with batching and per-source caps (#48), Supernote ink-only and template subtraction for exports (#49), vocabulary learned from Obsidian corrections (#50), `inkrelay viwoods list` with Learning and Knowledge Base listed (#51, still not pulled), Lemon Squeezy key issuing script (#52, untested), TestFlight archive path and workflow job (#54, untested), plan in the MCP status, daily notes offered in setup when the vault has them |
 
-247 tests, about 9 seconds (`swift test`). CI runs on pull requests only.
+257 tests, about 15 seconds (`swift test`); the longest ones draw pages and run real Vision. CI runs on pull requests only.
 
 ## Open issues
 
-- **#38–#47** are the 0.8.0 round; they close when the draft PR merges. **#48–#51** (0.9.0) and **#52–#54** (1.0.0) are planned in [plan-1.0.md](plan-1.0.md).
+- **#48, #49, #50, #52, #54** close when the 0.9.0 draft PR merges. **#51** stays open: `inkrelay viwoods list` shows the owner's Learning and Knowledge Base apps are empty at the top level (the home screen's "Knowledge Base 3" is its tabs), so their item format is still unknown and nothing is pulled. **#53** (bundled OAuth client ids) needs the owner's registrations.
 - **#3** Real exports from each tablet. Viwoods is checked with real notebooks through the cloud. Supernote is checked against public sample notebooks and the device's own PDFs. reMarkable, Boox and Kindle Scribe exports have never been seen.
 - **#19** Demand and pricing. Drafts exist (`docs/launch/`, `site/`). Posting, a waitlist form service and hosting are the owner's.
 - **#23** Connector matrix. Done except reading reMarkable Cloud directly: no account or device, and its API is unofficial and changes often.
@@ -30,7 +31,7 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 ## The owner's Mac today
 
-- **App:** `/Applications/InkRelay.app` 0.8.0 (build 80000), ad-hoc signed, built from branch `pro-grade`; the 0.7.0 build is kept at `build/InkRelay-0.7.0.app` in the repo folder (ignored by git) in case of a rollback. The CLI inside it is at `Contents/Resources/inkrelay`. The launch agent is not installed; the app does the syncing.
+- **App:** `/Applications/InkRelay.app` 0.9.0 (build 90000), ad-hoc signed, built from branch `reads-better`; the 0.8.0 build is kept at `build/InkRelay-0.8.0.app` in the repo folder (ignored by git) in case of a rollback. The CLI inside it is at `Contents/Resources/inkrelay`. The launch agent is not installed; the app does the syncing.
 - **License:** a lifetime Pro key for the owner is installed (`license.json` beside the config), issued with `scripts/make-license.swift`. The signing key is at `~/Library/Application Support/InkRelay/licensing/signing-key` (owner-only; back it up privately). The matching public key is in `Sources/InkRelayCore/Licensing/License.swift`.
 - **Config:** `~/Library/Application Support/InkRelay/config.json`.
   - Viwoods Cloud (paper, meeting, memo, Daily planner for 12 months, Vision, ink layer on) goes to:
@@ -42,7 +43,8 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 - **Viwoods sign-in:** done through the app's window on October 16, 9:32 PM CT. The token is in `viwoods-token.json` beside the config and refreshes itself.
 - **What has synced:** 24 items (20 planner days, 3 Paper notebooks, 1 memo) into Obsidian, plus 20 "Daily plan" events in Calendar.
   - The cloud lists "Paper 8, Meeting 1". Those counts include folders and templates, so 3 notebooks matches. If a notebook the owner expects is missing, that's the place to look.
-- **Not turned on for the owner, their call:** `dailyNotes` and `weeklyDigest` (the vault has no Daily Notes settings file, so daily notes would land in the vault root as `YYYY-MM-DD.md`), `notifications.newNotes`, `reviewReminder`.
+- **Learned vocabulary** lives in `vocabulary.json` beside the config once a correction is learned; nothing learned yet.
+- **Not turned on for the owner, their call:** AI transcription (would need their Anthropic key; `aiFolders: ["Daily"]` is the cheap way), `dailyNotes` and `weeklyDigest` (the vault has no Daily Notes settings file, so daily notes would land in the vault root as `YYYY-MM-DD.md`), `notifications.newNotes`, `reviewReminder`.
 - **Synced before later fixes, so these still look the old way:**
   - The 24 notes show the pull time (October 16) as `modified`, not when they were written.
   - Memo 1 and the planner days 2025-11-11 and 2025-11-12 are empty pages filed as "No text recognized" notes.
@@ -53,7 +55,7 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 ## Waiting on the owner
 
-0. Open draft PR #55 (0.8.0), mark it ready and merge it. It's a draft on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
+0. Open the 0.9.0 draft PR, mark it ready and merge it. Drafts on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
 1. Releases: create an App Store Connect API key (Admin role), then run `swift scripts/setup-releases.swift ~/Downloads/AuthKey_XXXX.p8 <issuer-id> --tag` on `main`. Details in [RELEASING.md](../RELEASING.md). Only an "Apple Development" identity exists locally; no Developer ID yet.
 2. Phone review:
    - install the iOS app from Xcode (Run on device; automatic signing with team DT9JP293AM);
@@ -71,7 +73,8 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 - Kindle Scribe email pickup.
 - The shared ledger across two real devices.
 - Phone review over iCloud on a real device. The simulator read a local folder, and the round trip is covered by tests.
-- The release workflow end to end.
+- The release workflow end to end, the TestFlight job (needs the app record in App Store Connect and the repository variable `TESTFLIGHT=on`), and `scripts/issue-licenses.swift` (needs a Lemon Squeezy store and `LEMONSQUEEZY_API_KEY`).
+- Template subtraction on a real tablet export; it's checked on a drawn page with ruled lines and "Name / Date" labels.
 - reMarkable Cloud.
 
 ## Suggested next steps

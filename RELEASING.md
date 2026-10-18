@@ -48,12 +48,12 @@ None of these ever go in the repository. If any is missing the workflow stops be
 ## Cutting a release
 
 ```bash
-scripts/check-version.sh v0.8.0   # the tag must match InkRelayCore.version
-git tag v0.8.0
-git push origin v0.8.0
+scripts/check-version.sh v0.9.0   # the tag must match InkRelayCore.version
+git tag v0.9.0
+git push origin v0.9.0
 ```
 
-The workflow tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release with `InkRelay-0.8.0.zip` and generated notes.
+The workflow tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release with `InkRelay-0.9.0.zip` and generated notes.
 
 ## Local builds
 

@@ -78,9 +78,9 @@ Every page InkRelay relays becomes a card: the page as written, the recognized t
 
 ## 9. Better recognition
 
-- **Names and words it keeps getting wrong:** add them to `recognition.vocabulary` in the config. Vision prefers them when the ink is close.
-- **Template text in your notes** ("Name", "Date …"): with Viwoods Cloud, InkRelay reads the ink layer alone, so it shouldn't happen. For folder exports there's no separate ink layer yet.
-- **Messy pages:** AI transcription (`"recognizer": "claude"` on a source, with your own Anthropic key and a monthly budget) reads harder handwriting and suggests titles and tags. Page images go to Anthropic only for sources you set this way.
+- **Names and words it keeps getting wrong:** fix them once inside InkRelay's block of the Obsidian note; the next time that page changes, the fix is learned and Vision expects the word from then on (`inkrelay vocabulary` shows what it learned). Or add words to `recognition.vocabulary` in the config.
+- **Template text in your notes** ("Name", "Date …"): Viwoods Cloud and Supernote notebooks are read from the ink alone. For PDF exports, point `template` on the source at a picture of the blank template and its lines and labels are taken out before recognition.
+- **Messy pages:** AI transcription (`"recognizer": "claude"` on a source, with your own Anthropic key and a monthly budget) reads harder handwriting and suggests titles and tags. `"aiFolders": ["Daily"]` limits it to the planner, where titles matter most, and `aiMonthlyBudgetUSD` caps one source. Page images go to Anthropic only for what you set this way.
 - **Other languages:** `recognition.languages`, or an empty list to let Vision guess.
 
 ## 10. AI assistants
