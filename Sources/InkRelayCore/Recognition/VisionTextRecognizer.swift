@@ -11,16 +11,31 @@ public struct VisionTextRecognizer: TextRecognizer {
 
     public func recognize(fileAt url: URL) throws -> [RecognizedPage] {
         let images = try PageRenderer.images(for: url, scale: config.renderScale, maxPixelDimension: config.maxPixelDimension)
-        return try images.enumerated().map { index, image in
-            let text = try recognizeText(in: image)
-            return RecognizedPage(number: index + 1, text: text, isBlank: text.isEmpty && InkCoverage.isBlank(image))
+        guard !images.isEmpty else { return [] }
+        // Pages are independent, so a notebook is read `concurrency` pages at a time, in order of page number.
+        let workers = max(1, min(config.concurrency, images.count))
+        var results = [Result<RecognizedPage, Error>?](repeating: nil, count: images.count)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: workers) { worker in
+            for index in stride(from: worker, to: images.count, by: workers) {
+                let image = images[index]
+                let result = Result { () throws -> RecognizedPage in
+                    let text = try recognizeText(in: image)
+                    return RecognizedPage(number: index + 1, text: text, isBlank: text.isEmpty && InkCoverage.isBlank(image))
+                }
+                lock.lock()
+                results[index] = result
+                lock.unlock()
+            }
         }
+        return try results.map { try $0!.get() }
     }
 
     func recognizeText(in image: CGImage) throws -> String {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = config.usesLanguageCorrection
+        if !config.vocabulary.isEmpty { request.customWords = config.vocabulary }
         if config.languages.isEmpty {
             request.automaticallyDetectsLanguage = true
         } else {

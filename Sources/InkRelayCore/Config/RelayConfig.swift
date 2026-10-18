@@ -206,16 +206,24 @@ public enum DestinationConfig: Codable, Equatable {
         /// Copy the original PDF next to the note and embed it.
         public var copyOriginal: Bool
         public var tags: [String]
+        /// Keep a block in the vault's daily note (Obsidian's own folder and date format) with the planner page,
+        /// the notes written that day and their open tasks.
+        public var dailyNotes: Bool
+        /// Keep `<folder>/Weekly/<year>-W<week>.md` with the week's notes, planner days and open tasks.
+        public var weeklyDigest: Bool
 
-        public init(id: String, vaultPath: String, folder: String = "Ink", copyOriginal: Bool = true, tags: [String] = ["ink"]) {
+        public init(id: String, vaultPath: String, folder: String = "Ink", copyOriginal: Bool = true, tags: [String] = ["ink"],
+                    dailyNotes: Bool = false, weeklyDigest: Bool = false) {
             self.id = id
             self.vaultPath = vaultPath
             self.folder = folder
             self.copyOriginal = copyOriginal
             self.tags = tags
+            self.dailyNotes = dailyNotes
+            self.weeklyDigest = weeklyDigest
         }
 
-        private enum CodingKeys: String, CodingKey { case id, vaultPath, folder, copyOriginal, tags }
+        private enum CodingKeys: String, CodingKey { case id, vaultPath, folder, copyOriginal, tags, dailyNotes, weeklyDigest }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -224,6 +232,8 @@ public enum DestinationConfig: Codable, Equatable {
             folder = try container.decodeIfPresent(String.self, forKey: .folder) ?? "Ink"
             copyOriginal = try container.decodeIfPresent(Bool.self, forKey: .copyOriginal) ?? true
             tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? ["ink"]
+            dailyNotes = try container.decodeIfPresent(Bool.self, forKey: .dailyNotes) ?? false
+            weeklyDigest = try container.decodeIfPresent(Bool.self, forKey: .weeklyDigest) ?? false
         }
 
         public var vaultURL: URL { URL(fileURLWithPath: PathExpansion.expand(vaultPath), isDirectory: true) }
@@ -359,15 +369,24 @@ public struct RecognitionConfig: Codable, Equatable {
     public var renderScale: Double
     /// Upper bound on the longest rendered side, to keep memory in check on large pages.
     public var maxPixelDimension: Int
+    /// Words Vision should expect: names, products, places. They win over the dictionary when the ink is close.
+    public var vocabulary: [String]
+    /// Pages read at the same time. Each one takes a core and a few hundred MB while it runs.
+    public var concurrency: Int
 
-    public init(languages: [String] = ["en-US"], usesLanguageCorrection: Bool = true, renderScale: Double = 2, maxPixelDimension: Int = 3000) {
+    public static var defaultConcurrency: Int { max(1, min(4, ProcessInfo.processInfo.activeProcessorCount)) }
+
+    public init(languages: [String] = ["en-US"], usesLanguageCorrection: Bool = true, renderScale: Double = 2, maxPixelDimension: Int = 3000,
+                vocabulary: [String] = [], concurrency: Int = RecognitionConfig.defaultConcurrency) {
         self.languages = languages
         self.usesLanguageCorrection = usesLanguageCorrection
         self.renderScale = renderScale
         self.maxPixelDimension = maxPixelDimension
+        self.vocabulary = vocabulary
+        self.concurrency = concurrency
     }
 
-    private enum CodingKeys: String, CodingKey { case languages, usesLanguageCorrection, renderScale, maxPixelDimension }
+    private enum CodingKeys: String, CodingKey { case languages, usesLanguageCorrection, renderScale, maxPixelDimension, vocabulary, concurrency }
 
     public init(from decoder: Decoder) throws {
         let defaults = RecognitionConfig()
@@ -376,6 +395,9 @@ public struct RecognitionConfig: Codable, Equatable {
         usesLanguageCorrection = try container.decodeIfPresent(Bool.self, forKey: .usesLanguageCorrection) ?? defaults.usesLanguageCorrection
         renderScale = try container.decodeIfPresent(Double.self, forKey: .renderScale) ?? defaults.renderScale
         maxPixelDimension = try container.decodeIfPresent(Int.self, forKey: .maxPixelDimension) ?? defaults.maxPixelDimension
+        vocabulary = try container.decodeIfPresent([String].self, forKey: .vocabulary) ?? []
+        concurrency = try container.decodeIfPresent(Int.self, forKey: .concurrency) ?? defaults.concurrency
+        guard (1...16).contains(concurrency) else { throw ConfigError.invalid("recognition.concurrency must be between 1 and 16.") }
     }
 }
 
