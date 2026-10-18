@@ -60,6 +60,19 @@ git push origin v0.10.0
 
 The workflow tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release with `InkRelay-0.10.0.zip` and generated notes.
 
+### When Apple takes longer than 30 minutes
+
+Apple usually notarizes in a few minutes, but it can hold a submission for hours, especially a new team's first ones. v0.10.0's first run timed out that way after 30 minutes. The workflow waits 30 minutes, then stops with the submission id and keeps the signed app as the run's `signed-app` artifact for 14 days. To finish:
+
+```bash
+# from the release-signing folder, with the App Store Connect key
+xcrun notarytool info <submission-id> --key AuthKey_XXXXXXXXXX.p8 --key-id XXXXXXXXXX --issuer <issuer-id>
+# once it says Accepted:
+gh workflow run release.yml -f run_id=<the tag's run id> -f tag=v0.10.0
+```
+
+That run checks the tag's run built that tag, staples the same app Apple accepted, and publishes the release. Nothing is rebuilt or re-signed. If Apple says Invalid instead, the failed run prints Apple's log.
+
 ## Local builds
 
 `scripts/build-app.sh` builds an ad-hoc signed app for this Mac. `SIGN_IDENTITY="Developer ID Application: …" scripts/build-app.sh` signs it like a release, without notarizing.

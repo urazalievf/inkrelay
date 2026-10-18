@@ -1,6 +1,17 @@
 # Handoff: where things stand
 
-As of October 18, 2026, 9:20 AM CT. Everything through 0.10.0 "Polish" (#69) is on `main`. Signed releases are set up: the tag `v0.10.0` was pushed at 9:03 AM CT and the release workflow (run 39134287085) had built and signed the app and was notarizing it. **First thing next session:** check it with `gh run view 39134287085` and `gh release view v0.10.0`; if it failed, read the log with `gh run view 39134287085 --log-failed`. The plan all rounds follow is [plan-1.0.md](plan-1.0.md).
+As of October 18, 2026, 9:50 AM CT. Everything through 0.10.0 "Polish" (#69) is on `main`. The plan all rounds follow is [plan-1.0.md](plan-1.0.md).
+
+**v0.10.0 isn't published yet.** The tag's first run (39134287085) tested, built and signed the app, then failed at 9:35 AM CT. Apple held the notarization (submission `2375454b-b42c-4aa9-8794-5105c155c395`) "In Progress" for the whole 30 minutes the step waits. Apple often holds a new team's first submissions for hours. The signed build was lost with the runner. Draft PR #71 keeps it from now on and adds a finish path (see [RELEASING.md](../RELEASING.md)).
+
+**First thing next session:** check whether Apple has finished:
+
+```bash
+cd ~/Library/Application\ Support/InkRelay/release-signing
+xcrun notarytool info 2375454b-b42c-4aa9-8794-5105c155c395 --key AuthKey_NTZGY42J5H.p8 --key-id NTZGY42J5H --issuer 1b49541c-4e95-48ab-a121-3d040d720b0a
+```
+
+If it says Accepted, `gh run rerun 39134287085 --failed` rebuilds from the tag, and the new submission should go through quickly. If it says Invalid, `xcrun notarytool log <id> …` says why. Check `gh release view v0.10.0` before re-running: if the release exists, it's done.
 
 ## What's shipped
 
@@ -23,7 +34,7 @@ As of October 18, 2026, 9:20 AM CT. Everything through 0.10.0 "Polish" (#69) is 
 
 ## Open issues
 
-- **#59–#68** (0.10.0) close when its draft PR merges. #48, #49, #50, #52, #54 closed with 0.9.0. **#51** stays open: `inkrelay viwoods list` shows the owner's Learning and Knowledge Base apps are empty at the top level (the home screen's "Knowledge Base 3" is its tabs), so their item format is still unknown and nothing is pulled. **#53** (bundled OAuth client ids) needs the owner's registrations.
+- Every issue of 0.8.0, 0.9.0 and 0.10.0 is closed except #51 and #53. GitHub only closes the first issue in "Closes #a, #b", so #38–#47, #49, #50, #52, #54 and #60–#68 were closed by hand on October 18. Write "Closes #a, closes #b" in PR descriptions. **#51** stays open: `inkrelay viwoods list` shows the owner's Learning and Knowledge Base apps are empty at the top level (the home screen's "Knowledge Base 3" is its tabs), so their item format is still unknown and nothing is pulled. **#53** (bundled OAuth client ids) needs the owner's registrations.
 - **#3** Real exports from each tablet. Viwoods is checked with real notebooks through the cloud. Supernote is checked against public sample notebooks and the device's own PDFs. reMarkable, Boox and Kindle Scribe exports have never been seen.
 - **#19** Demand and pricing. Drafts exist (`docs/launch/`, `site/`). Posting, a waitlist form service and hosting are the owner's.
 - **#23** Connector matrix. Done except reading reMarkable Cloud directly: no account or device, and its API is unofficial and changes often.
@@ -88,11 +99,9 @@ Done on October 18 with the owner's approval, so not waiting any more: App Store
 
 In rough order of value (the plan in [plan-1.0.md](plan-1.0.md) has the full list):
 
-1. **Recognition quality on real pages.** Vision gets clear writing mostly right ("Setup the diag rome for erin" for "Setup the diagram for Erin") and misreads messy lines. Ideas:
-   - Recognize from the cloud's ink-only layer (`mainBmp_`) instead of the rendered page, so template text such as "Name" and "Date 10/02/2025 01:43 PM" stops showing up as content. The rendered page stays in the PDF.
-   - Offer AI transcription for planner days, which also brings back meaningful event titles.
-2. **Viwoods apps not pulled yet:** Knowledge Base (3 items on the owner's account) and Learning. Their formats haven't been looked at.
-3. **Tidy the owner's existing data,** if they want: re-pull to fix the `modified` dates, and remove the three empty notes.
-4. **Ship a release** once the key exists, then put the zip on the landing page.
-5. **Bundled OAuth client IDs,** so people using InkRelay don't each create a Google client and an Entra app. The publisher creates them once.
+1. **Finish the v0.10.0 release** (top of this page), then give the zip a public home. Customers can't see GitHub Releases while the repository is private. A public releases-only repository or the site's host would work; the choice is the owner's.
+2. **Recognition quality on real pages.** Ink-only recognition (0.8.0) and planner-only AI (0.9.0) are built, and AI is off for the owner by choice. What's missing is a number: run `scripts/measure-pages.swift` on a fixed set of the owner's pages before and after each recognition change.
+3. **Viwoods apps not pulled yet:** Knowledge Base and Learning (#51). They're empty at the top level on the owner's account, so their format is still unknown.
+4. **Tidy the owner's existing data,** if they want: re-pull to fix the `modified` dates, and remove the three empty notes.
+5. **Bundled OAuth client IDs** (#53), so people using InkRelay don't each create a Google client and an Entra app. The publisher creates them once.
 6. #3 and #23 as devices or accounts become available.
