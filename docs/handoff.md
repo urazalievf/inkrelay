@@ -1,6 +1,6 @@
 # Handoff: where things stand
 
-As of October 18, 2026, CT. Everything through 0.9.0.2 (#58) is on `main`. Version 0.10.0 "Polish" is on branch `polish-0.10.0` in draft pull request #69, waiting for the owner. The plan both rounds follow is [plan-1.0.md](plan-1.0.md).
+As of October 18, 2026, 9:20 AM CT. Everything through 0.10.0 "Polish" (#69) is on `main`. Signed releases are set up: the tag `v0.10.0` was pushed at 9:03 AM CT and the release workflow (run 39134287085) had built and signed the app and was notarizing it. **First thing next session:** check it with `gh run view 39134287085` and `gh release view v0.10.0`; if it failed, read the log with `gh run view 39134287085 --log-failed`. The plan all rounds follow is [plan-1.0.md](plan-1.0.md).
 
 ## What's shipped
 
@@ -17,7 +17,7 @@ As of October 18, 2026, CT. Everything through 0.9.0.2 (#58) is on `main`. Versi
 | 0.9.0 | #56 | Planner-only AI with batching and per-source caps (#48), Supernote ink-only and template subtraction for exports (#49), vocabulary learned from Obsidian corrections (#50), `inkrelay viwoods list` with Learning and Knowledge Base listed (#51, still not pulled), Lemon Squeezy key issuing script (#52, untested), TestFlight archive path and workflow job (#54, untested), plan in the MCP status, daily notes offered in setup when the vault has them |
 | 0.9.0.1 | #57 | Fixes from a review of 0.9.0: corrections learned before the changed page is read and only from a vault copy of the archived version; `vocabulary.json` re-read when another process writes it; a template in the other orientation is turned and an ill-fitting one ignored; the archive-only paths use the same ink-only and per-folder routing; AI batches shrink to what the budget allows; the key issuer filters by product and skips test orders; the TestFlight upload takes the FIX number as its build number; Daily Notes detected from `core-plugins.json` |
 | 0.9.0.2 | #58 | Fixes from a review of 0.8.0: the plan is read again at every pass (a key entered while the app or agent runs takes effect at the next sync); one snapshot per pass, so "notes synced" and the review reminder carry the right pass; the update feed is the releases list, and a feed that can't be read is reported rather than called "up to date"; `--expires` covers the whole stated day in local time; `Do` ordinals in daily-note names; an orphaned start marker no longer swallows what follows it; a new daily note starts from the person's template; a rename no longer doubles the digest; Settings keep every source, every source setting, the Apple destinations' own settings and the cloud device name, and back up a config they couldn't read before replacing it |
-| 0.10.0 | #69 (draft) | License expiry as a calendar date; a purchase path and what Pro means for this setup (#59); the first run continues to the sign-in or login question (#60); doctor explains empty and unreadable sources and checks templates and send targets (#61); sources can leave folders out, Supernote's books and exports by default (#62); a trial-ended panel, trial notifications and the reason a key was rejected (#63); a per-launch key on the review server (#64); Kindle mail limited to Amazon senders, Amazon https links and 100 MB (#65); a sync log for the app, last-sync.json and scrubbed diagnostics (#66); tablet to-dos as Obsidian checkboxes with block ids (#67); planner pages from any folder (#68) |
+| 0.10.0 | #69 | License expiry as a calendar date; a purchase path and what Pro means for this setup (#59); the first run continues to the sign-in or login question (#60); doctor explains empty and unreadable sources and checks templates and send targets (#61); sources can leave folders out, Supernote's books and exports by default (#62); a trial-ended panel, trial notifications and the reason a key was rejected (#63); a per-launch key on the review server (#64); Kindle mail limited to Amazon senders, Amazon https links and 100 MB (#65); a sync log for the app, last-sync.json and scrubbed diagnostics (#66); tablet to-dos as Obsidian checkboxes with block ids (#67); planner pages from any folder (#68) |
 
 282 tests, about 15 seconds (`swift test`); the longest ones draw pages and run real Vision. CI runs on pull requests only.
 
@@ -58,16 +58,20 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 ## Waiting on the owner
 
-0. Open draft PR #69 (0.10.0), mark it ready and merge it. Drafts on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
-1. Releases: create an App Store Connect API key (Admin role), then run `swift scripts/setup-releases.swift ~/Downloads/AuthKey_XXXX.p8 <issuer-id> --tag` on `main`. Details in [RELEASING.md](../RELEASING.md). Only an "Apple Development" identity exists locally; no Developer ID yet.
-2. Phone review:
+Pull requests stay drafts until the owner marks them ready and merges them. Something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
+
+Done on October 18 with the owner's approval, so not waiting any more: App Store Connect API access, a Team API key "InkRelay Releases" (Admin, key ID NTZGY42J5H), a Developer ID Application certificate (G2, expires November 17, 2027), the six release secrets, and the `v0.10.0` tag. The key, the certificate and its private key are in `~/Library/Application Support/InkRelay/release-signing/` (owner-only); keep a private backup. The API can't create Developer ID certificates, so the certificate was made on developer.apple.com ([RELEASING.md](../RELEASING.md)).
+
+1. Phone review:
    - install the iOS app from Xcode (Run on device; automatic signing with team DT9JP293AM);
    - pick iCloud Drive/InkRelay in the app;
    - set `"shareWithPhone": true` on the Mac's `reviewStack`.
 
    The app needs iOS 17; the owner's iPhone 7 is stuck on iOS 15.
-3. Cloud accounts, before those destinations can be checked for real: a Google desktop OAuth client, a Microsoft Entra app registration and a Notion integration token. The README explains each.
-4. #19: a waitlist form service for `WAITLIST_ENDPOINT`, hosting for `site/` (Netlify or Cloudflare Pages; GitHub Pages needs a public repo or Pro), and the posts.
+2. Cloud accounts, before those destinations can be checked for real: a Google desktop OAuth client, a Microsoft Entra app registration and a Notion integration token (#53 would make the first two unnecessary for customers). The README explains each.
+3. #19: a waitlist form service for `WAITLIST_ENDPOINT`, hosting for `site/` (Netlify or Cloudflare Pages; GitHub Pages needs a public repo or Pro), and the posts. The download button points at GitHub Releases, which customers can't see while the repository is private, so the zip needs a public home too.
+4. Selling (#52): a Lemon Squeezy store and product, then `LEMONSQUEEZY_API_KEY=… swift scripts/issue-licenses.swift --store ID --product ID --send`. Until then keys are issued by hand with `scripts/make-license.swift`.
+5. TestFlight (#54): an app record for io.github.urazalievf.InkRelay.mobile in App Store Connect, then the repository variable `TESTFLIGHT=on`; the release workflow uploads the next tag's iPhone build.
 
 ## Never checked for real
 
