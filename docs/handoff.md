@@ -1,6 +1,6 @@
 # Handoff: where things stand
 
-As of October 17, 2026, early morning CT. Version 0.8.0 is on branch `pro-grade` in a draft pull request, waiting for the owner. 0.7.0 is on `main`. The plan this round follows is [plan-1.0.md](plan-1.0.md).
+As of October 17, 2026, early morning CT. Version 0.8.0 is on branch `pro-grade` in draft pull request #55, waiting for the owner. 0.7.0 is on `main`. The plan this round follows is [plan-1.0.md](plan-1.0.md).
 
 ## What's shipped
 
@@ -13,7 +13,7 @@ As of October 17, 2026, early morning CT. Version 0.8.0 is on branch `pro-grade`
 | 0.5.0 | #29 | Supernote `.note` files, Kindle Scribe by email, Mac and phone sharing one ledger (#17), MCP server |
 | 0.6.0 | #31 | Viwoods sign-in window in the app, one-command release setup, Apple Notes fixes found on real Notes (#2), cloud notes dated by when they were written |
 | 0.7.0 | #36 | Review stack on iPhone and iPad (#32), blank pages skipped (#33), planner events titled "Daily plan" (#34), app asks once to open at login (#35) |
-| 0.8.0 | draft PR | Pro license and 14-day trial (#38), notifications (#39), update check (#40), diagnostics export (#41), parallel recognition and vocabulary (#42), ink-only recognition for Viwoods (#43), Obsidian daily notes and weekly digest (#44), Settings that reopen (#45), landing page 2.0 (#46), user guide (#47) |
+| 0.8.0 | #55 (draft) | Pro license and 14-day trial (#38), notifications (#39), update check (#40), diagnostics export (#41), parallel recognition and vocabulary (#42), ink-only recognition for Viwoods (#43), Obsidian daily notes and weekly digest (#44), Settings that reopen (#45), landing page 2.0 (#46), user guide (#47) |
 
 247 tests, about 9 seconds (`swift test`). CI runs on pull requests only.
 
@@ -53,7 +53,7 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 ## Waiting on the owner
 
-0. Open the draft PR for 0.8.0, mark it ready and merge it. It's a draft on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
+0. Open draft PR #55 (0.8.0), mark it ready and merge it. It's a draft on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
 1. Releases: create an App Store Connect API key (Admin role), then run `swift scripts/setup-releases.swift ~/Downloads/AuthKey_XXXX.p8 <issuer-id> --tag` on `main`. Details in [RELEASING.md](../RELEASING.md). Only an "Apple Development" identity exists locally; no Developer ID yet.
 2. Phone review:
    - install the iOS app from Xcode (Run on device; automatic signing with team DT9JP293AM);
