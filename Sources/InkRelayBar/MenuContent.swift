@@ -56,6 +56,12 @@ struct MenuContent: View {
     }
 
     @ViewBuilder private var content: some View {
+        if let update = model.update {
+            Row(symbol: "arrow.down.circle", title: "InkRelay \(update.version) is available", detail: "Download") {
+                model.open(update.url)
+            }
+            Divider()
+        }
         if model.needsViwoodsSignIn {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Sign in to Viwoods Cloud so InkRelay can read your notebooks and planner.")
@@ -139,13 +145,36 @@ struct MenuContent: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             Divider()
+            HStack(spacing: 6) {
+                Text(model.entitlement.summary())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer()
+                if !model.entitlement.isPro || { if case .trial = model.entitlement.basis { return true } else { return false } }() {
+                    Button("Enter License…") { model.enterLicense() }
+                        .font(.caption)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            Divider()
             HStack {
                 Button("Settings…") {
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "setup")
                 }
-                Button("Config") { model.openConfig() }
-                Button("Logs") { model.openLog() }
+                Menu("More") {
+                    Button("Check for Updates…") { model.checkForUpdates() }
+                    Button("Enter License…") { model.enterLicense() }
+                    Button("Export Diagnostics…") { model.exportDiagnostics() }
+                    Divider()
+                    Button("Open Config") { model.openConfig() }
+                    Button("Open Logs") { model.openLog() }
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")

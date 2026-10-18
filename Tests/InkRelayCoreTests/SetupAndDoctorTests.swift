@@ -79,8 +79,10 @@ final class SetupAndDoctorTests: XCTestCase {
 
         let checks = doctor(config).checks(includeApps: false, accounts: false)
 
-        XCTAssertEqual(checks.map(\.status), [.ok, .problem, .problem, .ok, .warning])
+        XCTAssertEqual(checks.map(\.status), [.ok, .problem, .problem, .ok, .ok, .warning])
         XCTAssertTrue(checks[0].detail.hasPrefix("1 export(s)"))
+        XCTAssertEqual(checks[3].title, "Plan")
+        XCTAssertTrue(checks[3].detail.hasPrefix("Pro trial"))
         XCTAssertTrue(checks[4].detail.contains("install-agent.sh"))
 
         try home.write("Library/LaunchAgents/\(Doctor.agentLabel).plist", "<plist/>")

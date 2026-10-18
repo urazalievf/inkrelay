@@ -54,8 +54,18 @@ public struct Doctor {
         var results = sourceChecks() + destinationChecks()
         if includeApps { results += appChecks() }
         if accounts { results += accountChecks() }
+        results.append(planCheck())
         results += agentChecks()
         return results
+    }
+
+    func planCheck() -> DoctorCheck {
+        let entitlement = EntitlementStore(supportDirectory: supportDirectory).current()
+        if entitlement.isPro { return DoctorCheck(.ok, "Plan", entitlement.summary()) }
+        let used = ProFeatures.used(in: config)
+        return used.isEmpty
+            ? DoctorCheck(.ok, "Plan", entitlement.summary())
+            : DoctorCheck(.warning, "Plan", entitlement.summary() + "; paused: " + used.joined(separator: ", ") + ". `inkrelay license enter KEY`")
     }
 
     func sourceChecks() -> [DoctorCheck] {

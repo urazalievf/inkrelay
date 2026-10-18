@@ -19,6 +19,11 @@ Usage:
   inkrelay notion login             Save a Notion integration token in the Keychain
   inkrelay ai login                 Save an Anthropic API key for AI transcription
   inkrelay ai status                This month's AI transcription spend
+  inkrelay license                  Show the plan: Pro, trial or free
+  inkrelay license enter KEY        Save a Pro license key
+  inkrelay license remove           Go back to the free plan (or the trial)
+  inkrelay update check             Look for a newer InkRelay
+  inkrelay diagnostics [PATH]       Write a zip for a bug report (no secrets, no note text)
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
   inkrelay convert NOTE PDF          Turn a Supernote .note notebook into a PDF
   inkrelay mcp                      Serve InkRelay to AI assistants over MCP (stdio)
@@ -297,6 +302,7 @@ case "status":
         let delivered = state.files.values.filter { $0.destinations[destination.id]?.contentHash == $0.contentHash }.count
         print("  \(destination.id) (\(destination.kind)): \(delivered) up to date")
     }
+    print("Plan: " + EntitlementStore(supportDirectory: supportDirectory).current().summary())
 
 case "viwoods":
     let subcommand = arguments.first ?? ""
@@ -547,6 +553,55 @@ case "review":
 
     default:
         fail("Usage: inkrelay review [list | open | serve | done ID | later ID]")
+    }
+
+case "license":
+    let store = EntitlementStore(supportDirectory: supportDirectory)
+    switch arguments.first {
+    case "enter":
+        guard arguments.count >= 2 else { fail("Usage: inkrelay license enter INK1.…") }
+        do {
+            let license = try store.enter(arguments.dropFirst().joined())
+            print("Thanks, \(license.name). InkRelay is Pro on this Mac" + (license.expiresAt.map { " until \($0.formatted(date: .long, time: .omitted))" } ?? "") + ".")
+        } catch {
+            fail(error.localizedDescription)
+        }
+    case "remove":
+        store.remove()
+        print(store.current().summary())
+    case nil, "status":
+        let entitlement = store.current()
+        print(entitlement.summary())
+        if !entitlement.isPro, let config = try? ConfigStore.load(from: configURL) {
+            let used = ProFeatures.used(in: config)
+            if !used.isEmpty { print("Paused until a license is entered: \(used.joined(separator: ", ")).") }
+        }
+    default:
+        fail("Usage: inkrelay license [enter KEY | remove]")
+    }
+
+case "update":
+    guard arguments.first == "check" else { fail("Usage: inkrelay update check") }
+    do {
+        if let release = try UpdateChecker().check() {
+            print("InkRelay \(release.version) is available (you have \(InkRelayCore.version)): \(release.url.absoluteString)")
+        } else {
+            print("InkRelay \(InkRelayCore.version) is the newest version.")
+        }
+    } catch {
+        fail(error.localizedDescription)
+    }
+
+case "diagnostics":
+    let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/InkRelay", isDirectory: true)
+    let target = arguments.first.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop").appendingPathComponent(Diagnostics.suggestedName())
+    let data = Diagnostics.bundle(configURL: configURL, supportDirectory: supportDirectory, logDirectory: logs)
+    do {
+        try data.write(to: target, options: .atomic)
+        print("Wrote \(target.path) (\(data.count / 1024) KB). It holds versions, doctor's checks, the config without secrets, state counts and recent logs; no note text, tokens or keys.")
+    } catch {
+        fail(error.localizedDescription)
     }
 
 case "version", "--version", "-v":
