@@ -124,8 +124,13 @@ public struct SetupChoices: Equatable {
 
     /// The choices a config was made with, for showing it again in Settings.
     public init(from config: RelayConfig) {
-        let deviceName = config.viwoodsCloud?.device ?? config.sources.first?.device
-        tablet = TabletPreset.all.first { $0.name == deviceName } ?? TabletPreset.all.last ?? TabletPreset.all[0]
+        // The cloud section means a Viwoods whatever the device is called; otherwise the first folder's device.
+        if config.viwoodsCloud != nil {
+            tablet = TabletPreset.all.first { $0.hasCloudSource } ?? TabletPreset.all[0]
+        } else {
+            let deviceName = config.sources.first?.device
+            tablet = TabletPreset.all.first { $0.name == deviceName } ?? TabletPreset.all.last ?? TabletPreset.all[0]
+        }
         useViwoodsCloud = config.viwoodsCloud != nil
         exportFolder = config.sources.first?.path
         appleCalendar = false
@@ -156,12 +161,21 @@ public struct SetupChoices: Equatable {
     /// A config from these choices. With `existing`, the sections Settings doesn't show (Google, Microsoft, Notion
     /// destinations, AI, send targets, deletion policies, recognition) carry over unchanged.
     public func config(merging existing: RelayConfig? = nil) throws -> RelayConfig {
-        var sources: [SourceConfig] = []
+        // Settings shows one export folder: the first source's. Its other settings, and every other source, stay.
+        var sources = existing?.sources ?? []
         if let exportFolder {
-            let id = ObsidianDestination.safeFileName(tablet.name.lowercased().replacingOccurrences(of: " ", with: "-"))
-            let kept = existing?.sources.first { $0.path == exportFolder }
-            sources.append(SourceConfig(id: kept?.id ?? id, device: tablet.name, path: exportFolder, fileTypes: tablet.fileTypes, recognizer: kept?.recognizer ?? .vision))
+            if sources.contains(where: { $0.path == exportFolder }) {
+                // Already there, as it was.
+            } else if !sources.isEmpty {
+                sources[0].path = exportFolder
+            } else {
+                let id = ObsidianDestination.safeFileName(tablet.name.lowercased().replacingOccurrences(of: " ", with: "-"))
+                sources.append(SourceConfig(id: id, device: tablet.name, path: exportFolder, fileTypes: tablet.fileTypes))
+            }
+        } else if !sources.isEmpty {
+            sources.removeFirst()
         }
+        func kept<T>(_ pick: (DestinationConfig) -> T?) -> T? { existing?.destinations.compactMap(pick).first }
         var destinations: [DestinationConfig] = []
         if let obsidianVault {
             var obsidian = existing?.destinations.compactMap { if case .obsidian(let o) = $0 { return o } else { return nil } }.first
@@ -171,9 +185,17 @@ public struct SetupChoices: Equatable {
             obsidian.weeklyDigest = weeklyDigest
             destinations.append(.obsidian(obsidian))
         }
-        if let account = appleNotesAccount { destinations.append(.appleNotes(.init(id: "apple-notes", account: account))) }
-        if appleCalendar { destinations.append(.appleCalendar(.init(id: "apple-calendar"))) }
-        if appleReminders { destinations.append(.appleReminders(.init(id: "apple-reminders"))) }
+        if let account = appleNotesAccount {
+            var notes = kept { if case .appleNotes(let n) = $0 { return n } else { return nil } } ?? DestinationConfig.AppleNotesConfig(id: "apple-notes", account: account)
+            notes.account = account
+            destinations.append(.appleNotes(notes))
+        }
+        if appleCalendar {
+            destinations.append(.appleCalendar(kept { if case .appleCalendar(let c) = $0 { return c } else { return nil } } ?? .init(id: "apple-calendar")))
+        }
+        if appleReminders {
+            destinations.append(.appleReminders(kept { if case .appleReminders(let r) = $0 { return r } else { return nil } } ?? .init(id: "apple-reminders")))
+        }
         if reviewStack {
             var stack = existing?.destinations.compactMap { if case .reviewStack(let s) = $0 { return s } else { return nil } }.first
                 ?? DestinationConfig.ReviewStackConfig(id: "review")
@@ -187,8 +209,8 @@ public struct SetupChoices: Equatable {
             default: destinations.append(destination)
             }
         }
-        var cloud = existing?.viwoodsCloud ?? ViwoodsCloudConfig(device: tablet.name)
-        cloud.device = tablet.name
+        // An existing cloud section keeps its device name and every other setting.
+        let cloud = existing?.viwoodsCloud ?? ViwoodsCloudConfig(device: tablet.name)
         let config = RelayConfig(
             sources: sources,
             destinations: destinations,

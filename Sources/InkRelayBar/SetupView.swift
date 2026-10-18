@@ -25,6 +25,7 @@ struct SetupView: View {
     @State private var remind = false
     @State private var reminderTime = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? Date()
     @State private var error: String?
+    @State private var loadError: String?
     @State private var loaded = false
 
     private var tablet: TabletPreset { TabletPreset.all[tabletIndex] }
@@ -68,6 +69,10 @@ struct SetupView: View {
                     }
                 }
             }
+            if let loadError {
+                Text("Your config couldn't be read: \(loadError) Saving replaces it; the old file is kept as config.json.bak.")
+                    .foregroundStyle(.orange).font(.callout).fixedSize(horizontal: false, vertical: true)
+            }
             if let error {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
@@ -87,6 +92,9 @@ struct SetupView: View {
         guard !loaded else { return }
         loaded = true
         guard let config = model.config else {
+            if FileManager.default.fileExists(atPath: model.runner.configURL.path) {
+                do { _ = try ConfigStore.load(from: model.runner.configURL) } catch { loadError = error.localizedDescription }
+            }
             vault = detector.obsidianVaults().first.map(detector.tilde) ?? ""
             // A vault with Daily Notes set up gets the block offered; nothing is written until Save.
             dailyNotes = !vault.isEmpty && DailyNotesSettings.isEnabled(vault: URL(fileURLWithPath: (vault as NSString).expandingTildeInPath, isDirectory: true))
@@ -153,7 +161,7 @@ struct SetupView: View {
             choices.reviewReminder = String(format: "%02d:%02d", parts.hour ?? 9, parts.minute ?? 0)
         }
         do {
-            try ConfigStore.save(try choices.config(merging: existing), to: model.runner.configURL)
+            try ConfigStore.replace(try choices.config(merging: existing), at: model.runner.configURL)
             model.reload()
             dismiss()
         } catch let failure {

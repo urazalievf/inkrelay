@@ -18,17 +18,23 @@ final class UpdateAndDiagnosticsTests: XCTestCase {
         transport.handlers[feed] = { sent in
             XCTAssertEqual(sent.request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
             XCTAssertNil(sent.request.httpBody)
-            return (200, try JSONSerialization.data(withJSONObject: ["tag_name": "v0.9.0", "html_url": "https://example.test/r/v0.9.0", "body": "Notes", "draft": false, "prerelease": false]))
+            return (200, try JSONSerialization.data(withJSONObject: [
+                ["tag_name": "v1.0.0-beta", "html_url": "https://example.test/r/beta", "prerelease": true],
+                ["tag_name": "v0.9.0", "html_url": "https://example.test/r/v0.9.0", "body": "Notes", "draft": false, "prerelease": false],
+            ]))
         }
         let checker = UpdateChecker(feedURL: URL(string: feed)!, transport: transport)
-        XCTAssertEqual(try checker.latest(), ReleaseInfo(version: "0.9.0", url: URL(string: "https://example.test/r/v0.9.0")!, notes: "Notes"))
+        XCTAssertEqual(try checker.latest(), ReleaseInfo(version: "0.9.0", url: URL(string: "https://example.test/r/v0.9.0")!, notes: "Notes"), "the newest published one, skipping pre-releases")
         XCTAssertEqual(try checker.check(current: "0.8.0")?.version, "0.9.0")
         XCTAssertNil(try checker.check(current: "0.9.0"))
 
+        transport.handlers[feed] = { _ in (200, Data("[]".utf8)) }
+        XCTAssertNil(try checker.latest(), "no releases yet")
         transport.handlers[feed] = { _ in (404, Data()) }
-        XCTAssertNil(try checker.latest())
-        transport.handlers[feed] = { _ in (200, try JSONSerialization.data(withJSONObject: ["tag_name": "v1.0.0", "html_url": "https://example.test", "prerelease": true])) }
-        XCTAssertNil(try checker.latest(), "pre-releases aren't offered")
+        XCTAssertThrowsError(try checker.latest(), "a feed that can't be read is not 'up to date'") { error in
+            XCTAssertEqual(error as? UpdateError, .feedUnavailable(404))
+            XCTAssertTrue(error.localizedDescription.contains("can't tell"))
+        }
         transport.handlers[feed] = { _ in (503, Data()) }
         XCTAssertThrowsError(try checker.latest())
     }

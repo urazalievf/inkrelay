@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.9.0.1: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.9.0.2: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
 
 ### Compatibility
 
@@ -95,7 +95,7 @@ Tips:
 
 Everything a Mac can do on its own is free: export folders from any tablet, Obsidian, Apple Notes, Apple Calendar and Apple Reminders. Pro adds Viwoods Cloud, Kindle Scribe by email, Google Calendar and Docs, Outlook Calendar and OneNote, Notion, AI transcription, and the review stack on the Mac and the phone. Every install starts with a 14-day Pro trial.
 
-When the trial ends without a license, the Pro parts pause: each sync says so in one line, nothing is deleted, and the moment a key is entered they catch up from where they stopped. Enter a key with **Enter License…** in the InkRelay menu or `inkrelay license enter INK1.…`; `inkrelay license` shows the plan. Keys are checked on the Mac against the publisher's public key, so InkRelay never contacts a server about them.
+When the trial ends without a license, the Pro parts pause: each sync says so in one line, nothing is deleted, and once a key is entered they catch up from where they stopped at the next sync (every pass reads the plan again, so the app or the agent needs no restart). Enter a key with **Enter License…** in the InkRelay menu or `inkrelay license enter INK1.…`; `inkrelay license` shows the plan. Keys are checked on the Mac against the publisher's public key, so InkRelay never contacts a server about them.
 
 ## Supernote
 
@@ -274,7 +274,7 @@ Vision is free and never sends anything anywhere, but it struggles with cursive 
 ## Notifications, updates and bug reports
 
 - **Notifications** (menu bar app): a problem that wasn't there before, such as an expired Viwoods sign-in or a denied permission, gets one notification, not one per sync. `notifications.newNotes` adds a short note when pages sync. `notifications.reviewReminder` (`"09:00"`) posts "N cards to review" once a day. All of it is in Settings… too.
-- **Updates**: the app looks for a newer release once a day and shows it in the menu; **Check for Updates…** does it now. `inkrelay update check` from the terminal. Nothing about your Mac is sent; it's one request to the release feed. `"checkForUpdates": false` turns it off.
+- **Updates**: the app looks for a newer release once a day and shows it in the menu; **Check for Updates…** does it now. `inkrelay update check` from the terminal. Nothing about your Mac is sent; it's one request to the release feed. A feed that can't be read says so rather than "up to date". `"checkForUpdates": false` turns it off.
 - **Bug reports**: **Export Diagnostics…** (or `inkrelay diagnostics`) writes one zip with versions, `doctor`'s checks, your config with every secret replaced, counts from the sync state and the last few hundred log lines. No note text, tokens or keys.
 
 ## iPhone and iPad

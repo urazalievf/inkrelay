@@ -44,6 +44,10 @@ final class RelayRunnerTests: XCTestCase {
         XCTAssertEqual(afterFirstPass.recent.first?.openURL?.lastPathComponent, "Meeting notes.pdf", "no vault, so it opens the export")
         XCTAssertEqual(runner.snapshot.status, .idle)
         XCTAssertEqual(destination.upserts.count, 1)
+        for snapshot in seen where snapshot.lastSync != nil {
+            XCTAssertTrue(snapshot.summary.contains("found"), "a snapshot with a sync time carries that pass's summary, never the previous one's")
+        }
+        XCTAssertEqual(afterFirstPass.lastSynced, 1)
     }
 
     func testPausedRunnersDontSync() throws {

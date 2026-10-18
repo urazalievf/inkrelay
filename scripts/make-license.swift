@@ -93,11 +93,13 @@ guard let name = option("--name"), let email = option("--email") else {
 
 var expires: Date?
 if let text = option("--expires") {
+    // The key works through the whole of that day where the key is issued, not until midnight UTC.
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
-    formatter.timeZone = TimeZone(identifier: "UTC")
-    guard let date = formatter.date(from: text) else { fail("--expires takes YYYY-MM-DD.") }
-    expires = date
+    formatter.timeZone = .current
+    guard let start = formatter.date(from: text),
+          let endOfDay = Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: start) else { fail("--expires takes YYYY-MM-DD.") }
+    expires = endOfDay
 }
 
 // The same fields and order as `License` in InkRelayCore, so the app decodes what this signs.

@@ -48,7 +48,7 @@ Things worth knowing:
 
 Free: export folders from any tablet, Obsidian, Apple Notes, Apple Calendar and Apple Reminders. Pro ($29, once): Viwoods Cloud, Kindle Scribe by email, Google Calendar and Docs, Outlook Calendar and OneNote, Notion, AI transcription, and the review stack on the Mac and the phone.
 
-Every install starts with a 14-day Pro trial. The menu shows how many days are left. When it ends without a key, the Pro parts pause: the sync report says so in one line, nothing is deleted, and entering a key resumes them from where they stopped. **Enter License…** is in the menu; `inkrelay license enter INK1.…` from the terminal. Keys are checked on your Mac; InkRelay has no server.
+Every install starts with a 14-day Pro trial. The menu shows how many days are left. When it ends without a key, the Pro parts pause: the sync report says so in one line, nothing is deleted, and entering a key resumes them from where they stopped at the next sync, with no restart. **Enter License…** is in the menu; `inkrelay license enter INK1.…` from the terminal. Keys are checked on your Mac; InkRelay has no server.
 
 ## 5. The review stack
 

@@ -20,10 +20,12 @@ public final class RelayEngine {
     private let reviewShare: ReviewPublisher?
     private let fileManager: FileManager
     private let now: () -> Date
-    /// Pro or free. Free passes skip the Pro sources and destinations and say so once per pass.
-    private let entitlement: Entitlement
+    /// Pro or free, read again at the start of every pass so a key entered while the engine runs, or a trial
+    /// that ends while it runs, takes effect at the next sync. Free passes skip the Pro parts and say so once.
+    private let entitlementProvider: () -> Entitlement
+    private var entitlement: Entitlement
     /// Destination ids left out of this pass because they need Pro.
-    private let pausedDestinationIDs: Set<String>
+    private var pausedDestinationIDs: Set<String> = []
     /// Words learned from corrections in Obsidian, shared with the Vision recognizer.
     private let learned: LearnedVocabulary?
     /// Rendered templates and their masks, by template path and page size, for the life of the engine.
@@ -42,6 +44,7 @@ public final class RelayEngine {
         kindle: KindleMailPuller? = nil,
         reviewShare: ReviewPublisher? = nil,
         entitlement: Entitlement = .pro,
+        entitlementProvider: (() -> Entitlement)? = nil,
         learned: LearnedVocabulary? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
@@ -56,9 +59,15 @@ public final class RelayEngine {
         self.kindle = kindle
         self.reviewShare = reviewShare
         self.entitlement = entitlement
+        self.entitlementProvider = entitlementProvider ?? { entitlement }
         self.learned = learned
         self.fileManager = fileManager
         self.now = now
+        refreshEntitlement()
+    }
+
+    private func refreshEntitlement() {
+        entitlement = entitlementProvider()
         pausedDestinationIDs = entitlement.isPro ? [] : Set(config.destinations.filter(ProFeatures.isPro).map(\.id))
     }
 
@@ -99,7 +108,7 @@ public final class RelayEngine {
             ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
             kindle: config.kindleMail.map { KindleMailPuller(config: $0) },
             reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent()),
-            entitlement: EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current(),
+            entitlementProvider: { EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current() },
             learned: learned
         )
     }
@@ -136,6 +145,7 @@ public final class RelayEngine {
             }
         }
         try? store.reload()
+        refreshEntitlement()
         return pass()
     }
 
@@ -285,6 +295,8 @@ public final class RelayEngine {
             }
 
             try? notes.upsert(note, key: key, at: now())
+            // The old key leaves the archive before destinations build their digests, or the note counts twice.
+            if let renamedFrom { notes.remove(key: renamedFrom) }
             var deliveredAll = true
             var filedInNotes = false
             for destination in targets {
@@ -316,7 +328,6 @@ public final class RelayEngine {
             if let renamedFrom {
                 try store.remove(renamedFrom)
                 ExportConverter.discard(key: renamedFrom, cache: convertedDirectory)
-                notes.remove(key: renamedFrom)
                 report.renamed += 1
             }
             if deliveredAll { report.synced += 1 }

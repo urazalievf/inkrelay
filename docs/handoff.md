@@ -1,6 +1,6 @@
 # Handoff: where things stand
 
-As of October 17, 2026, late evening CT. 0.8.0 (#55) and 0.9.0 (#56) are on `main`. Version 0.9.0.1 is on branch `fixes-0.9.0.1` in draft pull request #57, waiting for the owner. The plan both rounds follow is [plan-1.0.md](plan-1.0.md).
+As of October 17, 2026, late evening CT. 0.8.0 (#55), 0.9.0 (#56) and 0.9.0.1 (#57) are on `main`. Version 0.9.0.2 is on branch `fixes-0.9.0.2` in draft pull request #58, waiting for the owner. The plan both rounds follow is [plan-1.0.md](plan-1.0.md).
 
 ## What's shipped
 
@@ -15,9 +15,10 @@ As of October 17, 2026, late evening CT. 0.8.0 (#55) and 0.9.0 (#56) are on `mai
 | 0.7.0 | #36 | Review stack on iPhone and iPad (#32), blank pages skipped (#33), planner events titled "Daily plan" (#34), app asks once to open at login (#35) |
 | 0.8.0 | #55 | Pro license and 14-day trial (#38), notifications (#39), update check (#40), diagnostics export (#41), parallel recognition and vocabulary (#42), ink-only recognition for Viwoods (#43), Obsidian daily notes and weekly digest (#44), Settings that reopen (#45), landing page 2.0 (#46), user guide (#47) |
 | 0.9.0 | #56 | Planner-only AI with batching and per-source caps (#48), Supernote ink-only and template subtraction for exports (#49), vocabulary learned from Obsidian corrections (#50), `inkrelay viwoods list` with Learning and Knowledge Base listed (#51, still not pulled), Lemon Squeezy key issuing script (#52, untested), TestFlight archive path and workflow job (#54, untested), plan in the MCP status, daily notes offered in setup when the vault has them |
-| 0.9.0.1 | #57 (draft) | Fixes from a review of 0.9.0: corrections learned before the changed page is read and only from a vault copy of the archived version; `vocabulary.json` re-read when another process writes it; a template in the other orientation is turned and an ill-fitting one ignored; the archive-only paths use the same ink-only and per-folder routing; AI batches shrink to what the budget allows; the key issuer filters by product and skips test orders; the TestFlight upload takes the FIX number as its build number; Daily Notes detected from `core-plugins.json` |
+| 0.9.0.1 | #57 | Fixes from a review of 0.9.0: corrections learned before the changed page is read and only from a vault copy of the archived version; `vocabulary.json` re-read when another process writes it; a template in the other orientation is turned and an ill-fitting one ignored; the archive-only paths use the same ink-only and per-folder routing; AI batches shrink to what the budget allows; the key issuer filters by product and skips test orders; the TestFlight upload takes the FIX number as its build number; Daily Notes detected from `core-plugins.json` |
+| 0.9.0.2 | #58 (draft) | Fixes from a review of 0.8.0: the plan is read again at every pass (a key entered while the app or agent runs takes effect at the next sync); one snapshot per pass, so "notes synced" and the review reminder carry the right pass; the update feed is the releases list, and a feed that can't be read is reported rather than called "up to date"; `--expires` covers the whole stated day in local time; `Do` ordinals in daily-note names; an orphaned start marker no longer swallows what follows it; a new daily note starts from the person's template; a rename no longer doubles the digest; Settings keep every source, every source setting, the Apple destinations' own settings and the cloud device name, and back up a config they couldn't read before replacing it |
 
-263 tests, about 15 seconds (`swift test`); the longest ones draw pages and run real Vision. CI runs on pull requests only.
+268 tests, about 15 seconds (`swift test`); the longest ones draw pages and run real Vision. CI runs on pull requests only.
 
 ## Open issues
 
@@ -32,7 +33,7 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 ## The owner's Mac today
 
-- **App:** `/Applications/InkRelay.app` 0.9.0.1 (build 90001), ad-hoc signed, built from branch `fixes-0.9.0.1`; the 0.9.0 build is kept at `build/InkRelay-0.9.0.app` in the repo folder (ignored by git) in case of a rollback. The CLI inside it is at `Contents/Resources/inkrelay`. The launch agent is not installed; the app does the syncing.
+- **App:** `/Applications/InkRelay.app` 0.9.0.2 (build 90002), ad-hoc signed, built from branch `fixes-0.9.0.2`; the 0.9.0.1 build is kept at `build/InkRelay-0.9.0.1.app` in the repo folder (ignored by git) in case of a rollback. The CLI inside it is at `Contents/Resources/inkrelay`. The launch agent is not installed; the app does the syncing.
 - **License:** a lifetime Pro key for the owner is installed (`license.json` beside the config), issued with `scripts/make-license.swift`. The signing key is at `~/Library/Application Support/InkRelay/licensing/signing-key` (owner-only; back it up privately). The matching public key is in `Sources/InkRelayCore/Licensing/License.swift`.
 - **Config:** `~/Library/Application Support/InkRelay/config.json`.
   - Viwoods Cloud (paper, meeting, memo, Daily planner for 12 months, Vision, ink layer on) goes to:
@@ -56,7 +57,7 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 ## Waiting on the owner
 
-0. Open draft PR #57 (0.9.0.1), mark it ready and merge it. Drafts on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
+0. Open draft PR #58 (0.9.0.2), mark it ready and merge it. Drafts on purpose: something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
 1. Releases: create an App Store Connect API key (Admin role), then run `swift scripts/setup-releases.swift ~/Downloads/AuthKey_XXXX.p8 <issuer-id> --tag` on `main`. Details in [RELEASING.md](../RELEASING.md). Only an "Apple Development" identity exists locally; no Developer ID yet.
 2. Phone review:
    - install the iOS app from Xcode (Run on device; automatic signing with team DT9JP293AM);
