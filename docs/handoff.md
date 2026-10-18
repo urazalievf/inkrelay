@@ -1,6 +1,6 @@
 # Handoff: where things stand
 
-As of October 17, 2026, early morning CT. Version 0.8.0 is on branch `pro-grade` in draft pull request #55, waiting for the owner. 0.7.0 is on `main`. The plan this round follows is [plan-1.0.md](plan-1.0.md).
+As of October 17, 2026, evening CT. Version 0.8.0 is on branch `pro-grade` in draft pull request #55, waiting for the owner. 0.7.0 is on `main`. The plan this round follows is [plan-1.0.md](plan-1.0.md).
 
 ## What's shipped
 
