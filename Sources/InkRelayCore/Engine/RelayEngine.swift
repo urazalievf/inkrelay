@@ -19,6 +19,11 @@ public final class RelayEngine {
     private let reviewShare: ReviewPublisher?
     private let fileManager: FileManager
     private let now: () -> Date
+    /// Pro or free. Free passes skip the Pro sources and destinations and say so once per pass.
+    private let entitlement: Entitlement
+    /// Destination ids left out of this pass because they need Pro.
+    private let pausedDestinationIDs: Set<String>
+    private var activeDestinations: [NoteDestination] { destinations.filter { !pausedDestinationIDs.contains($0.id) } }
 
     public init(
         config: RelayConfig,
@@ -30,6 +35,7 @@ public final class RelayEngine {
         ledger: SharedLedger? = nil,
         kindle: KindleMailPuller? = nil,
         reviewShare: ReviewPublisher? = nil,
+        entitlement: Entitlement = .pro,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
     ) {
@@ -42,8 +48,20 @@ public final class RelayEngine {
         self.ledger = ledger
         self.kindle = kindle
         self.reviewShare = reviewShare
+        self.entitlement = entitlement
         self.fileManager = fileManager
         self.now = now
+        pausedDestinationIDs = entitlement.isPro ? [] : Set(config.destinations.filter(ProFeatures.isPro).map(\.id))
+    }
+
+    /// What this pass left out for want of a license, or nil.
+    var pausedNotice: String? {
+        guard !entitlement.isPro else { return nil }
+        let parts = ProFeatures.used(in: config)
+        guard !parts.isEmpty else { return nil }
+        let when: String
+        if case .trialEnded(let date) = entitlement.basis { when = " since the trial ended \(date.formatted(date: .abbreviated, time: .omitted))" } else { when = "" }
+        return "Pro features paused\(when): \(parts.joined(separator: ", ")). Enter a license with `inkrelay license enter KEY` or in the InkRelay menu; nothing is lost, syncing resumes from here."
     }
 
     /// The production wiring: Vision for recognition, the destinations named in the config,
@@ -71,7 +89,8 @@ public final class RelayEngine {
             aiRecognizer: ai,
             ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
             kindle: config.kindleMail.map { KindleMailPuller(config: $0) },
-            reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent())
+            reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent()),
+            entitlement: EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current()
         )
     }
 
@@ -112,14 +131,15 @@ public final class RelayEngine {
 
     private func pass() -> SyncReport {
         var report = SyncReport()
-        if let puller {
+        if let pausedNotice { report.warnings.append(pausedNotice) }
+        if let puller, entitlement.isPro {
             let pull = puller.pull()
             report.pull = pull
             for failure in pull.failures {
                 report.failures.append(.init(item: puller.config.id, destinationID: nil, message: failure))
             }
         }
-        if let kindle {
+        if let kindle, entitlement.isPro {
             let (_, failures) = kindle.pull()
             for failure in failures { report.failures.append(.init(item: kindle.config.id, destinationID: nil, message: failure)) }
         }
@@ -153,7 +173,7 @@ public final class RelayEngine {
             }
         }
         // Last, so phones see this pass's cards and the Mac applies what they decided since the previous one.
-        if let reviewShare {
+        if let reviewShare, entitlement.isPro {
             let shared = reviewShare.sync()
             report.warnings += shared.failures
         }
@@ -208,7 +228,7 @@ public final class RelayEngine {
             )
             // A rename goes to every destination that holds the note, so it moves instead of staying behind.
             let pendingNow = pending(for: hash, in: record)
-            let targets = renamedFrom == nil ? pendingNow : destinations.filter { destination in
+            let targets = renamedFrom == nil ? pendingNow : activeDestinations.filter { destination in
                 record.destinations[destination.id] != nil || pendingNow.contains { $0.id == destination.id }
             }
             guard !targets.isEmpty else {
@@ -228,6 +248,8 @@ public final class RelayEngine {
 
             // Native notebooks (Supernote .note) become a PDF first; everything downstream reads that.
             let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
+            // Viwoods Cloud keeps an ink-only copy beside the page; reading that leaves the template's text out.
+            let forReading = inkOnlyURL(for: file, source: source) ?? readable
             let note = InkNote(
                 title: file.url.deletingPathExtension().lastPathComponent,
                 sourceID: source.id,
@@ -236,7 +258,7 @@ public final class RelayEngine {
                 relativePath: file.relativePath,
                 modified: file.modified,
                 contentHash: hash,
-                pages: try (source.recognizer == .claude ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: readable)
+                pages: try (source.recognizer == .claude && entitlement.isPro ? aiRecognizer ?? recognizer : recognizer).recognize(fileAt: forReading)
             )
 
             if note.pages.allSatisfy(\.isBlank), record.destinations.isEmpty {
@@ -290,6 +312,12 @@ public final class RelayEngine {
         }
     }
 
+    private func inkOnlyURL(for file: ScannedFile, source: SourceConfig) -> URL? {
+        guard let cloud = config.viwoodsCloud, cloud.id == source.id, cloud.recognizeInkOnly else { return nil }
+        let url = cloud.inkURL(for: file.relativePath)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
+    }
+
     /// PDFs made from native notebooks, next to the sync state.
     private var convertedDirectory: URL { store.url.deletingLastPathComponent().appendingPathComponent("converted", isDirectory: true) }
 
@@ -335,7 +363,7 @@ public final class RelayEngine {
 
     /// Destinations that haven't received the export with this hash.
     private func pending(for hash: String, in record: FileRecord) -> [NoteDestination] {
-        destinations.filter { record.destinations[$0.id]?.contentHash != hash }
+        activeDestinations.filter { record.destinations[$0.id]?.contentHash != hash }
     }
 }
 

@@ -55,7 +55,9 @@ final class ViwoodsCloudPullerTests: XCTestCase {
                 "pages": [["page": ["id": "p1", "order": 0]], ["page": ["id": "p2", "order": 1]], ["page": ["id": "gone", "order": 2, "isDeleted": 1]]],
                 "resourceRefs": [
                     ["fileName": "screenshotBmp_p1.png", "remoteUrl": "https://cdn.test/p1.png", "ownerPageId": "p1"],
+                    ["fileName": "mainBmp_p1.png", "remoteUrl": "https://cdn.test/ink1.png", "ownerPageId": "p1"],
                     ["fileName": "screenshotBmp_p2.png", "remoteUrl": "https://cdn.test/p2.png", "ownerPageId": "p2"],
+                    ["fileName": "mainBmp_p2.png", "remoteUrl": "https://cdn.test/ink2.png", "ownerPageId": "p2"],
                     ["fileName": "screenshotBmp_gone.png", "remoteUrl": "https://cdn.test/gone.png", "ownerPageId": "gone"],
                 ],
             ]))
@@ -85,7 +87,7 @@ final class ViwoodsCloudPullerTests: XCTestCase {
                 return (200, try FakeTransport.envelope([]))
             }
         }
-        for name in ["p1", "p2", "gone", "memo", "day"] {
+        for name in ["p1", "p2", "gone", "memo", "day", "ink1", "ink2"] {
             transport.handlers["https://cdn.test/\(name).png"] = { _ in (200, makePNG()) }
         }
     }
@@ -101,6 +103,7 @@ final class ViwoodsCloudPullerTests: XCTestCase {
         XCTAssertEqual(report.checked, 4, "the notebook, the encrypted one, the memo and the planner day")
         XCTAssertEqual(report.updated, 3)
         XCTAssertEqual(pageCount("Paper/Work- Q4/ll.pdf"), 2, "deleted pages are left out and the folder name is made safe")
+        XCTAssertEqual(pageCount(".ink/Paper/Work- Q4/ll.pdf"), 2, "the ink layer sits beside the page, hidden from the scanner")
         XCTAssertEqual(pageCount("Memo/Memo 1.pdf"), 1)
         XCTAssertEqual(pageCount("Daily/2026-01-13.pdf"), 1)
         XCTAssertEqual(plans.upserts.count, 1)
@@ -170,6 +173,8 @@ final class ViwoodsCloudPullerTests: XCTestCase {
 
         XCTAssertNil(pageCount("Paper/Work- Q4/ll.pdf"))
         XCTAssertEqual(pageCount("Paper/Work- Q4/Renamed.pdf"), 2)
+        XCTAssertNil(pageCount(".ink/Paper/Work- Q4/ll.pdf"))
+        XCTAssertEqual(pageCount(".ink/Paper/Work- Q4/Renamed.pdf"), 2)
     }
 
     func testRenameWithoutNewInkMovesTheCachedPDFByteForByte() throws {
@@ -190,6 +195,7 @@ final class ViwoodsCloudPullerTests: XCTestCase {
 
         XCTAssertEqual(try Data(contentsOf: cache.url.appendingPathComponent("Paper/Work- Q4/Renamed.pdf")), before, "same bytes, so the relay sees a rename")
         XCTAssertEqual(transport.sent.filter { $0.request.url?.host == "cdn.test" }.count, downloads, "nothing downloaded again")
+        XCTAssertEqual(pageCount(".ink/Paper/Work- Q4/Renamed.pdf"), 2, "the ink copy moved too")
     }
 
     func testNotebooksDeletedInTheCloudLeaveTheCache() throws {

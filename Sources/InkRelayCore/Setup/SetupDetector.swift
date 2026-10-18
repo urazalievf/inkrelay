@@ -99,6 +99,14 @@ public struct SetupChoices: Equatable {
     public var shareWithPhone: Bool
     /// Pick up notebooks a Kindle Scribe emails, from Mail.
     public var kindleMail: Bool = false
+    /// Obsidian extras.
+    public var dailyNotes: Bool = false
+    public var weeklyDigest: Bool = false
+    /// Menu bar app notifications.
+    public var notifyProblems: Bool = true
+    public var notifyNewNotes: Bool = false
+    /// `HH:mm` or nil.
+    public var reviewReminder: String?
 
     public init(tablet: TabletPreset, useViwoodsCloud: Bool = false, exportFolder: String? = nil, obsidianVault: String? = nil,
                 appleNotesAccount: String?? = nil, appleCalendar: Bool = false, appleReminders: Bool = false, reviewStack: Bool = true,
@@ -114,24 +122,89 @@ public struct SetupChoices: Equatable {
         self.shareWithPhone = shareWithPhone
     }
 
-    public func config() throws -> RelayConfig {
+    /// The choices a config was made with, for showing it again in Settings.
+    public init(from config: RelayConfig) {
+        let deviceName = config.viwoodsCloud?.device ?? config.sources.first?.device
+        tablet = TabletPreset.all.first { $0.name == deviceName } ?? TabletPreset.all.last ?? TabletPreset.all[0]
+        useViwoodsCloud = config.viwoodsCloud != nil
+        exportFolder = config.sources.first?.path
+        appleCalendar = false
+        appleReminders = false
+        reviewStack = false
+        shareWithPhone = config.sharedLedger != nil
+        kindleMail = config.kindleMail != nil
+        notifyProblems = config.notifications.problems
+        notifyNewNotes = config.notifications.newNotes
+        reviewReminder = config.notifications.reviewReminder
+        for destination in config.destinations {
+            switch destination {
+            case .obsidian(let obsidian):
+                obsidianVault = obsidian.vaultPath
+                dailyNotes = obsidian.dailyNotes
+                weeklyDigest = obsidian.weeklyDigest
+            case .appleNotes(let notes): appleNotesAccount = .some(notes.account)
+            case .appleCalendar: appleCalendar = true
+            case .appleReminders: appleReminders = true
+            case .reviewStack(let stack):
+                reviewStack = true
+                if stack.shareWithPhone { shareWithPhone = true }
+            default: continue
+            }
+        }
+    }
+
+    /// A config from these choices. With `existing`, the sections Settings doesn't show (Google, Microsoft, Notion
+    /// destinations, AI, send targets, deletion policies, recognition) carry over unchanged.
+    public func config(merging existing: RelayConfig? = nil) throws -> RelayConfig {
         var sources: [SourceConfig] = []
         if let exportFolder {
             let id = ObsidianDestination.safeFileName(tablet.name.lowercased().replacingOccurrences(of: " ", with: "-"))
-            sources.append(SourceConfig(id: id, device: tablet.name, path: exportFolder, fileTypes: tablet.fileTypes))
+            let kept = existing?.sources.first { $0.path == exportFolder }
+            sources.append(SourceConfig(id: kept?.id ?? id, device: tablet.name, path: exportFolder, fileTypes: tablet.fileTypes, recognizer: kept?.recognizer ?? .vision))
         }
         var destinations: [DestinationConfig] = []
-        if let obsidianVault { destinations.append(.obsidian(.init(id: "obsidian", vaultPath: obsidianVault))) }
+        if let obsidianVault {
+            var obsidian = existing?.destinations.compactMap { if case .obsidian(let o) = $0 { return o } else { return nil } }.first
+                ?? DestinationConfig.ObsidianConfig(id: "obsidian", vaultPath: obsidianVault)
+            obsidian.vaultPath = obsidianVault
+            obsidian.dailyNotes = dailyNotes
+            obsidian.weeklyDigest = weeklyDigest
+            destinations.append(.obsidian(obsidian))
+        }
         if let account = appleNotesAccount { destinations.append(.appleNotes(.init(id: "apple-notes", account: account))) }
         if appleCalendar { destinations.append(.appleCalendar(.init(id: "apple-calendar"))) }
         if appleReminders { destinations.append(.appleReminders(.init(id: "apple-reminders"))) }
-        if reviewStack { destinations.append(.reviewStack(.init(id: "review", shareWithPhone: shareWithPhone))) }
+        if reviewStack {
+            var stack = existing?.destinations.compactMap { if case .reviewStack(let s) = $0 { return s } else { return nil } }.first
+                ?? DestinationConfig.ReviewStackConfig(id: "review")
+            stack.shareWithPhone = shareWithPhone
+            destinations.append(.reviewStack(stack))
+        }
+        // Destinations Settings has no switches for stay as they were.
+        for destination in existing?.destinations ?? [] {
+            switch destination {
+            case .obsidian, .appleNotes, .appleCalendar, .appleReminders, .reviewStack: continue
+            default: destinations.append(destination)
+            }
+        }
+        var cloud = existing?.viwoodsCloud ?? ViwoodsCloudConfig(device: tablet.name)
+        cloud.device = tablet.name
         let config = RelayConfig(
             sources: sources,
             destinations: destinations,
-            viwoodsCloud: useViwoodsCloud ? ViwoodsCloudConfig(device: tablet.name) : nil,
-            sharedLedger: shareWithPhone && appleNotesAccount != nil ? SharedLedgerConfig() : nil,
-            kindleMail: kindleMail ? KindleMailConfig() : nil
+            recognition: existing?.recognition ?? RecognitionConfig(),
+            rescanIntervalSeconds: existing?.rescanIntervalSeconds ?? 300,
+            viwoodsCloud: useViwoodsCloud ? cloud : nil,
+            google: existing?.google,
+            microsoft: existing?.microsoft,
+            onDelete: (existing?.onDelete ?? [:]).filter { policy in destinations.contains { $0.id == policy.key } },
+            settleSeconds: existing?.settleSeconds ?? 5,
+            ai: existing?.ai,
+            sendTargets: existing?.sendTargets ?? [],
+            sharedLedger: shareWithPhone && appleNotesAccount != nil ? (existing?.sharedLedger ?? SharedLedgerConfig()) : nil,
+            kindleMail: kindleMail ? (existing?.kindleMail ?? KindleMailConfig()) : nil,
+            notifications: NotificationsConfig(problems: notifyProblems, newNotes: notifyNewNotes, reviewReminder: reviewReminder),
+            checkForUpdates: existing?.checkForUpdates ?? true
         )
         try config.validate()
         return config

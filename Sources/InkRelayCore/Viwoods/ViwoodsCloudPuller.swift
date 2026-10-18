@@ -86,6 +86,7 @@ public final class ViwoodsCloudPuller {
             do {
                 let notebook = try client.notebook(app, uuid: item.resourceId)
                 try writePDF(from: notebook.pageImageURLs(), to: relativePath, modified: item.lastModifiedTime)
+                writeInkPDF(from: notebook.inkImageURLs(), to: relativePath, into: &report)
                 remember(item.resourceId, modified: item.lastModifiedTime, at: relativePath)
                 report.updated += 1
             } catch {
@@ -205,6 +206,22 @@ public final class ViwoodsCloudPuller {
         }
     }
 
+    /// The ink layer beside the page, for recognition. Missing or failed ink is no failure: Vision reads the full page.
+    private func writeInkPDF(from urls: [URL]?, to relativePath: String, into report: inout PullReport) {
+        let target = config.inkURL(for: relativePath)
+        guard config.recognizeInkOnly, let urls, !urls.isEmpty else {
+            try? fileManager.removeItem(at: target)
+            return
+        }
+        do {
+            let images = try urls.map(client.download)
+            try PDFComposer.write(pageImages: images, to: target)
+        } catch {
+            try? fileManager.removeItem(at: target)
+            report.failures.append("\(relativePath): ink layer not pulled, recognizing the full page (\(error.localizedDescription))")
+        }
+    }
+
     private func isCurrent(_ resourceID: String, modified: Int64?, at relativePath: String) -> Bool {
         guard let entry = manifest.notes[resourceID] else { return false }
         return entry.modified == (modified ?? 0) && entry.path == relativePath
@@ -217,6 +234,11 @@ public final class ViwoodsCloudPuller {
         guard let entry = manifest.notes[resourceID], entry.modified == (modified ?? 0), entry.path != relativePath else { return false }
         let old = config.cacheURL.appendingPathComponent(entry.path)
         let new = config.cacheURL.appendingPathComponent(relativePath)
+        if fileManager.fileExists(atPath: config.inkURL(for: entry.path).path) {
+            try? fileManager.createDirectory(at: config.inkURL(for: relativePath).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fileManager.removeItem(at: config.inkURL(for: relativePath))
+            try? fileManager.moveItem(at: config.inkURL(for: entry.path), to: config.inkURL(for: relativePath))
+        }
         guard fileManager.fileExists(atPath: old.path) else { return false }
         do {
             try fileManager.createDirectory(at: new.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -234,6 +256,7 @@ public final class ViwoodsCloudPuller {
         let prefix = app.folderName + "/"
         for (resourceID, entry) in manifest.notes where entry.path.hasPrefix(prefix) && !seen.contains(resourceID) {
             try? fileManager.removeItem(at: config.cacheURL.appendingPathComponent(entry.path))
+            try? fileManager.removeItem(at: config.inkURL(for: entry.path))
             manifest.notes[resourceID] = nil
             report.removed += 1
         }
@@ -243,6 +266,7 @@ public final class ViwoodsCloudPuller {
         if let old = manifest.notes[resourceID]?.path, old != relativePath {
             // Renamed or moved on the tablet: drop the stale PDF so the old note stops being refreshed.
             try? fileManager.removeItem(at: config.cacheURL.appendingPathComponent(old))
+            try? fileManager.removeItem(at: config.inkURL(for: old))
         }
         manifest.notes[resourceID] = NoteEntry(modified: modified ?? 0, path: relativePath)
     }
@@ -374,6 +398,9 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
     public var cachePath: String?
     /// `vision` (default) or `claude`, as for folder sources.
     public var recognizer: RecognizerKind = .vision
+    /// Also pull each notebook page's ink layer, without the template, and recognize from that. The PDF keeps the
+    /// full page. Costs one more image per page the first time a notebook is pulled.
+    public var recognizeInkOnly: Bool = true
 
     public init(
         id: String = "viwoods-cloud",
@@ -381,7 +408,8 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         apps: [String] = ["paper", "meeting", "memo"],
         daily: Bool = true,
         dailyMonths: Int = 12,
-        cachePath: String? = nil
+        cachePath: String? = nil,
+        recognizeInkOnly: Bool = true
     ) {
         self.id = id
         self.device = device
@@ -389,9 +417,15 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         self.daily = daily
         self.dailyMonths = dailyMonths
         self.cachePath = cachePath
+        self.recognizeInkOnly = recognizeInkOnly
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, apps, daily, dailyMonths, cachePath, recognizer }
+    /// Where the ink-only PDF for a cached notebook lives: a hidden folder the scanner never lists.
+    public func inkURL(for relativePath: String) -> URL {
+        cacheURL.appendingPathComponent(".ink", isDirectory: true).appendingPathComponent(relativePath)
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, device, apps, daily, dailyMonths, cachePath, recognizer, recognizeInkOnly }
 
     public init(from decoder: Decoder) throws {
         let defaults = ViwoodsCloudConfig()
@@ -403,6 +437,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
         dailyMonths = try container.decodeIfPresent(Int.self, forKey: .dailyMonths) ?? defaults.dailyMonths
         cachePath = try container.decodeIfPresent(String.self, forKey: .cachePath)
         recognizer = try container.decodeIfPresent(RecognizerKind.self, forKey: .recognizer) ?? .vision
+        recognizeInkOnly = try container.decodeIfPresent(Bool.self, forKey: .recognizeInkOnly) ?? true
     }
 
     public var enabledApps: [ViwoodsApp] {

@@ -27,6 +27,10 @@ public struct RelayConfig: Codable, Equatable {
     public var sharedLedger: SharedLedgerConfig?
     /// Notebooks a Kindle Scribe shares by email, picked up from Mail.
     public var kindleMail: KindleMailConfig?
+    /// What the menu bar app tells you about. Defaults apply when missing.
+    public var notifications: NotificationsConfig
+    /// Look for a newer InkRelay once a day and say so in the menu.
+    public var checkForUpdates: Bool
 
     public init(
         sources: [SourceConfig],
@@ -41,7 +45,9 @@ public struct RelayConfig: Codable, Equatable {
         ai: AITranscriptionConfig? = nil,
         sendTargets: [SendTargetConfig] = [],
         sharedLedger: SharedLedgerConfig? = nil,
-        kindleMail: KindleMailConfig? = nil
+        kindleMail: KindleMailConfig? = nil,
+        notifications: NotificationsConfig = NotificationsConfig(),
+        checkForUpdates: Bool = true
     ) {
         self.sources = sources
         self.destinations = destinations
@@ -56,10 +62,12 @@ public struct RelayConfig: Codable, Equatable {
         self.sendTargets = sendTargets
         self.sharedLedger = sharedLedger
         self.kindleMail = kindleMail
+        self.notifications = notifications
+        self.checkForUpdates = checkForUpdates
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets, sharedLedger, kindleMail
+        case sources, destinations, recognition, rescanIntervalSeconds, viwoodsCloud, google, microsoft, onDelete, settleSeconds, ai, sendTargets, sharedLedger, kindleMail, notifications, checkForUpdates
     }
 
     /// Folder sources plus the Viwoods Cloud cache, which the engine scans like any other folder.
@@ -82,6 +90,8 @@ public struct RelayConfig: Codable, Equatable {
         sendTargets = try container.decodeIfPresent([SendTargetConfig].self, forKey: .sendTargets) ?? []
         sharedLedger = try container.decodeIfPresent(SharedLedgerConfig.self, forKey: .sharedLedger)
         kindleMail = try container.decodeIfPresent(KindleMailConfig.self, forKey: .kindleMail)
+        notifications = try container.decodeIfPresent(NotificationsConfig.self, forKey: .notifications) ?? NotificationsConfig()
+        checkForUpdates = try container.decodeIfPresent(Bool.self, forKey: .checkForUpdates) ?? true
     }
 
     /// Checks the things JSON decoding can't: unique ids and at least one source and destination.
@@ -109,6 +119,7 @@ public struct RelayConfig: Codable, Equatable {
             throw ConfigError.invalid("onDelete names \"\(unknown)\", which isn't a destination id.")
         }
         guard (0...600).contains(settleSeconds) else { throw ConfigError.invalid("settleSeconds must be between 0 and 600.") }
+        try notifications.validate()
         try ai?.validate()
         if let duplicate = sendTargets.map(\.id).firstDuplicate() {
             throw ConfigError.invalid("Two send targets share the id \"\(duplicate)\".")
@@ -195,16 +206,24 @@ public enum DestinationConfig: Codable, Equatable {
         /// Copy the original PDF next to the note and embed it.
         public var copyOriginal: Bool
         public var tags: [String]
+        /// Keep a block in the vault's daily note (Obsidian's own folder and date format) with the planner page,
+        /// the notes written that day and their open tasks.
+        public var dailyNotes: Bool
+        /// Keep `<folder>/Weekly/<year>-W<week>.md` with the week's notes, planner days and open tasks.
+        public var weeklyDigest: Bool
 
-        public init(id: String, vaultPath: String, folder: String = "Ink", copyOriginal: Bool = true, tags: [String] = ["ink"]) {
+        public init(id: String, vaultPath: String, folder: String = "Ink", copyOriginal: Bool = true, tags: [String] = ["ink"],
+                    dailyNotes: Bool = false, weeklyDigest: Bool = false) {
             self.id = id
             self.vaultPath = vaultPath
             self.folder = folder
             self.copyOriginal = copyOriginal
             self.tags = tags
+            self.dailyNotes = dailyNotes
+            self.weeklyDigest = weeklyDigest
         }
 
-        private enum CodingKeys: String, CodingKey { case id, vaultPath, folder, copyOriginal, tags }
+        private enum CodingKeys: String, CodingKey { case id, vaultPath, folder, copyOriginal, tags, dailyNotes, weeklyDigest }
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -213,6 +232,8 @@ public enum DestinationConfig: Codable, Equatable {
             folder = try container.decodeIfPresent(String.self, forKey: .folder) ?? "Ink"
             copyOriginal = try container.decodeIfPresent(Bool.self, forKey: .copyOriginal) ?? true
             tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? ["ink"]
+            dailyNotes = try container.decodeIfPresent(Bool.self, forKey: .dailyNotes) ?? false
+            weeklyDigest = try container.decodeIfPresent(Bool.self, forKey: .weeklyDigest) ?? false
         }
 
         public var vaultURL: URL { URL(fileURLWithPath: PathExpansion.expand(vaultPath), isDirectory: true) }
@@ -348,15 +369,24 @@ public struct RecognitionConfig: Codable, Equatable {
     public var renderScale: Double
     /// Upper bound on the longest rendered side, to keep memory in check on large pages.
     public var maxPixelDimension: Int
+    /// Words Vision should expect: names, products, places. They win over the dictionary when the ink is close.
+    public var vocabulary: [String]
+    /// Pages read at the same time. Each one takes a core and a few hundred MB while it runs.
+    public var concurrency: Int
 
-    public init(languages: [String] = ["en-US"], usesLanguageCorrection: Bool = true, renderScale: Double = 2, maxPixelDimension: Int = 3000) {
+    public static var defaultConcurrency: Int { max(1, min(4, ProcessInfo.processInfo.activeProcessorCount)) }
+
+    public init(languages: [String] = ["en-US"], usesLanguageCorrection: Bool = true, renderScale: Double = 2, maxPixelDimension: Int = 3000,
+                vocabulary: [String] = [], concurrency: Int = RecognitionConfig.defaultConcurrency) {
         self.languages = languages
         self.usesLanguageCorrection = usesLanguageCorrection
         self.renderScale = renderScale
         self.maxPixelDimension = maxPixelDimension
+        self.vocabulary = vocabulary
+        self.concurrency = concurrency
     }
 
-    private enum CodingKeys: String, CodingKey { case languages, usesLanguageCorrection, renderScale, maxPixelDimension }
+    private enum CodingKeys: String, CodingKey { case languages, usesLanguageCorrection, renderScale, maxPixelDimension, vocabulary, concurrency }
 
     public init(from decoder: Decoder) throws {
         let defaults = RecognitionConfig()
@@ -365,6 +395,9 @@ public struct RecognitionConfig: Codable, Equatable {
         usesLanguageCorrection = try container.decodeIfPresent(Bool.self, forKey: .usesLanguageCorrection) ?? defaults.usesLanguageCorrection
         renderScale = try container.decodeIfPresent(Double.self, forKey: .renderScale) ?? defaults.renderScale
         maxPixelDimension = try container.decodeIfPresent(Int.self, forKey: .maxPixelDimension) ?? defaults.maxPixelDimension
+        vocabulary = try container.decodeIfPresent([String].self, forKey: .vocabulary) ?? []
+        concurrency = try container.decodeIfPresent(Int.self, forKey: .concurrency) ?? defaults.concurrency
+        guard (1...16).contains(concurrency) else { throw ConfigError.invalid("recognition.concurrency must be between 1 and 16.") }
     }
 }
 
@@ -394,5 +427,44 @@ extension Array where Element: Hashable {
             return element
         }
         return nil
+    }
+}
+
+/// What the menu bar app notifies about. Quiet on success by default, loud when something needs a person.
+public struct NotificationsConfig: Codable, Equatable {
+    /// A sync problem that wasn't there before: an expired sign-in, a denied permission, a missing folder.
+    public var problems: Bool
+    /// New or changed pages that synced.
+    public var newNotes: Bool
+    /// Daily, at this local time (`HH:mm`), how many review cards are waiting. Nil for none.
+    public var reviewReminder: String?
+
+    public init(problems: Bool = true, newNotes: Bool = false, reviewReminder: String? = nil) {
+        self.problems = problems
+        self.newNotes = newNotes
+        self.reviewReminder = reviewReminder
+    }
+
+    private enum CodingKeys: String, CodingKey { case problems, newNotes, reviewReminder }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        problems = try container.decodeIfPresent(Bool.self, forKey: .problems) ?? true
+        newNotes = try container.decodeIfPresent(Bool.self, forKey: .newNotes) ?? false
+        reviewReminder = try container.decodeIfPresent(String.self, forKey: .reviewReminder)
+    }
+
+    /// Hour and minute of the reminder, when one is set.
+    public var reminderTime: (hour: Int, minute: Int)? {
+        guard let reviewReminder else { return nil }
+        let parts = reviewReminder.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2, (0...23).contains(parts[0]), (0...59).contains(parts[1]) else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    func validate() throws {
+        if reviewReminder != nil, reminderTime == nil {
+            throw ConfigError.invalid("notifications.reviewReminder must be a time like \"09:00\".")
+        }
     }
 }

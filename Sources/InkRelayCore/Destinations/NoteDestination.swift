@@ -77,7 +77,7 @@ public enum DestinationFactory {
         return configs.map { config -> NoteDestination in
             switch config {
             case .obsidian(let obsidian):
-                return ObsidianDestination(config: obsidian)
+                return ObsidianDestination(config: obsidian, archive: NoteArchive(directory: context.supportDirectory.appendingPathComponent("archive", isDirectory: true)))
             case .appleNotes(let notes):
                 return AppleNotesDestination(config: notes, runner: context.scriptRunner)
             case .appleCalendar(let calendar):

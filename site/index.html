@@ -4,71 +4,243 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>InkRelay: your tablet's handwriting, in the apps you already use</title>
-<meta name="description" content="InkRelay files handwritten notes from any e-ink tablet into Apple Notes, Obsidian, OneNote, Notion and Google Docs, with tasks in Reminders and plans in your calendar.">
+<meta name="description" content="InkRelay reads the handwriting on your e-ink tablet on your Mac and files every notebook into Obsidian, Apple Notes, OneNote, Notion or Google Docs, with tasks in Reminders, plans in your calendar, and a read-later stack of your own pages.">
+<meta property="og:title" content="InkRelay">
+<meta property="og:description" content="Any e-ink tablet, into the notes and calendar apps you already use. Read on your Mac, nothing uploaded.">
+<meta property="og:image" content="assets/hero.png">
+<link rel="icon" href="assets/favicon.png"><link rel="apple-touch-icon" href="assets/icon.png">
 <style>
-:root{--bg:#f2efe8;--card:#fffdf9;--ink:#1c1b19;--muted:#6d685f;--line:#e4dfd4;--accent:#2e5b4e;--accent-ink:#fff;--serif:ui-serif,"New York","Iowan Old Style",Georgia,serif;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a}}
-:root[data-theme="dark"]{--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
-main{max-width:760px;margin:0 auto;padding:56px 16px 40px}
-.mark{font:600 1rem var(--serif);color:var(--muted);letter-spacing:.02em}
-h1{font:600 clamp(2rem,6vw,3.1rem)/1.1 var(--serif);margin:.4em 0 .35em;letter-spacing:-.01em}
-.lede{font-size:1.15rem;color:var(--muted);max-width:36em;margin:0 0 2rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:2rem 0}
+:root{--bg:#f2efe8;--card:#fffdf9;--ink:#1c1b19;--muted:#6d685f;--line:#e4dfd4;--accent:#2e5b4e;--accent-ink:#fff;--soft:#e7eee9;--serif:ui-serif,"New York","Iowan Old Style",Georgia,serif;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a;--soft:#1d2622}}
+:root[data-theme="dark"]{--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a;--soft:#1d2622}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+header{position:sticky;top:0;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:5}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font:600 1.05rem var(--serif);color:var(--ink);text-decoration:none}
+.brand img{width:28px;height:28px;border-radius:7px}
+nav{display:flex;gap:18px;font-size:.92rem}nav a{color:var(--muted);text-decoration:none}nav a:hover{color:var(--ink)}
+@media (max-width:720px){nav{display:none}}
+.btn{display:inline-block;font:600 .98rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:12px 20px;text-decoration:none;cursor:pointer}
+.btn.quiet{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,details summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hero{padding:64px 0 32px;display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:center}
+@media (max-width:860px){.hero{grid-template-columns:1fr;padding-top:40px}}
+.hero h1{font:600 clamp(2.1rem,5.2vw,3.4rem)/1.08 var(--serif);margin:0 0 .5em;letter-spacing:-.01em}
+.lede{font-size:1.15rem;color:var(--muted);max-width:34em;margin:0 0 1.6rem}
+.cta{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.cta .note{font-size:.85rem;color:var(--muted);width:100%}
+.hero img{width:100%;height:auto;border-radius:18px;border:1px solid var(--line);background:var(--card)}
+section{padding:48px 0;border-top:1px solid var(--line)}
+h2{font:600 clamp(1.5rem,3vw,2rem)/1.2 var(--serif);margin:0 0 .4em;letter-spacing:-.01em}
+.sub{color:var(--muted);max-width:40em;margin:0 0 1.6rem}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;counter-reset:step}
+@media (max-width:720px){.steps{grid-template-columns:1fr}}
+.step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+.step::before{counter-increment:step;content:counter(step);display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--soft);color:var(--accent);font-weight:700;margin-bottom:10px}
+.step h3{font:600 1.1rem var(--serif);margin:0 0 .3rem}.step p{margin:0;color:var(--muted);font-size:.95rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px}
-.card h2{font:600 1.05rem/1.3 var(--serif);margin:0 0 .3rem}.card p{margin:0;color:var(--muted);font-size:.95rem}
-form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:2.4rem}
-form h2{font:600 1.35rem var(--serif);margin:0 0 .3rem}form p{margin:0 0 1rem;color:var(--muted)}
+.card h3{font:600 1.05rem/1.3 var(--serif);margin:0 0 .3rem}.card p{margin:0;color:var(--muted);font-size:.95rem}
+table{width:100%;border-collapse:collapse;font-size:.95rem;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.85rem;letter-spacing:.02em;text-transform:uppercase}
+tr:last-child td{border-bottom:0}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{font-size:.9rem;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.review{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:center}
+@media (max-width:760px){.review{grid-template-columns:1fr}}
+.stack{position:relative;height:300px}
+.rcard{position:absolute;left:50%;top:50%;width:min(300px,86%);transform:translate(-50%,-50%) rotate(-4deg);background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.rcard.two{transform:translate(-50%,-50%) rotate(2deg) translateY(-10px)}
+.rcard.three{transform:translate(-50%,-50%) rotate(6deg) translateY(-20px);opacity:.7}
+.rcard .t{font:600 1rem var(--serif);margin:0 0 2px}.rcard .s{font-size:.8rem;color:var(--muted);margin:0 0 10px}
+.rcard .ink{height:84px;border-radius:8px;background:repeating-linear-gradient(0deg,transparent 0 22px,var(--line) 22px 23px),var(--bg)}
+.rcard .acts{display:flex;gap:8px;margin-top:12px}.rcard .acts span{flex:1;text-align:center;font-size:.85rem;padding:6px;border-radius:8px;border:1px solid var(--line)}
+.rcard .acts span.done{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:760px}
+@media (max-width:640px){.plans{grid-template-columns:1fr}}
+.plan{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
+.plan.pro{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
+.plan h3{font:600 1.2rem var(--serif);margin:0}.price{font:600 2rem var(--serif);margin:.2em 0 .1em}.price small{font:400 .95rem var(--sans);color:var(--muted)}
+.plan ul{margin:.8rem 0 0;padding-left:1.1em;color:var(--muted);font-size:.95rem}.plan li{margin:.25em 0}
+details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 16px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:600;padding:10px 0}details p{margin:0 0 12px;color:var(--muted)}
+form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;max-width:560px}
+form h3{font:600 1.2rem var(--serif);margin:0 0 .3rem}form p{margin:0 0 1rem;color:var(--muted);font-size:.95rem}
 label{display:block;font-size:.9rem;font-weight:600;margin:.8rem 0 .3rem}
 input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:560px){.row{grid-template-columns:1fr}}
-button{margin-top:1.2rem;font:600 1rem var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:13px 20px;cursor:pointer;width:100%}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.small{font-size:.85rem;color:var(--muted);margin-top:.8rem}footer{color:var(--muted);font-size:.85rem;text-align:center;padding:24px 16px}
+form .btn{width:100%;margin-top:1.2rem}
+.small{font-size:.85rem;color:var(--muted)}
+code{font:.9em var(--mono);background:var(--soft);padding:1px 5px;border-radius:5px}
+footer{color:var(--muted);font-size:.85rem;padding:28px 16px;border-top:1px solid var(--line)}
+footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
 </head>
 <body>
-<main>
-  <div class="mark">InkRelay</div>
-  <h1>Your tablet's handwriting, in the apps you already use.</h1>
-  <p class="lede">E-ink tablets sync to their own cloud. InkRelay picks the notes up, reads the handwriting on your Mac, and files every notebook into Apple Notes, Obsidian, OneNote, Notion or Google Docs. Tasks you write become reminders; planner pages land in your calendar.</p>
-
-  <div class="grid">
-    <div class="card"><h2>Any tablet</h2><p>Viwoods, reMarkable, Supernote, Boox, Kindle Scribe, or anything that exports PDF.</p></div>
-    <div class="card"><h2>Read on your Mac</h2><p>Apple's on-device recognition by default. Optional AI transcription for messy pages, capped at a budget you set.</p></div>
-    <div class="card"><h2>Your edits stay</h2><p>Write around your notes in Obsidian; re-syncs only touch what InkRelay wrote.</p></div>
-    <div class="card"><h2>A read-later stack</h2><p>New pages and to-dos as cards to flip through, one at a time, when you have a minute.</p></div>
-    <div class="card"><h2>And back again</h2><p>Send articles and documents to the tablet as clean EPUB books.</p></div>
-    <div class="card"><h2>Mac, iPhone, iPad</h2><p>A quiet menu bar app, and Shortcuts actions on the go.</p></div>
+<header>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="assets/icon.png" alt="" width="28" height="28">InkRelay</a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#compat">Compatibility</a>
+      <a href="#review">Review</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn" href="#download">Download for Mac</a>
   </div>
+</header>
 
-  <!-- Replace WAITLIST_ENDPOINT with a form service URL (Formspree, Tally, Buttondown...). The tablet and destination
-       fields are there to count sign-ups by tablet and destination (#19). -->
-  <form action="WAITLIST_ENDPOINT" method="POST">
-    <h2>Join the waitlist</h2>
-    <p>One email when it's ready. Nothing else.</p>
-    <label for="email">Email</label>
-    <input id="email" name="email" type="email" autocomplete="email" required>
-    <div class="row">
-      <div>
-        <label for="tablet">Your tablet</label>
-        <select id="tablet" name="tablet" required>
-          <option value="">Choose…</option>
-          <option>Viwoods</option><option>reMarkable</option><option>Supernote</option><option>Boox</option><option>Kindle Scribe</option><option>Other</option>
-        </select>
-      </div>
-      <div>
-        <label for="destination">Where notes should go</label>
-        <select id="destination" name="destination" required>
-          <option value="">Choose…</option>
-          <option>Apple Notes</option><option>Obsidian</option><option>OneNote</option><option>Notion</option><option>Google Docs</option><option>Other</option>
-        </select>
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <h1>Your tablet's handwriting, in the apps you already use.</h1>
+      <p class="lede">E-ink tablets sync to their own cloud and stop there. InkRelay picks your notebooks up, reads the handwriting on your Mac, and files every page into Obsidian, Apple Notes, OneNote, Notion or Google Docs. Tasks you write become reminders. Planner pages land in your calendar. Nothing is uploaded.</p>
+      <div class="cta">
+        <a class="btn" href="#download">Download for Mac</a>
+        <a class="btn quiet" href="#how">See how it works</a>
+        <span class="note">macOS 14 or later. Free for export folders, Obsidian and the Apple apps; 14-day trial of everything else.</span>
       </div>
     </div>
-    <button type="submit">Notify me</button>
-    <p class="small">Your email is used only for this. No tracking on this page.</p>
-  </form>
+    <img src="assets/hero.png" alt="An e-ink tablet whose handwriting flows into typed notes, a calendar entry and a checklist" width="1600" height="900">
+  </div>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="sub">Set it up once. From then on it runs in the menu bar and you keep writing.</p>
+    <div class="steps">
+      <div class="step"><h3>Write on the tablet</h3><p>Viwoods Cloud is read directly. Every other tablet exports PDFs to Google Drive, Dropbox, OneDrive or iCloud Drive; InkRelay watches that folder. Supernote notebooks are read in their own format.</p></div>
+      <div class="step"><h3>It's read on your Mac</h3><p>Apple's on-device recognition turns the ink into text, page by page, with your own vocabulary for names and products. Optional AI transcription for the hard pages, on a budget you set.</p></div>
+      <div class="step"><h3>It lands where you work</h3><p>Each notebook becomes a note with the original page beside it. Edits you make around it survive every sync. Tasks go to Reminders; plans to your calendar; new pages to a review stack.</p></div>
+    </div>
+  </section>
+
+  <section id="compat">
+    <h2>Any tablet, any notes app</h2>
+    <p class="sub">One app instead of a plugin per vendor. This is the whole matrix today.</p>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Tablet</th><th>How notes arrive</th><th>Checked with</th></tr></thead>
+      <tbody>
+        <tr><td>Viwoods AiPaper, AiPaper Mini</td><td>Straight from Viwoods Cloud: notebooks, memos, the Daily planner, the ink layer without the template. Or a PDF export folder.</td><td>A real account: notebooks, memos, 20 planner days</td></tr>
+        <tr><td>Supernote Manta, Nomad, A5 X, A6 X</td><td><code>.note</code> files from the device's own sync, read directly, or PDF exports</td><td>Public sample notebooks and the device's own PDFs</td></tr>
+        <tr><td>reMarkable Paper Pro, Paper Pro Move, 2</td><td>PDF exports to Google Drive, Dropbox or OneDrive</td><td>Export folders in general; a reMarkable export itself still to come</td></tr>
+        <tr><td>Boox Note Air, Tab, Go</td><td>PDF or PNG exports to any cloud folder</td><td>Export folders in general</td></tr>
+        <tr><td>Kindle Scribe, Scribe Colorsoft</td><td>Notebooks you share by email, picked up from Mail</td><td>Built against Amazon's export email; a live inbox still to come</td></tr>
+        <tr><td>Anything else</td><td>A folder of PDFs or images</td><td>Yes</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="chips" aria-label="Destinations">
+      <span class="chip">Obsidian</span><span class="chip">Apple Notes</span><span class="chip">Apple Calendar</span><span class="chip">Apple Reminders</span><span class="chip">Google Calendar</span><span class="chip">Google Docs</span><span class="chip">Outlook Calendar</span><span class="chip">OneNote</span><span class="chip">Notion</span><span class="chip">Obsidian daily notes</span><span class="chip">iPhone &amp; iPad</span>
+    </div>
+  </section>
+
+  <section id="review">
+    <div class="review">
+      <div>
+        <h2>A read-later stack of your own pages</h2>
+        <p class="sub">Every new page and every planner to-do becomes a card. Flip through them when you have a minute, on the Mac or on your phone: Done, or Later. Lines with a date become calendar events with one tap. Done cards can come back in 3, 14 and 60 days if you want to remember what you wrote.</p>
+        <p class="sub">A weekly digest in Obsidian sums the week up: what you wrote, which planner days, which tasks are still open.</p>
+      </div>
+      <div class="stack" aria-hidden="true">
+        <div class="rcard three"><p class="t">Reading notes</p><p class="s">Page 4 of 11 · Paper</p><div class="ink"></div></div>
+        <div class="rcard two"><p class="t">2026-10-14</p><p class="s">Daily plan · Wednesday</p><div class="ink"></div></div>
+        <div class="rcard"><p class="t">Ensemble</p><p class="s">Page 1 of 4 · Paper</p><div class="ink"></div><div class="acts"><span>Later</span><span class="done">Done</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <h2>Read on your Mac. Kept on your Mac.</h2>
+    <div class="grid">
+      <div class="card"><h3>No server</h3><p>Recognition runs on your Mac. The license is checked on your Mac. Phones share through your own iCloud Drive. There is nothing to sign up for.</p></div>
+      <div class="card"><h3>You choose what leaves</h3><p>AI transcription is off until you turn it on, per source, with your own key and a monthly cap. Google, Microsoft and Notion see only what you send them.</p></div>
+      <div class="card"><h3>Your edits stay</h3><p>In Obsidian, InkRelay rewrites only its own block. Write around it, tag it, link it; re-syncs leave your words alone.</p></div>
+      <div class="card"><h3>Nothing is erased for good</h3><p>Deletions, if you turn them on, go to the Trash or Recently Deleted. A folder that turns up empty deletes nothing.</p></div>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <h2>Pricing</h2>
+    <p class="sub">Free for what a Mac can do alone. One payment for the rest. Every install starts with 14 days of everything.</p>
+    <div class="plans">
+      <div class="plan">
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <ul>
+          <li>Export folders from any tablet</li>
+          <li>Obsidian, with daily notes and the weekly digest</li>
+          <li>Apple Notes, Apple Calendar, Apple Reminders</li>
+          <li>On-device recognition with your vocabulary</li>
+          <li>Send articles to the tablet</li>
+        </ul>
+      </div>
+      <div class="plan pro">
+        <h3>Pro</h3>
+        <p class="price">$29 <small>once, for one person's Macs</small></p>
+        <ul>
+          <li>Everything in Free</li>
+          <li>Viwoods Cloud, read directly, ink layer and planner included</li>
+          <li>Kindle Scribe by email</li>
+          <li>Google Calendar and Docs, Outlook Calendar, OneNote, Notion</li>
+          <li>The review stack, on the Mac and on iPhone and iPad</li>
+          <li>AI transcription with your own key</li>
+        </ul>
+      </div>
+    </div>
+    <p class="small" style="margin-top:14px">When the trial ends, Pro parts pause and say so; nothing is deleted, and they pick up where they stopped once a key is entered.</p>
+  </section>
+
+  <section id="faq">
+    <h2>Questions</h2>
+    <details><summary>Does my handwriting leave my Mac?</summary><p>No. Vision, Apple's recognition, runs on the Mac. The only exception is AI transcription, which you turn on yourself for a source, with your own key.</p></details>
+    <details><summary>How good is the recognition?</summary><p>Clear handwriting comes out right. Messy lines don't, on any system; InkRelay keeps the page image beside the text so you always have the original, and lets you add names and words it should expect. For hard pages, AI transcription reads better and suggests a title.</p></details>
+    <details><summary>Which tablet do I need?</summary><p>Any that can export PDFs to a cloud folder, which is all of them. A Viwoods AiPaper with Viwoods Cloud needs no export at all. Supernote notebooks are read in their own format.</p></details>
+    <details><summary>Does it need the Mac to be on?</summary><p>Yes; InkRelay syncs while it runs. Open it at login and forget it. The iPhone app reads exports and the review stack on its own, through iCloud Drive and the Files app.</p></details>
+    <details><summary>What happens to my notes if I stop paying?</summary><p>Nothing. There's no subscription. A Pro key is yours; the free parts never pause.</p></details>
+    <details><summary>Can I use it from the terminal or with an AI assistant?</summary><p>Yes. <code>inkrelay</code> ships inside the app with every command, and <code>inkrelay mcp</code> serves your notes to Claude and other MCP clients: search what you wrote, list tasks, work through the stack.</p></details>
+  </section>
+
+  <section id="download">
+    <h2>Download</h2>
+    <p class="sub">InkRelay for Mac, macOS 14 or later, Apple silicon and Intel. The iPhone and iPad app follows on TestFlight.</p>
+    <p><a class="btn" href="https://github.com/urazalievf/inkrelay/releases/latest">Download InkRelay for Mac</a></p>
+    <form action="WAITLIST_ENDPOINT" method="POST" style="margin-top:28px">
+      <h3>Hear when the iPhone app and new tablets land</h3>
+      <p>One email per release. Nothing else, and no tracking on this page.</p>
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+      <div class="row">
+        <div>
+          <label for="tablet">Your tablet</label>
+          <select id="tablet" name="tablet" required>
+            <option value="">Choose…</option>
+            <option>Viwoods</option><option>reMarkable</option><option>Supernote</option><option>Boox</option><option>Kindle Scribe</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label for="destination">Where notes should go</label>
+          <select id="destination" name="destination" required>
+            <option value="">Choose…</option>
+            <option>Obsidian</option><option>Apple Notes</option><option>OneNote</option><option>Notion</option><option>Google Docs</option><option>Other</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" type="submit">Keep me posted</button>
+    </form>
+  </section>
 </main>
-<footer>© 2026 InkRelay</footer>
+<footer>
+  <div class="wrap">
+    <span>© 2026 InkRelay</span>
+    <span><a href="https://github.com/urazalievf/inkrelay/releases">Releases</a> · <a href="mailto:hello@inkrelay.app">Contact</a></span>
+  </div>
+</footer>
 </body>
 </html>

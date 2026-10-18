@@ -79,9 +79,11 @@ final class SetupAndDoctorTests: XCTestCase {
 
         let checks = doctor(config).checks(includeApps: false, accounts: false)
 
-        XCTAssertEqual(checks.map(\.status), [.ok, .problem, .problem, .ok, .warning])
+        XCTAssertEqual(checks.map(\.status), [.ok, .problem, .problem, .ok, .ok, .warning])
         XCTAssertTrue(checks[0].detail.hasPrefix("1 export(s)"))
-        XCTAssertTrue(checks[4].detail.contains("install-agent.sh"))
+        XCTAssertEqual(checks[4].title, "Plan")
+        XCTAssertTrue(checks[4].detail.hasPrefix("Pro trial"))
+        XCTAssertTrue(checks[5].detail.contains("install-agent.sh"))
 
         try home.write("Library/LaunchAgents/\(Doctor.agentLabel).plist", "<plist/>")
         try home.write("Library/Logs/InkRelay/inkrelay.log", "hello")

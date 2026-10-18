@@ -114,6 +114,15 @@ public struct ViwoodsNotebook: Decodable, Equatable {
     public var pages: [PageEntry]
     public var resourceRefs: [ResourceRef]
 
+    /// The ink alone for each live page, without the template, or nil when any page lacks one.
+    public func inkImageURLs() -> [URL]? {
+        let live = pages.filter { $0.page.isDeleted != 1 }.sorted { $0.page.order < $1.page.order }
+        let urls = live.compactMap { entry in
+            resourceRefs.first { $0.ownerPageId == entry.page.id && $0.fileName.hasPrefix("mainBmp_") }.flatMap { URL(string: $0.remoteUrl) }
+        }
+        return urls.count == live.count ? urls : nil
+    }
+
     /// The rendered image of each live page, in reading order.
     public func pageImageURLs() -> [URL] {
         let live = pages.filter { $0.page.isDeleted != 1 }.sorted { $0.page.order < $1.page.order }

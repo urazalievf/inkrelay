@@ -29,6 +29,8 @@ public final class RelayRunner {
         public var recent: [RecentNote] = []
         public var reviewDue = 0
         public var reviewURL: URL?
+        /// Notes delivered by the last pass; they're at the top of `recent`.
+        public var lastSynced = 0
 
         public init() {}
     }
@@ -162,6 +164,7 @@ public final class RelayRunner {
         syncing = false
         snapshot.lastSync = now()
         snapshot.summary = report.summary
+        snapshot.lastSynced = report.synced
         snapshot.problems = report.failures.map { failure in
             failure.item + (failure.destinationID.map { " → \($0)" } ?? "") + ": " + failure.message
         } + report.warnings
