@@ -51,7 +51,7 @@ public struct Doctor {
 
     /// `includeApps` probes Notes, Calendar and Reminders, which makes macOS ask for permission the first time.
     public func checks(includeApps: Bool = true, accounts: Bool = true) -> [DoctorCheck] {
-        var results = sourceChecks() + destinationChecks()
+        var results = sourceChecks() + destinationChecks() + sendTargetChecks()
         if includeApps { results += appChecks() }
         if accounts { results += accountChecks() }
         results.append(planCheck())
@@ -69,15 +69,59 @@ public struct Doctor {
     }
 
     func sourceChecks() -> [DoctorCheck] {
-        config.allSources.map { source in
+        config.allSources.flatMap { source -> [DoctorCheck] in
+            let isCloudCache = source.id == config.viwoodsCloud?.id
             guard fileManager.fileExists(atPath: source.url.path) else {
-                if source.id == config.viwoodsCloud?.id {
-                    return DoctorCheck(.warning, "Viwoods Cloud cache", "not created yet; it appears after the first sync")
+                if isCloudCache {
+                    return [DoctorCheck(.warning, "Viwoods Cloud cache", "not created yet; it appears after the first sync")]
                 }
-                return DoctorCheck(.problem, "Source \(source.id)", "no folder at \(source.url.path). Check the path and that the cloud app is running.")
+                return [DoctorCheck(.problem, "Source \(source.id)", "no folder at \(source.url.path). Check the path and that the cloud app is running.")]
             }
-            let count = (try? FolderScanner.scan(source, fileManager: fileManager).count) ?? 0
-            return DoctorCheck(.ok, "Source \(source.id)", "\(count) export(s) in \(source.url.path)")
+            var checks: [DoctorCheck] = []
+            do {
+                let files = try FolderScanner.scan(source, fileManager: fileManager)
+                if files.isEmpty, !isCloudCache {
+                    checks.append(DoctorCheck(.warning, "Source \(source.id)", emptyExplanation(source)))
+                } else {
+                    checks.append(DoctorCheck(.ok, "Source \(source.id)", "\(files.count) export(s) in \(source.url.path)"))
+                }
+            } catch {
+                checks.append(DoctorCheck(.problem, "Source \(source.id)", error.localizedDescription))
+            }
+            if let template = source.templateURL {
+                if !fileManager.fileExists(atPath: template.path) {
+                    checks.append(DoctorCheck(.problem, "Template for \(source.id)", "no file at \(template.path); every page of this source would fail to read"))
+                } else if (try? TemplateSubtractor.templateImage(at: template, scale: config.recognition.renderScale, maxPixelDimension: config.recognition.maxPixelDimension)) == nil {
+                    checks.append(DoctorCheck(.problem, "Template for \(source.id)", "\(template.lastPathComponent) isn't a PNG, JPEG or PDF InkRelay can open"))
+                } else {
+                    checks.append(DoctorCheck(.ok, "Template for \(source.id)", template.path))
+                }
+            }
+            return checks
+        }
+    }
+
+    /// Why a folder that exists gives no exports: empty (or only online placeholders), or files of other types.
+    func emptyExplanation(_ source: SourceConfig) -> String {
+        let census = FolderScanner.census(of: source.url, fileManager: fileManager)
+        guard census.total > 0 else {
+            return "0 exports: the folder is empty. If the cloud app keeps files online only, mark the folder Available offline."
+        }
+        let listed = census.counts.sorted { $0.value > $1.value }.prefix(4).map { "\($0.value) .\($0.key)" }.joined(separator: ", ")
+        return "0 exports: the folder holds \(listed)\(census.total >= 500 ? " (and more)" : "") file(s), and this source reads \(source.fileTypes.joined(separator: ", ")). Add the right types to fileTypes."
+    }
+
+    func sendTargetChecks() -> [DoctorCheck] {
+        config.sendTargets.compactMap { target in
+            guard case .folder(let id, let path) = target else { return nil }
+            let folder = URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: folder.path, isDirectory: &isDirectory) {
+                return isDirectory.boolValue
+                    ? DoctorCheck(.ok, "Send target \(id)", folder.path)
+                    : DoctorCheck(.problem, "Send target \(id)", "\(folder.path) is a file, not a folder")
+            }
+            return DoctorCheck(.warning, "Send target \(id)", "\(folder.path) doesn't exist yet. It's made on the first send; check it's inside the folder your tablet syncs.")
         }
     }
 

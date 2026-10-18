@@ -20,10 +20,16 @@ public enum FolderScanner {
 
         let types = Set(source.fileTypes.map { $0.lowercased() })
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        // A folder macOS won't let InkRelay read still enumerates, as empty; the error handler is the only sign.
+        var rootError: Error?
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            options: [.skipsHiddenFiles, .skipsPackageDescendants],
+            errorHandler: { url, error in
+                if url.standardizedFileURL.resolvingSymlinksInPath().path == root.path { rootError = error }
+                return true
+            }
         ) else {
             throw ScanError.folderMissing(source.id, root.path)
         }
@@ -41,7 +47,24 @@ public enum FolderScanner {
                 modified: values.contentModificationDate ?? .distantPast
             ))
         }
+        if files.isEmpty, let rootError { throw ScanError.unreadable(source.id, root.path, rootError.localizedDescription) }
         return files.sorted { $0.relativePath < $1.relativePath }
+    }
+
+    /// What's in a folder by file type, for explaining a source that finds nothing. Reads at most `limit` entries.
+    public static func census(of folder: URL, fileManager: FileManager = .default, limit: Int = 500) -> (counts: [String: Int], total: Int) {
+        guard let enumerator = fileManager.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) else {
+            return ([:], 0)
+        }
+        var counts: [String: Int] = [:]
+        var total = 0
+        for case let url as URL in enumerator {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            total += 1
+            counts[url.pathExtension.isEmpty ? "(none)" : url.pathExtension.lowercased(), default: 0] += 1
+            if total >= limit { break }
+        }
+        return (counts, total)
     }
 
     static func relativePath(of url: URL, in root: URL) -> String {
@@ -54,11 +77,14 @@ public enum FolderScanner {
 
 public enum ScanError: Error, LocalizedError {
     case folderMissing(String, String)
+    case unreadable(String, String, String)
 
     public var errorDescription: String? {
         switch self {
         case .folderMissing(let id, let path):
             return "Source \"\(id)\": no folder at \(path). Check the path, and that the cloud app (Google Drive, Dropbox or OneDrive) is running."
+        case .unreadable(let id, let path, let reason):
+            return "Source \"\(id)\": \(path) can't be read (\(reason)). Allow InkRelay in System Settings → Privacy & Security → Files and Folders."
         }
     }
 }
