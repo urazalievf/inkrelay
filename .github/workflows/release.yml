@@ -8,20 +8,32 @@ name: Release
 #   NOTARY_KEY_P8_BASE64        App Store Connect API key (.p8), base64
 #   NOTARY_KEY_ID               its key id
 #   NOTARY_ISSUER_ID            its issuer id
+# Apple sometimes holds a notarization for hours (a new team's first submissions especially). The signed app is
+# kept as the run's "signed-app" artifact, so once Apple accepts it the release is finished without rebuilding:
+#   gh workflow run release.yml -f run_id=<the tag's run> -f tag=v0.10.0
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Tag run whose signed app Apple has since accepted"
+        required: true
+      tag:
+        description: "Its tag, e.g. v0.10.0"
+        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
     name: Build, sign, notarize, publish
+    if: github.event_name == 'push'
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -68,15 +80,47 @@ jobs:
       - name: Build and sign the app (universal, hardened runtime)
         run: UNIVERSAL=1 SIGN_IDENTITY="$DEVELOPER_ID_NAME" scripts/build-app.sh
 
+      - name: Keep the signed app
+        run: ditto -c -k --keepParent build/InkRelay.app "$RUNNER_TEMP/InkRelay-signed.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-app
+          path: ${{ runner.temp }}/InkRelay-signed.zip
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Notarize and staple
         run: |
+          set -o pipefail
           echo "$NOTARY_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary.p8"
-          ditto -c -k --keepParent build/InkRelay.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
-            --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --timeout 30m
+          trap 'rm -f "$RUNNER_TEMP/notary.p8"' EXIT
+          AUTH=(--key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID")
+          ID=$(xcrun notarytool submit "$RUNNER_TEMP/InkRelay-signed.zip" "${AUTH[@]}" --output-format json | jq -er .id)
+          echo "Submission $ID"
+          xcrun notarytool wait "$ID" "${AUTH[@]}" --timeout 30m || true
+          STATUS=$(xcrun notarytool info "$ID" "${AUTH[@]}" --output-format json | jq -r .status)
+          case "$STATUS" in
+            Accepted) ;;
+            "In Progress")
+              FINISH="gh workflow run release.yml -f run_id=$GITHUB_RUN_ID -f tag=$GITHUB_REF_NAME"
+              {
+                echo "### Apple is still checking the app"
+                echo
+                echo "Submission \`$ID\` was still in progress after 30 minutes. The signed app is kept as this run's \`signed-app\` artifact for 14 days."
+                echo "When \`xcrun notarytool info $ID\` says Accepted, finish the release without rebuilding:"
+                echo
+                echo "    $FINISH"
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::Apple is still checking submission $ID. Once it's accepted: $FINISH"
+              exit 1 ;;
+            *)
+              xcrun notarytool log "$ID" "${AUTH[@]}" || true
+              echo "::error::Notarization says $STATUS for submission $ID; Apple's log is above."
+              exit 1 ;;
+          esac
           xcrun stapler staple build/InkRelay.app
           spctl --assess --type execute --verbose build/InkRelay.app
-          rm "$RUNNER_TEMP/notary.p8"
 
       - name: Package
         run: ditto -c -k --keepParent build/InkRelay.app "InkRelay-${{ steps.version.outputs.version }}.zip"
@@ -92,12 +136,71 @@ jobs:
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
 
+  # Run by hand (see the top) when a tag's run stopped at notarization and Apple has since accepted the app.
+  # Staples the very app that run signed and submitted, then publishes it; nothing is rebuilt or re-signed.
+  finish:
+    name: Staple and publish an accepted app
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RUN_ID: ${{ inputs.run_id }}
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Inputs look right
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "::error::run_id must be a run number"; exit 1; }
+          [[ "$TAG" =~ ^v[0-9]+(\.[0-9]+){2,3}$ ]] || { echo "::error::tag must look like v1.2.3 or v1.2.3.1"; exit 1; }
+
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: The run built this tag
+        id: version
+        run: |
+          read -r EVENT RUN_SHA RUN_REF < <(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            --jq '"\(.event) \(.head_sha) \(.head_branch)"')
+          if [[ "$EVENT" != push || "$RUN_SHA" != "$(git rev-parse HEAD)" || "$RUN_REF" != "$TAG" ]]; then
+            echo "::error::Run $RUN_ID built $RUN_REF at $RUN_SHA from a $EVENT, not $TAG at $(git rev-parse HEAD)."
+            exit 1
+          fi
+          echo "version=$(scripts/check-version.sh "$TAG")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-app
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/signed
+
+      - name: Staple
+        run: |
+          mkdir -p build
+          ditto -x -k "$RUNNER_TEMP/signed/InkRelay-signed.zip" build
+          # Fails with "Record not found" until Apple has accepted this exact build.
+          xcrun stapler staple build/InkRelay.app
+          spctl --assess --type execute --verbose build/InkRelay.app
+
+      - name: Package
+        run: ditto -c -k --keepParent build/InkRelay.app "InkRelay-${{ steps.version.outputs.version }}.zip"
+
+      - name: Publish the release
+        run: |
+          gh release create "$TAG" "InkRelay-${{ steps.version.outputs.version }}.zip" \
+            --title "InkRelay ${{ steps.version.outputs.version }}" --generate-notes --verify-tag
+
   # The iPhone and iPad app to TestFlight, with the same App Store Connect key. Skipped until the app record
   # exists in App Store Connect and TESTFLIGHT is set to "on" in the repository variables.
   testflight:
     name: iPhone and iPad to TestFlight
-    if: vars.TESTFLIGHT == 'on'
-    needs: release
+    # After whichever job published the Mac app: the tag's own run, or a finish run.
+    if: vars.TESTFLIGHT == 'on' && !cancelled() && (needs.release.result == 'success' || needs.finish.result == 'success')
+    needs: [release, finish]
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -105,6 +208,8 @@ jobs:
       NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Archive and upload
