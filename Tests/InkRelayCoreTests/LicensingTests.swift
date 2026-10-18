@@ -124,6 +124,27 @@ final class LicensingTests: XCTestCase {
         XCTAssertFalse(ProFeatures.isPro(.appleCalendar(.init(id: "cal"))))
     }
 
+    func testTheOutlookSaysWhatStopsOrThatNothingDoes() throws {
+        let freeOnly = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: "/tmp/x")], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v"))])
+        let withPro = RelayConfig(sources: [], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v")), .reviewStack(.init(id: "review"))], viwoodsCloud: ViwoodsCloudConfig())
+        let trial = Entitlement(plan: .pro, basis: .trial(endsAt: now))
+        XCTAssertEqual(ProFeatures.outlook(for: freeOnly, entitlement: trial), "Everything you use is in Free; nothing stops when the trial ends.")
+        XCTAssertEqual(ProFeatures.outlook(for: withPro, entitlement: trial), "After the trial: Viwoods Cloud, review stack pause.")
+        XCTAssertEqual(ProFeatures.outlook(for: withPro, entitlement: Entitlement(plan: .free, basis: .trialEnded(now))), "Paused: Viwoods Cloud, review stack.")
+        XCTAssertNil(ProFeatures.outlook(for: freeOnly, entitlement: Entitlement(plan: .free, basis: .trialEnded(now))))
+        let licensed = Entitlement(plan: .pro, basis: .license(License(name: "Ada", email: "a@x", issuedAt: now)))
+        XCTAssertNil(ProFeatures.outlook(for: withPro, entitlement: licensed))
+    }
+
+    func testAKeyOnFileThatDoesntCountSaysWhy() throws {
+        let store = store
+        XCTAssertNil(store.licenseProblem(now: now), "no file, no problem")
+        try store.enter(try key(expires: nil), now: now)
+        XCTAssertNil(store.licenseProblem(now: now))
+        try Data(#"{"key":"INK1.broken.key"}"#.utf8).write(to: folder.url.appendingPathComponent("license.json"))
+        XCTAssertNotNil(store.licenseProblem(now: now))
+    }
+
     func testTheBundledPublicKeyIsSetBeforeRelease() throws {
         // The placeholder is replaced by `scripts/make-license.swift --init`; shipping without it would make every key invalid.
         if LicensePublisher.publicKeyBase64 == "__PUBLIC_KEY__" {

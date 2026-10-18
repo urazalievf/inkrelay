@@ -605,10 +605,9 @@ case "license":
     case nil, "status":
         let entitlement = store.current()
         print(entitlement.summary())
-        if !entitlement.isPro, let config = try? ConfigStore.load(from: configURL) {
-            let used = ProFeatures.used(in: config)
-            if !used.isEmpty { print("Paused until a license is entered: \(used.joined(separator: ", ")).") }
-        }
+        if let outlook = ProFeatures.outlook(for: try? ConfigStore.load(from: configURL), entitlement: entitlement) { print(outlook) }
+        if case .license = entitlement.basis {} else { print("Buy a license at \(LicensePublisher.purchaseText), then: inkrelay license enter INK1.…") }
+        if let problem = store.licenseProblem() { print("The key on file wasn't accepted: \(problem)") }
     default:
         fail("Usage: inkrelay license [enter KEY | remove]")
     }

@@ -117,6 +117,13 @@ public enum LicenseError: Error, LocalizedError, Equatable {
 
 /// The publisher's public key. Replace it only together with the private key in `make-license --init`.
 public enum LicensePublisher {
+    /// Where a key comes from. An email to the publisher until a checkout exists; keys are issued by hand.
+    public static let purchaseURL = URL(string: "mailto:hello@inkrelay.app?subject=InkRelay%20Pro%20license")!
+    /// The same, for a sentence: "hello@inkrelay.app" rather than a mailto link.
+    public static var purchaseText: String {
+        purchaseURL.scheme == "mailto" ? (purchaseURL.absoluteString.dropFirst("mailto:".count).split(separator: "?").first.map(String.init) ?? "") : purchaseURL.absoluteString
+    }
+
     public static let publicKeyBase64 = "Jgj+VBNXaf/l0/Ls1OOs10A1djYptKsuLby8jkbXEJw="
 
     public static var publicKey: Curve25519.Signing.PublicKey? {

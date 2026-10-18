@@ -145,16 +145,26 @@ struct MenuContent: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             Divider()
-            HStack(spacing: 6) {
-                Text(model.entitlement.summary())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer()
-                if !model.entitlement.isPro || { if case .trial = model.entitlement.basis { return true } else { return false } }() {
-                    Button("Enter License…") { model.enterLicense() }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(model.entitlement.summary())
                         .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer()
+                    if model.offersLicense {
+                        Button("Buy Pro…") { model.buyPro() }
+                            .font(.caption)
+                        Button("Enter License…") { model.enterLicense() }
+                            .font(.caption)
+                    }
+                }
+                if let outlook = model.planOutlook {
+                    Text(outlook)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(.horizontal, 12)

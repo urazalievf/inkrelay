@@ -13,7 +13,7 @@
 :root{--bg:#f2efe8;--card:#fffdf9;--ink:#1c1b19;--muted:#6d685f;--line:#e4dfd4;--accent:#2e5b4e;--accent-ink:#fff;--soft:#e7eee9;--serif:ui-serif,"New York","Iowan Old Style",Georgia,serif;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a;--soft:#1d2622}}
 :root[data-theme="dark"]{--bg:#151513;--card:#201f1c;--ink:#ecebe5;--muted:#a29d93;--line:#33312c;--accent:#86c2ad;--accent-ink:#0f1f1a;--soft:#1d2622}
-*{box-sizing:border-box}html{scroll-behavior:smooth}
+*{box-sizing:border-box}html{scroll-behavior:smooth}[hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
 a{color:var(--accent)}
 .wrap{max-width:1040px;margin:0 auto;padding:0 16px}
@@ -192,6 +192,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
           <li>The review stack, on the Mac and on iPhone and iPad</li>
           <li>AI transcription with your own key</li>
         </ul>
+        <p style="margin:1rem 0 0"><a class="btn" href="mailto:hello@inkrelay.app?subject=InkRelay%20Pro%20license">Buy Pro, $29</a></p>
+        <p class="small" style="margin-top:.6rem">Keys are sent by email and work offline on all your Macs.</p>
       </div>
     </div>
     <p class="small" style="margin-top:14px">When the trial ends, Pro parts pause and say so; nothing is deleted, and they pick up where they stopped once a key is entered.</p>
@@ -211,7 +213,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
     <h2>Download</h2>
     <p class="sub">InkRelay for Mac, macOS 14 or later, Apple silicon and Intel. The iPhone and iPad app follows on TestFlight.</p>
     <p><a class="btn" href="https://github.com/urazalievf/inkrelay/releases/latest">Download InkRelay for Mac</a></p>
-    <form action="WAITLIST_ENDPOINT" method="POST" style="margin-top:28px">
+    <form id="waitlist" action="WAITLIST_ENDPOINT" method="POST" style="margin-top:28px">
       <h3>Hear when the iPhone app and new tablets land</h3>
       <p>One email per release. Nothing else, and no tracking on this page.</p>
       <label for="email">Email</label>
@@ -236,6 +238,13 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
     </form>
   </section>
 </main>
+<script>
+  // The waitlist form stays hidden until it has a real address to post to.
+  (function () {
+    var form = document.getElementById('waitlist');
+    if (form && form.getAttribute('action') === 'WAITLIST_ENDPOINT') form.hidden = true;
+  })();
+</script>
 <footer>
   <div class="wrap">
     <span>© 2026 InkRelay</span>

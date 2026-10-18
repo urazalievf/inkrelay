@@ -78,7 +78,7 @@ public final class RelayEngine {
         guard !parts.isEmpty else { return nil }
         let when: String
         if case .trialEnded(let date) = entitlement.basis { when = " since the trial ended \(date.formatted(date: .abbreviated, time: .omitted))" } else { when = "" }
-        return "Pro features paused\(when): \(parts.joined(separator: ", ")). Enter a license with `inkrelay license enter KEY` or in the InkRelay menu; nothing is lost, syncing resumes from here."
+        return "Pro features paused\(when): \(parts.joined(separator: ", ")). Buy a license at \(LicensePublisher.purchaseText), then enter it in the InkRelay menu or with `inkrelay license enter KEY`; nothing is lost, syncing resumes from here."
     }
 
     /// The production wiring: Vision for recognition, the destinations named in the config,

@@ -86,18 +86,27 @@ final class BarModel: ObservableObject {
     var entitlement: Entitlement { EntitlementStore(supportDirectory: supportDirectory).current() }
 
     /// Asks for a key in a sheet-less alert, saves it, and restarts the engine so paused parts resume now.
-    func enterLicense() {
+    func enterLicense(prefill: String = "", problem: String? = nil) {
         let alert = NSAlert()
         alert.messageText = "Enter your InkRelay Pro license"
-        alert.informativeText = "Paste the key from your purchase email. It starts with INK1."
+        alert.informativeText = (problem.map { $0 + "\n\n" } ?? "") + "Paste the key from your purchase email. It starts with INK1."
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
         field.placeholderString = "INK1.…"
+        field.stringValue = prefill
         alert.accessoryView = field
         alert.addButton(withTitle: "Enter")
         alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Buy Pro…")
         NSApp.activate(ignoringOtherApps: true)
         alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: break
+        case .alertThirdButtonReturn:
+            buyPro()
+            return
+        default:
+            return
+        }
         do {
             let license = try EntitlementStore(supportDirectory: supportDirectory).enter(field.stringValue)
             objectWillChange.send()
@@ -108,8 +117,24 @@ final class BarModel: ObservableObject {
             thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + "."
             thanks.runModal()
         } catch {
-            let failed = NSAlert(error: error)
-            failed.runModal()
+            // Back to the same alert with the pasted text, so a typo isn't a start-over.
+            enterLicense(prefill: field.stringValue, problem: error.localizedDescription)
+        }
+    }
+
+    func buyPro() {
+        NSWorkspace.shared.open(LicensePublisher.purchaseURL)
+    }
+
+    /// One line under the plan: what stops when the trial ends, or that nothing does.
+    var planOutlook: String? { ProFeatures.outlook(for: config, entitlement: entitlement) }
+
+    /// The Enter License button matters only when something the config uses needs Pro, or the trial is over.
+    var offersLicense: Bool {
+        switch entitlement.basis {
+        case .license: return false
+        case .trial: return !(config.map(ProFeatures.used(in:)) ?? []).isEmpty
+        case .trialEnded, .none: return true
         }
     }
 

@@ -38,7 +38,7 @@ struct SetupView: View {
                     ForEach(TabletPreset.all.indices, id: \.self) { Text(TabletPreset.all[$0].name).tag($0) }
                 }
                 if tablet.hasCloudSource {
-                    Toggle("Read straight from Viwoods Cloud", isOn: $useViwoodsCloud)
+                    Toggle(isOn: $useViwoodsCloud) { proLabel("Read straight from Viwoods Cloud") }
                 }
                 Text(tablet.exportHint).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -54,7 +54,7 @@ struct SetupView: View {
                 Toggle("Apple Notes", isOn: $appleNotes)
                 Toggle("Apple Calendar (planner pages and to-dos)", isOn: $appleCalendar)
                 Toggle("Apple Reminders (tasks you write)", isOn: $appleReminders)
-                Toggle("Review stack (read later)", isOn: $reviewStack)
+                Toggle(isOn: $reviewStack) { proLabel("Review stack (read later)") }
                 if appleNotes || reviewStack, SharedLedger.iCloudDriveFolder != nil {
                     Toggle("Share with InkRelay on iPhone and iPad (iCloud Drive)", isOn: $shareWithPhone)
                 }
@@ -86,6 +86,20 @@ struct SetupView: View {
         .formStyle(.grouped)
         .frame(width: 480)
         .onAppear(perform: load)
+    }
+
+    /// A toggle's label with a small Pro tag, for the parts that need a license after the trial.
+    private func proLabel(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Text("PRO")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.secondary))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Pro")
+        }
     }
 
     private func load() {

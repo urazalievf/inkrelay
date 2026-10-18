@@ -52,6 +52,19 @@ public struct Entitlement: Equatable {
 
 /// Which parts need Pro. Free covers what a Mac can do alone: export folders, Obsidian and the Apple apps.
 public enum ProFeatures {
+    /// What the plan means for this config, in one line: what pauses when the trial ends, or that nothing does.
+    public static func outlook(for config: RelayConfig?, entitlement: Entitlement) -> String? {
+        guard let config else { return nil }
+        let used = used(in: config)
+        switch entitlement.basis {
+        case .license: return nil
+        case .trial:
+            return used.isEmpty ? "Everything you use is in Free; nothing stops when the trial ends." : "After the trial: " + used.joined(separator: ", ") + " pause."
+        case .trialEnded, .none:
+            return used.isEmpty ? nil : "Paused: " + used.joined(separator: ", ") + "."
+        }
+    }
+
     public static func isPro(_ destination: DestinationConfig) -> Bool {
         switch destination {
         case .obsidian, .appleNotes, .appleCalendar, .appleReminders: return false
@@ -123,6 +136,17 @@ public struct EntitlementStore {
 
     public func remove() {
         try? FileManager.default.removeItem(at: licenseURL)
+    }
+
+    /// Why a key on file doesn't count, or nil when there's none or it's fine.
+    public func licenseProblem(now: Date = Date()) -> String? {
+        guard FileManager.default.fileExists(atPath: licenseURL.path) else { return nil }
+        do {
+            _ = try license(now: now)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     /// When the trial started; the first call starts it.

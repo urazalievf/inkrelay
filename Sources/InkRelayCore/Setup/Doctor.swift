@@ -65,7 +65,7 @@ public struct Doctor {
         let used = ProFeatures.used(in: config)
         return used.isEmpty
             ? DoctorCheck(.ok, "Plan", entitlement.summary())
-            : DoctorCheck(.warning, "Plan", entitlement.summary() + "; paused: " + used.joined(separator: ", ") + ". `inkrelay license enter KEY`")
+            : DoctorCheck(.warning, "Plan", entitlement.summary() + "; paused: " + used.joined(separator: ", ") + ". Buy a license at \(LicensePublisher.purchaseText), then `inkrelay license enter KEY`")
     }
 
     func sourceChecks() -> [DoctorCheck] {
