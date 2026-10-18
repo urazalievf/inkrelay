@@ -14,16 +14,39 @@ public struct KindleMailConfig: Codable, Equatable {
     /// Defaults to `~/Library/Application Support/InkRelay/kindle`.
     public var cachePath: String?
 
-    public init(id: String = "kindle-scribe", device: String = "Kindle Scribe", sender: String = "amazon", lookbackDays: Int = 14, checkEveryMinutes: Int = 15, cachePath: String? = nil) {
+    /// Only mail sent from an address at one of these domains (or a subdomain) counts. A display name says
+    /// nothing; anyone can call themselves "Amazon Kindle".
+    public var senderDomains: [String]
+    /// Only https links on these hosts (or subdomains) are downloaded.
+    public var linkDomains: [String]
+
+    public static let defaultSenderDomains = ["amazon.com", "kindle.com"]
+    public static let defaultLinkDomains = ["amazon.com", "amazonaws.com", "kindle.com", "a2z.com"]
+    /// Larger downloads are refused before they start.
+    public static let maxDownloadBytes = 100 * 1024 * 1024
+
+    public init(id: String = "kindle-scribe", device: String = "Kindle Scribe", sender: String = "amazon", lookbackDays: Int = 14, checkEveryMinutes: Int = 15, cachePath: String? = nil,
+                senderDomains: [String] = KindleMailConfig.defaultSenderDomains, linkDomains: [String] = KindleMailConfig.defaultLinkDomains) {
         self.id = id
         self.device = device
         self.sender = sender
         self.lookbackDays = lookbackDays
         self.checkEveryMinutes = checkEveryMinutes
         self.cachePath = cachePath
+        self.senderDomains = senderDomains
+        self.linkDomains = linkDomains
     }
 
-    private enum CodingKeys: String, CodingKey { case id, device, sender, lookbackDays, checkEveryMinutes, cachePath }
+    private enum CodingKeys: String, CodingKey { case id, device, sender, lookbackDays, checkEveryMinutes, cachePath, senderDomains, linkDomains }
+
+    /// Whether `host` is `domain` or a subdomain of it, for any of `domains`.
+    static func host(_ host: String, isIn domains: [String]) -> Bool {
+        let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return domains.contains { domain in
+            let domain = domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return host == domain || host.hasSuffix("." + domain)
+        }
+    }
 
     public init(from decoder: Decoder) throws {
         let defaults = KindleMailConfig()
@@ -34,6 +57,8 @@ public struct KindleMailConfig: Codable, Equatable {
         lookbackDays = try container.decodeIfPresent(Int.self, forKey: .lookbackDays) ?? defaults.lookbackDays
         checkEveryMinutes = try container.decodeIfPresent(Int.self, forKey: .checkEveryMinutes) ?? defaults.checkEveryMinutes
         cachePath = try container.decodeIfPresent(String.self, forKey: .cachePath)
+        senderDomains = try container.decodeIfPresent([String].self, forKey: .senderDomains) ?? defaults.senderDomains
+        linkDomains = try container.decodeIfPresent([String].self, forKey: .linkDomains) ?? defaults.linkDomains
     }
 
     public var cacheURL: URL {
@@ -69,6 +94,8 @@ public final class KindleMailPuller {
 
     struct Message: Equatable {
         var id: String
+        /// The sender's address, from Mail's own parsing of the From line.
+        var address: String
         var subject: String
         var content: String
     }
@@ -83,10 +110,19 @@ public final class KindleMailPuller {
             try FileManager.default.createDirectory(at: config.cacheURL, withIntermediateDirectories: true)
             var handled = Set((try? JSONDecoder().decode([String].self, from: Data(contentsOf: ledgerURL))) ?? [])
             let listing = try runner.run(Self.listScript, arguments: [config.sender, String(config.lookbackDays)])
+            var skippedSenders = Set<String>()
             for message in Self.messages(in: listing) where !handled.contains(message.id) {
+                let domain = message.address.split(separator: "@").last.map(String.init) ?? ""
+                guard KindleMailConfig.host(domain, isIn: config.senderDomains) else {
+                    // Not from Amazon whatever it's called; say so once per domain, in case it's a real one to add.
+                    if !domain.isEmpty, skippedSenders.insert(domain).inserted {
+                        failures.append("Skipped a Kindle-looking email from \(message.address): add \"\(domain)\" to kindleMail.senderDomains if that's Amazon.")
+                    }
+                    continue
+                }
                 let title = Self.title(fromSubject: message.subject)
                 do {
-                    if try save(message, title: title) { saved += 1 }
+                    if try save(message, title: title, into: &failures) { saved += 1 }
                     handled.insert(message.id)
                 } catch {
                     failures.append("\"\(title)\": \(error.localizedDescription)")
@@ -100,27 +136,42 @@ public final class KindleMailPuller {
     }
 
     /// Saves the message's PDF, attached or linked. False when the message has no notebook in it.
-    private func save(_ message: Message, title: String) throws -> Bool {
+    private func save(_ message: Message, title: String, into failures: inout [String]) throws -> Bool {
         let destination = config.cacheURL.appendingPathComponent(ObsidianDestination.safeFileName(title) + ".pdf")
         let attached = try runner.run(Self.saveAttachmentScript, arguments: [message.id, destination.path])
         if attached == "saved" { return true }
-        for link in Self.links(in: message.content).prefix(5) {
+        let (links, skippedHosts) = Self.links(in: message.content, allowedDomains: config.linkDomains)
+        for link in links.prefix(5) {
+            // Ask the size first: the download is buffered whole, so a huge one is refused before it starts.
+            var head = URLRequest(url: link)
+            head.httpMethod = "HEAD"
+            head.setValue("InkRelay/\(InkRelayCore.version)", forHTTPHeaderField: "User-Agent")
+            if let (_, response) = try? transport.send(head),
+               let length = response.value(forHTTPHeaderField: "Content-Length").flatMap(Int.init), length > KindleMailConfig.maxDownloadBytes {
+                failures.append("\"\(title)\": the linked file is \(length / 1_048_576) MB, over the 100 MB limit; not downloaded")
+                continue
+            }
             var request = URLRequest(url: link)
             request.setValue("InkRelay/\(InkRelayCore.version)", forHTTPHeaderField: "User-Agent")
             let (data, response) = try transport.send(request)
+            // A redirect that leaves Amazon's hosts doesn't count.
+            if let final = response.url?.host, !KindleMailConfig.host(final, isIn: config.linkDomains) { continue }
             // Download links redirect to the file; anything else (a help page, an unsubscribe link) isn't a PDF.
-            guard response.statusCode == 200, data.starts(with: Data("%PDF".utf8)) else { continue }
+            guard response.statusCode == 200, data.count <= KindleMailConfig.maxDownloadBytes, data.starts(with: Data("%PDF".utf8)) else { continue }
             try data.write(to: destination, options: .atomic)
             return true
+        }
+        for host in skippedHosts {
+            failures.append("\"\(title)\": skipped a link to \(host); add \"\(host)\" to kindleMail.linkDomains if it's Amazon's.")
         }
         return false
     }
 
     static func messages(in listing: String) -> [Message] {
         listing.split(separator: "\n").compactMap { line in
-            let fields = line.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
-            guard fields.count == 3, !fields[0].isEmpty else { return nil }
-            return Message(id: fields[0], subject: fields[1], content: fields[2])
+            let fields = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+            guard fields.count == 4, !fields[0].isEmpty else { return nil }
+            return Message(id: fields[0], address: fields[1].trimmingCharacters(in: .whitespaces).lowercased(), subject: fields[2], content: fields[3])
         }
     }
 
@@ -134,14 +185,26 @@ public final class KindleMailPuller {
         return subject.isEmpty ? "Kindle notebook" : subject
     }
 
-    static func links(in text: String) -> [URL] {
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return [] }
-        return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url)
-            .filter { ["http", "https"].contains($0.scheme?.lowercased() ?? "") }
-            .filter { !$0.absoluteString.lowercased().contains("unsubscribe") && !$0.absoluteString.lowercased().contains("help") }
+    /// https links on the allowed hosts, in order, and the other hosts seen (http links count as other).
+    static func links(in text: String, allowedDomains: [String] = KindleMailConfig.defaultLinkDomains) -> (links: [URL], skippedHosts: [String]) {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return ([], []) }
+        var links: [URL] = []
+        var skipped: [String] = []
+        for url in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.url) {
+            let lower = url.absoluteString.lowercased()
+            guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), !lower.contains("unsubscribe"), !lower.contains("help") else { continue }
+            guard let linkHost = url.host?.lowercased() else { continue }
+            if url.scheme?.lowercased() == "https", KindleMailConfig.host(linkHost, isIn: allowedDomains) {
+                links.append(url)
+            } else if !skipped.contains(linkHost) {
+                skipped.append(linkHost)
+            }
+        }
+        return (links, skipped)
     }
 
-    /// Recent messages from the sender that mention Kindle, one per line: id, subject, text with line breaks flattened.
+    /// Recent messages from the sender that mention Kindle, one per line: id, sender address, subject, and text with
+    /// line breaks flattened. The address is Mail's own parse of the From line; the display name isn't trusted.
     static let listScript = """
     on run argv
         set senderHint to item 1 of argv
@@ -150,7 +213,11 @@ public final class KindleMailPuller {
         tell application "Mail"
             set found to (every message of inbox whose date received > cutoff and sender contains senderHint and subject contains "Kindle")
             repeat with theMessage in found
-                set output to output & (message id of theMessage) & tab & my flatten(subject of theMessage) & tab & my flatten(content of theMessage) & linefeed
+                set senderAddress to ""
+                try
+                    set senderAddress to (extract address from (sender of theMessage))
+                end try
+                set output to output & (message id of theMessage) & tab & senderAddress & tab & my flatten(subject of theMessage) & tab & my flatten(content of theMessage) & linefeed
             end repeat
         end tell
         return output

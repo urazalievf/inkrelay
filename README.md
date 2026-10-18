@@ -107,11 +107,17 @@ Password-protected notebooks and the oldest A5 format (before firmware C.053) ar
 
 ## Kindle Scribe
 
-A Kindle Scribe shares a notebook by email: Share → Send to email sends a PDF (attached, or as a download link) from Amazon. With a `kindleMail` section in the config (setup adds it when you pick the Scribe), InkRelay asks Mail every 15 minutes for recent messages from Amazon that mention Kindle, saves each notebook's PDF into its own cache, and relays it like any other export. It reads nothing else, remembers which messages it has handled, and only follows links that turn out to be PDFs. macOS asks once to let InkRelay read Mail.
+A Kindle Scribe shares a notebook by email: Share → Send to email sends a PDF (attached, or as a download link) from Amazon. With a `kindleMail` section in the config (setup adds it when you pick the Scribe), InkRelay asks Mail every 15 minutes for recent messages from Amazon that mention Kindle, saves each notebook's PDF into its own cache, and relays it like any other export. It reads nothing else and remembers which messages it has handled. Only mail sent from an address at one of `senderDomains` counts (a display name proves nothing), only https links on `linkDomains` are followed, a redirect off those hosts doesn't count, a link must turn out to be a PDF, and anything over 100 MB is refused before it downloads. A Kindle-looking email from another domain, or a link to another host, is named in the sync report once, so a real one is easy to add. macOS asks once to let InkRelay read Mail.
 
 ```json
-"kindleMail": { "sender": "amazon", "lookbackDays": 14, "checkEveryMinutes": 15 }
+"kindleMail": {
+  "lookbackDays": 14, "checkEveryMinutes": 15,
+  "senderDomains": ["amazon.com", "kindle.com"],
+  "linkDomains": ["amazon.com", "amazonaws.com", "kindle.com", "a2z.com"]
+}
 ```
+
+These defaults haven't been checked against a real share email from every Amazon store yet; if yours comes from `amazon.co.uk` or links to another Amazon host, the sync report says what to add.
 
 ## Viwoods Cloud
 

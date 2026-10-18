@@ -112,6 +112,7 @@ final class TasksAndEventsTests: XCTestCase {
             AppleNotesDestination.createScript, AppleNotesDestination.updateScript,
             AppleNotesDestination.deleteScript, AppleNotesDestination.archiveScript,
             NotesRoundTrip.folderOfNoteScript, NotesRoundTrip.removeFoldersScript,
+            KindleMailPuller.listScript, KindleMailPuller.saveAttachmentScript,
         ]
         for script in scripts { XCTAssertFalse(script.contains("\\("), "an interpolation was left in the script") }
         let folder = try TemporaryFolder()
