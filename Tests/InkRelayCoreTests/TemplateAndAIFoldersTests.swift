@@ -120,4 +120,88 @@ final class TemplateAndAIFoldersTests: XCTestCase {
         XCTAssertEqual(LearnedVocabulary(url: support.url.appendingPathComponent("vocabulary.json")).all, ["diagram"])
         XCTAssertEqual(try engine().syncOnce().learned, [], "nothing new the next time")
     }
+
+    /// Records the learned words at the moment it's asked to read, as Vision would see them.
+    private final class WordsRecorder: TextRecognizer {
+        let learned: LearnedVocabulary
+        var seen: [[String]] = []
+        init(learned: LearnedVocabulary) { self.learned = learned }
+        func recognize(fileAt url: URL) throws -> [RecognizedPage] {
+            seen.append(learned.all)
+            return [RecognizedPage(number: 1, text: "Setup the diag rome for erin")]
+        }
+    }
+
+    func testTheChangedPageIsReadWithTheCorrectionAlreadyLearned() throws {
+        let exports = try TemporaryFolder(), support = try TemporaryFolder(), vault = try TemporaryFolder()
+        defer { exports.remove(); support.remove(); vault.remove() }
+        let export = try exports.write("Paper/Plan.pdf", "v1")
+        let config = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: exports.url.path)],
+                                 destinations: [.obsidian(.init(id: "obsidian", vaultPath: vault.url.path))], settleSeconds: 0)
+        let learned = LearnedVocabulary(url: support.url.appendingPathComponent("vocabulary.json"))
+        let recorder = WordsRecorder(learned: learned)
+        func engine() throws -> RelayEngine {
+            RelayEngine(config: config, store: try StateStore(url: support.url.appendingPathComponent("state.json")), recognizer: recorder,
+                        destinations: DestinationFactory.make(config.destinations, context: DestinationContext(supportDirectory: support.url)), learned: learned)
+        }
+        _ = try engine().syncOnce()
+        let note = vault.url.appendingPathComponent("Ink/drive/Paper/Plan.md")
+        try Data(try String(contentsOf: note, encoding: .utf8).replacingOccurrences(of: "diag rome", with: "diagram").utf8).write(to: note)
+        try Data("v2".utf8).write(to: export)
+
+        _ = try engine().syncOnce()
+
+        XCTAssertEqual(recorder.seen, [[], ["diagram"]], "the second read already knows the word")
+    }
+
+    func testAStaleVaultCopyTeachesNothing() throws {
+        let exports = try TemporaryFolder(), support = try TemporaryFolder(), vault = try TemporaryFolder()
+        defer { exports.remove(); support.remove(); vault.remove() }
+        let export = try exports.write("Paper/Plan.pdf", "v1")
+        let config = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: exports.url.path)],
+                                 destinations: [.obsidian(.init(id: "obsidian", vaultPath: vault.url.path))], settleSeconds: 0)
+        let recognizer = FakeRecognizer()
+        recognizer.text = "diag rome"
+        let learned = LearnedVocabulary(url: support.url.appendingPathComponent("vocabulary.json"))
+        func engine() throws -> RelayEngine {
+            RelayEngine(config: config, store: try StateStore(url: support.url.appendingPathComponent("state.json")), recognizer: recognizer,
+                        destinations: DestinationFactory.make(config.destinations, context: DestinationContext(supportDirectory: support.url)), learned: learned)
+        }
+        _ = try engine().syncOnce()
+        // The archive moved on (a later version was read) while the vault still holds the old block.
+        let archive = NoteArchive(directory: support.url.appendingPathComponent("archive"))
+        try archive.upsert(makeNote(title: "Plan", relativePath: "Paper/Plan.pdf", pages: [RecognizedPage(number: 1, text: "diagram")]), key: "drive/Paper/Plan.pdf")
+        try Data("v3".utf8).write(to: export)
+
+        let report = try engine().syncOnce()
+
+        XCTAssertEqual(report.learned, [], "the vault's 'diag rome' isn't a correction of 'diagram'")
+    }
+
+    func testATemplateInTheOtherOrientationIsTurnedAndAnOddShapeIsIgnored() {
+        let template = draw(lines: true, word: nil)
+        // The same template, turned a quarter turn, as a landscape device would export it.
+        let turned: CGImage = {
+            let context = CGContext(data: nil, width: template.height, height: template.width, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: template.height, height: template.width))
+            context.translateBy(x: CGFloat(template.height), y: 0)
+            context.rotate(by: .pi / 2)
+            context.draw(template, in: CGRect(x: 0, y: 0, width: template.width, height: template.height))
+            return context.makeImage()!
+        }()
+        let mask = TemplateSubtractor.Mask(template: template, width: turned.width, height: turned.height)
+        XCTAssertTrue(mask.applies)
+        let cleaned = TemplateSubtractor.clean(turned, mask: mask)
+        let darkBefore = TemplateSubtractor.grayPixels(turned, width: turned.width, height: turned.height).filter { $0 < 160 }.count
+        let darkAfter = TemplateSubtractor.grayPixels(cleaned, width: turned.width, height: turned.height).filter { $0 < 160 }.count
+        XCTAssertGreaterThan(darkBefore, 1000)
+        XCTAssertLessThan(darkAfter, darkBefore / 20, "the turned template's own lines are taken out")
+
+        let odd = TemplateSubtractor.Mask(template: template, width: 900, height: 900)
+        XCTAssertFalse(odd.applies)
+        let square = draw(lines: false, word: "X")
+        XCTAssertTrue(TemplateSubtractor.clean(square, mask: odd) === square)
+    }
 }

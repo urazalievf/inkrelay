@@ -467,6 +467,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
     }
 
     func validate() throws {
+        if let budget = aiMonthlyBudgetUSD, budget < 0 { throw ConfigError.invalid("viwoodsCloud.aiMonthlyBudgetUSD can't be negative.") }
         guard !id.isEmpty else { throw ConfigError.invalid("viwoodsCloud.id can't be empty.") }
         if let unknown = apps.first(where: { ViwoodsApp(name: $0) == nil }) {
             throw ConfigError.invalid("viwoodsCloud.apps: unknown app \"\(unknown)\". Use paper, meeting or memo.")

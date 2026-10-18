@@ -355,6 +355,9 @@ case "viwoods":
     case "list":
         let client = ViwoodsClient(credentials: FileCredentialStore(url: tokenURL))
         let wanted = arguments.dropFirst().first.flatMap(ViwoodsApp.init(name:))
+        if arguments.contains("--raw"), wanted == nil || !arguments.indices.contains(arguments.firstIndex(of: "--raw")! + 1) {
+            fail("Usage: inkrelay viwoods list APP --raw UUID   (APP is paper, meeting, memo, learning or knowledgebase)")
+        }
         if let raw = arguments.firstIndex(of: "--raw"), arguments.indices.contains(raw + 1), let app = wanted {
             do {
                 let item = try client.rawItem(app, uuid: arguments[raw + 1])

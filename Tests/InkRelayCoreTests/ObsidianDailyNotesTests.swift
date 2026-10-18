@@ -33,6 +33,19 @@ final class ObsidianDailyNotesTests: XCTestCase {
         XCTAssertEqual(DailyNotesSettings(folder: "Journal/Daily", format: "YYYY-MM-DD").notePath(for: date, calendar: calendar), "Journal/Daily/2026-10-13")
     }
 
+    func testThePluginCountsAsOnFromEitherSettingsFile() throws {
+        XCTAssertFalse(DailyNotesSettings.isEnabled(vault: vault.url))
+        try vault.write(".obsidian/core-plugins.json", #"["file-explorer", "daily-notes"]"#)
+        XCTAssertTrue(DailyNotesSettings.isEnabled(vault: vault.url), "older vaults list plugin names")
+        try vault.write(".obsidian/core-plugins.json", #"{"file-explorer": true, "daily-notes": false}"#)
+        XCTAssertFalse(DailyNotesSettings.isEnabled(vault: vault.url))
+        try vault.write(".obsidian/core-plugins.json", #"{"daily-notes": true}"#)
+        XCTAssertTrue(DailyNotesSettings.isEnabled(vault: vault.url), "newer vaults map names to on/off")
+        try vault.write(".obsidian/core-plugins.json", "{}")
+        try vault.write(".obsidian/daily-notes.json", "{}")
+        XCTAssertTrue(DailyNotesSettings.isEnabled(vault: vault.url), "settings saved means it's on")
+    }
+
     func testObsidiansOwnSettingsAreRead() throws {
         try vault.write(".obsidian/daily-notes.json", #"{"folder": "/Daily/", "format": "DD-MM-YYYY", "template": "t"}"#)
         XCTAssertEqual(DailyNotesSettings.load(vault: vault.url), DailyNotesSettings(folder: "Daily", format: "DD-MM-YYYY"))

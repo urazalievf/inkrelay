@@ -46,4 +46,20 @@ final class VocabularyTests: XCTestCase {
         XCTAssertEqual(learned.all.count, LearnedVocabulary.limit)
         XCTAssertEqual(learned.all.last, "word\(LearnedVocabulary.limit + 5)", "the newest stay")
     }
+
+    func testTwoProcessesShareTheFile() throws {
+        let folder = try TemporaryFolder()
+        defer { folder.remove() }
+        let url = folder.url.appendingPathComponent("vocabulary.json")
+        let daemon = LearnedVocabulary(url: url)
+        daemon.add(["Erin"])
+        let cli = LearnedVocabulary(url: url)
+        Thread.sleep(forTimeInterval: 0.02)
+        cli.add(["Ensemble"])
+        XCTAssertTrue(cli.remove("Erin"))
+        XCTAssertEqual(daemon.all, ["Ensemble"], "the long-running engine sees what the command changed")
+        Thread.sleep(forTimeInterval: 0.02)
+        daemon.add(["Orchard"])
+        XCTAssertEqual(LearnedVocabulary(url: url).all, ["Ensemble", "Orchard"], "and doesn't bring the removed word back")
+    }
 }

@@ -89,7 +89,7 @@ struct SetupView: View {
         guard let config = model.config else {
             vault = detector.obsidianVaults().first.map(detector.tilde) ?? ""
             // A vault with Daily Notes set up gets the block offered; nothing is written until Save.
-            dailyNotes = !vault.isEmpty && FileManager.default.fileExists(atPath: (vault as NSString).expandingTildeInPath + "/.obsidian/daily-notes.json")
+            dailyNotes = !vault.isEmpty && DailyNotesSettings.isEnabled(vault: URL(fileURLWithPath: (vault as NSString).expandingTildeInPath, isDirectory: true))
             return
         }
         let choices = SetupChoices(from: config)
