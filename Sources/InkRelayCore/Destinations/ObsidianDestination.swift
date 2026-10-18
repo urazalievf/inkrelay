@@ -7,10 +7,15 @@ import Foundation
 public struct ObsidianDestination: NoteDestination {
     public var config: DestinationConfig.ObsidianConfig
     private let fileManager: FileManager
+    /// The recognized text of every note, for the daily note and the weekly digest.
+    private let archive: NoteArchive?
+    private let calendar: Calendar
 
-    public init(config: DestinationConfig.ObsidianConfig, fileManager: FileManager = .default) {
+    public init(config: DestinationConfig.ObsidianConfig, fileManager: FileManager = .default, archive: NoteArchive? = nil, calendar: Calendar = .current) {
         self.config = config
         self.fileManager = fileManager
+        self.archive = archive
+        self.calendar = calendar
     }
 
     public var id: String { config.id }
@@ -48,7 +53,44 @@ public struct ObsidianDestination: NoteDestination {
                 try? fileManager.removeItem(at: file)
             }
         }
+        if config.dailyNotes || config.weeklyDigest { updateDigests(for: note, in: vault) }
         return notePath
+    }
+
+    /// Rewrites the daily note's block and the week's digest for the day this note belongs to. Built from the
+    /// archive, so every note of that day is listed, not only this one. A failure here never fails the note.
+    private func updateDigests(for note: InkNote, in vault: URL) {
+        guard let archive, let archived = archive.entry(forKey: "\(note.sourceID)/\(note.relativePath)") else { return }
+        let digest = InkDigest(folder: config.folder, calendar: calendar)
+        let all = archive.all()
+        let day = digest.day(of: digest.entry(for: archived))
+        if config.dailyNotes, let block = digest.dailyBlock(for: day, notes: all) {
+            let settings = DailyNotesSettings.load(vault: vault)
+            let target = vault.appendingPathComponent(settings.notePath(for: day, calendar: calendar) + ".md")
+            let existing = try? String(contentsOf: target, encoding: .utf8)
+            let updated = ManagedBlock.replace(in: existing, with: block, start: InkDigest.dailyStart, end: InkDigest.dailyEnd)
+            try? fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(updated.utf8).write(to: target, options: .atomic)
+        }
+        if config.weeklyDigest, let block = digest.weeklyBlock(for: digest.week(containing: day), notes: all) {
+            let name = digest.weekName(for: day)
+            let target = vault.appendingPathComponent(config.folder).appendingPathComponent("Weekly").appendingPathComponent(name + ".md")
+            let existing = try? String(contentsOf: target, encoding: .utf8)
+            let heading = "# Week \(Int(name.suffix(2)) ?? 0), \(name.prefix(4)) (\(Self.span(digest.week(containing: day), calendar: calendar)))\n\n"
+            let updated = ManagedBlock.replace(in: existing ?? heading, with: block, start: InkDigest.weeklyStart, end: InkDigest.weeklyEnd)
+            try? fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(updated.utf8).write(to: target, options: .atomic)
+        }
+    }
+
+    /// "Oct 12 – Oct 18"
+    static func span(_ week: DateInterval, calendar: Calendar) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: week.start) + " – " + formatter.string(from: week.end.addingTimeInterval(-1))
     }
 
     /// Archive moves the note and its PDF under `<folder>/Archive/`; delete sends them to the Trash.
