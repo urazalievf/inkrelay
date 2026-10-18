@@ -25,6 +25,10 @@ Settled choices and the reasons for them. Change one only when the reason no lon
 - **Recognition reads the ink layer when there is one.** Viwoods Cloud serves it per page; the PDF keeps the full page so people still see the template. Measured on real notebooks: the template's "Name" and "Date …" lines disappear from the text.
 - **AI transcription is narrowed, not widened.** `aiFolders` and per-source caps exist so people can afford Claude where it matters (the planner, where titles are read) and keep Vision for the rest. The default stays Vision everywhere.
 - **Corrections are learned at the last moment they'd be lost.** A word typed into InkRelay's block is learned when the page changes on the tablet, right before the block is rewritten. No periodic scan of the vault.
+- **A license expires on a date, not at an instant.** `expiresOn` holds through the end of that day wherever the person is, and shows as that date everywhere. An instant would end a day early west of the issuer and show the next day east of them.
+- **The review server's key travels in the URL fragment.** Browsers never send a fragment, so it doesn't land in server logs or referrers; the page keeps it for the tab. A new key every launch.
+- **Tablet tasks are Obsidian checkboxes the person can tick.** A tick made in Obsidian survives re-syncs, because the block id says which line it is; the tablet's own tick wins only by turning a box on, never off.
+- **Planner pages are a source setting, not a Viwoods special case.** `planner.folders` (Daily by default) and the file name decide; the date is resolved once and carried on the note.
 - **Daily notes follow Obsidian's own settings.** Folder and date format come from `.obsidian/daily-notes.json`; the block has its own markers and never touches the rest of the daily note. Off by default: writing into someone's journal is their call.
 
 ## Apple platforms
