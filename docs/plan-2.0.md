@@ -13,7 +13,7 @@ InkRelay costs its owner money every month: the Apple Developer Program, the too
   - Destinations: Obsidian, Apple Notes, Calendar and Reminders, Google Calendar and Docs, Outlook Calendar, OneNote, Notion and the review stack.
   - Also: sending articles to the tablet, Obsidian daily notes and a weekly digest, review on iPhone and iPad, an MCP server, and a Pro license with a trial.
 - **What's proven on real data:** one tablet (Viwoods) going into Obsidian, Apple Calendar and Apple Notes. Everything else passes tests against fixtures but has never run against a real account or a real export (see "Never checked for real" in [handoff.md](handoff.md)).
-- **Who has bought it:** nobody yet. Downloads, the site and the update feed point at a private repository, so anyone but the owner gets a 404.
+- **Who has bought it:** nobody yet. v0.10.0's download, the site's button and the update feed point at the private repository, so anyone but the owner gets a 404. #74 moves them to the public `urazalievf/inkrelay-releases`; 0.10.1 is the first public build.
 
 InkRelay is wide but thin. The breadth is real, but only one tablet has been proven.
 
@@ -69,7 +69,7 @@ Nothing new gets built until a stranger can download InkRelay, try it and buy it
 
 | # | Item | Why | Scope |
 |---|---|---|---|
-| 1 | Public downloads and update feed | Everything else depends on it | A public releases repository (work under way on branch `public-releases`). The release workflow publishes there, and `UpdateChecker.feed` and the site point at it |
+| 1 | Public downloads and update feed | Everything else depends on it | A public releases repository: `urazalievf/inkrelay-releases`, created October 19, wired up in #74. The release workflow publishes there, and `UpdateChecker.feed` and the site point at it |
 | 2 | Site live with a checkout and a waitlist | The page exists, but nobody can reach it | `site/` on Cloudflare Pages. A Lemon Squeezy store selling Pro yearly and Founder. A form service for `WAITLIST_ENDPOINT` that records tablet, destination and computer (Mac, Windows, or phone only) |
 | 3 | Yearly keys and renewals | The issuer only handles one-time orders | `scripts/issue-licenses.swift` gives subscription orders a key with `expiresOn` one year out, and a new key at each renewal. The trial-ended panel also covers "Pro expired, renew" |
 | 4 | Verified routes, labeled in the matrix | Buyers judge their own route | Run Google Calendar and Docs, Outlook, OneNote, Notion, Reminders and Kindle email against real accounts. The site's matrix labels each route verified or beta |
@@ -162,6 +162,7 @@ These are goals, not forecasts. The dollar amounts assume yearly Pro at $36.50 a
 - Waitlist sign-ups by tablet, destination and computer.
 - Trials that turn into paid licenses (target 5%, from plan 1.0), and the split between Founder and yearly buyers.
 - How many routes in the matrix real users have verified.
+- Recognition: word accuracy on the owner's page set (`inkrelay measure`), before and after each recognition change.
 - The share of Pro users who review at least one card a week.
 - Renewals after 12 months (target 70%).
 - Support: diagnostics bundles per 100 users, and hours a week spent on support.

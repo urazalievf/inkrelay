@@ -17,9 +17,12 @@ public struct ReleaseInfo: Equatable {
 /// Asks the release feed for the newest version. Nothing about this Mac is sent: it's one GET with no body,
 /// no identifier and no cookies, once a day at most.
 public struct UpdateChecker {
-    public static let feed = URL(string: "https://api.github.com/repos/urazalievf/inkrelay/releases?per_page=5")!
+    /// The public repository that holds only the release downloads; the source repository is private, so its
+    /// releases answer 404 to everyone else. The release workflow publishes here and the site links here.
+    public static let releasesRepository = "urazalievf/inkrelay-releases"
+    public static let feed = URL(string: "https://api.github.com/repos/\(releasesRepository)/releases?per_page=5")!
     /// Where people download by hand, when the feed has no release yet.
-    public static let downloads = URL(string: "https://github.com/urazalievf/inkrelay/releases")!
+    public static let downloads = URL(string: "https://github.com/\(releasesRepository)/releases")!
 
     let feedURL: URL
     let transport: HTTPTransport

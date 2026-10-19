@@ -60,7 +60,7 @@ So a buyer judges InkRelay on six things:
 
 - Trial starts → licenses (target 5% at launch).
 - Sign-ups by tablet and destination from the landing page.
-- Recognition: word accuracy on a fixed set of real pages (`scripts/measure-pages.swift`), before and after each change.
+- Recognition: word accuracy on a fixed set of real pages (`inkrelay measure`, which reads them the way a sync does), before and after each change.
 - Support: diagnostics bundles received per 100 users; problems that needed a human.
 
 ## Not doing, and why

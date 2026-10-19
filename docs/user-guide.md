@@ -4,7 +4,7 @@ InkRelay takes the handwriting on your e-ink tablet and files it into the apps y
 
 ## 1. Install
 
-- **Mac:** download `InkRelay-<version>.zip` from the releases page, unzip, move `InkRelay.app` to Applications and open it. It lives in the menu bar; there's no Dock icon. macOS 14 or later.
+- **Mac:** download [InkRelay.zip](https://github.com/urazalievf/inkrelay-releases/releases/latest/download/InkRelay.zip) (every version is on the [releases page](https://github.com/urazalievf/inkrelay-releases/releases)), unzip, move `InkRelay.app` to Applications and open it. It lives in the menu bar; there's no Dock icon. macOS 14 or later.
 - **Command line (optional):** the `inkrelay` command is inside the app at `InkRelay.app/Contents/Resources/inkrelay`. Add that folder to your PATH, or run it by its full path.
 - **iPhone and iPad (optional):** the app in `iOS/` runs from Xcode on your own device until it's on TestFlight.
 

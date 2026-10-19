@@ -21,7 +21,7 @@ targets:
         PRODUCT_NAME: InkRelay
         PRODUCT_BUNDLE_IDENTIFIER: io.github.urazalievf.InkRelay.mobile
         # iPhone and iPad apps carry MAJOR.MINOR.PATCH as the version; a bug-fix number goes in the build number.
-        MARKETING_VERSION: "0.10.0"
+        MARKETING_VERSION: "0.10.1"
         CURRENT_PROJECT_VERSION: "0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"

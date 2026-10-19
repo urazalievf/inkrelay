@@ -1,6 +1,8 @@
 name: Release
 
 # Builds, signs, notarizes and publishes InkRelay.app when a version tag is pushed (v0.4.0, v1.2.3.1).
+# Releases go to the public repository urazalievf/inkrelay-releases (scripts/publish-release.sh), because this
+# one is private; the notes come from docs/release-notes/<version>.md.
 # Needs these repository secrets (Settings → Secrets and variables → Actions); see RELEASING.md:
 #   DEVELOPER_ID_P12_BASE64     Developer ID Application certificate and key, exported as .p12, base64
 #   DEVELOPER_ID_P12_PASSWORD   the .p12's password
@@ -8,6 +10,7 @@ name: Release
 #   NOTARY_KEY_P8_BASE64        App Store Connect API key (.p8), base64
 #   NOTARY_KEY_ID               its key id
 #   NOTARY_ISSUER_ID            its issuer id
+#   RELEASES_TOKEN              fine-grained token: urazalievf/inkrelay-releases only, Contents read and write
 # Apple sometimes holds a notarization for hours (a new team's first submissions especially). The signed app is
 # kept as the run's "signed-app" artifact, so once Apple accepts it the release is finished without rebuilding:
 #   gh workflow run release.yml -f run_id=<the tag's run> -f tag=v0.10.0
@@ -23,8 +26,9 @@ on:
         description: "Its tag, e.g. v0.10.0"
         required: true
 
+# Nothing is written to this repository; publishing uses RELEASES_TOKEN.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -43,6 +47,7 @@ jobs:
       NOTARY_KEY_P8_BASE64: ${{ secrets.NOTARY_KEY_P8_BASE64 }}
       NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
       NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -53,13 +58,16 @@ jobs:
       - name: Signing secrets are present
         run: |
           missing=()
-          for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD DEVELOPER_ID_NAME NOTARY_KEY_P8_BASE64 NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+          for name in DEVELOPER_ID_P12_BASE64 DEVELOPER_ID_P12_PASSWORD DEVELOPER_ID_NAME NOTARY_KEY_P8_BASE64 NOTARY_KEY_ID NOTARY_ISSUER_ID RELEASES_TOKEN; do
             [[ -n "${!name}" ]] || missing+=("$name")
           done
           if (( ${#missing[@]} )); then
             echo "::error::Missing repository secrets: ${missing[*]}. See RELEASING.md. Nothing unsigned is published."
             exit 1
           fi
+
+      - name: Release notes, token and releases repository are ready
+        run: scripts/publish-release.sh --check "$GITHUB_REF_NAME"
 
       - name: Test
         run: swift test
@@ -126,11 +134,7 @@ jobs:
         run: ditto -c -k --keepParent build/InkRelay.app "InkRelay-${{ steps.version.outputs.version }}.zip"
 
       - name: Publish the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" "InkRelay-${{ steps.version.outputs.version }}.zip" \
-            --title "InkRelay ${{ steps.version.outputs.version }}" --generate-notes --verify-tag
+        run: scripts/publish-release.sh "$GITHUB_REF_NAME" "InkRelay-${{ steps.version.outputs.version }}.zip"
 
       - name: Remove the signing keychain
         if: always()
@@ -144,12 +148,13 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
       actions: read
     env:
       RUN_ID: ${{ inputs.run_id }}
       TAG: ${{ inputs.tag }}
       GH_TOKEN: ${{ github.token }}
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - name: Inputs look right
         run: |
@@ -171,6 +176,11 @@ jobs:
           fi
           echo "version=$(scripts/check-version.sh "$TAG")" >> "$GITHUB_OUTPUT"
 
+      - name: Release notes, token and releases repository are ready
+        run: |
+          [[ -n "$RELEASES_TOKEN" ]] || { echo "::error::Missing repository secret RELEASES_TOKEN. See RELEASING.md."; exit 1; }
+          scripts/publish-release.sh --check "$TAG"
+
       - uses: actions/download-artifact@v8
         with:
           name: signed-app
@@ -190,9 +200,7 @@ jobs:
         run: ditto -c -k --keepParent build/InkRelay.app "InkRelay-${{ steps.version.outputs.version }}.zip"
 
       - name: Publish the release
-        run: |
-          gh release create "$TAG" "InkRelay-${{ steps.version.outputs.version }}.zip" \
-            --title "InkRelay ${{ steps.version.outputs.version }}" --generate-notes --verify-tag
+        run: scripts/publish-release.sh "$TAG" "InkRelay-${{ steps.version.outputs.version }}.zip"
 
   # The iPhone and iPad app to TestFlight, with the same App Store Connect key. Skipped until the app record
   # exists in App Store Connect and TESTFLIGHT is set to "on" in the repository variables.

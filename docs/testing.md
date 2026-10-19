@@ -36,6 +36,7 @@ swift build --product inkrelay && .build/debug/inkrelay sync --config "$S/config
 - `state.json` shows which exports were judged `blank`, and `$S/shared/Review/stack.json` shows what a phone would get.
 - On the owner's data at 0.7.0: 21 synced, 3 blank, 50 cards (43 pages, 7 suggested events).
 - `swift scripts/measure-pages.swift FILE.pdf …` prints ink coverage and Vision's lines with confidence for any PDF.
+- `inkrelay measure` scores recognition on the owner's set of corrected pages (`measure/` beside the config) and compares it with the last run. Run it before and after a recognition change; `inkrelay measure add viwoods-cloud/Daily/2025-11-03.pdf` adds pages as drafts to correct.
 
 ## The iPhone and iPad app
 

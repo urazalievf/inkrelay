@@ -270,9 +270,7 @@ public final class RelayEngine {
                 // Touched but not changed: remember the new date so the next pass skips the read.
                 try store.set(record, for: key)
                 if notes.entry(forKey: key)?.contentHash != hash, !source.usesAI(for: file.relativePath) {
-                    let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
-                    let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: file.url, key: key, cache: convertedDirectory) : nil
-                    let forReading = inkOnlyURL(for: file, source: source) ?? supernoteInk ?? readable
+                    let (readable, forReading) = try readingURLs(for: file.url, relativePath: file.relativePath, key: key, source: source)
                     let title = file.url.deletingPathExtension().lastPathComponent
                     try notes.upsert(InkNote(
                         title: title, sourceID: source.id, device: source.device,
@@ -285,12 +283,7 @@ public final class RelayEngine {
                 return
             }
 
-            // Native notebooks (Supernote .note) become a PDF first; everything downstream reads that.
-            let readable = try ExportConverter.readableURL(for: file.url, key: key, cache: convertedDirectory)
-            // Viwoods Cloud keeps an ink-only copy beside the page, and Supernote notebooks can leave their template
-            // layer out; reading those keeps the template's text out of the note.
-            let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: file.url, key: key, cache: convertedDirectory) : nil
-            let forReading = inkOnlyURL(for: file, source: source) ?? supernoteInk ?? readable
+            let (readable, forReading) = try readingURLs(for: file.url, relativePath: file.relativePath, key: key, source: source)
             let note = InkNote(
                 title: file.url.deletingPathExtension().lastPathComponent,
                 sourceID: source.id,
@@ -355,6 +348,41 @@ public final class RelayEngine {
         }
     }
 
+    /// What a sync reads from one export, page by page, without filing it anywhere or touching the sync state:
+    /// the same conversion, ink-only copy, template and recognizer (AI too, for folders the source sends there).
+    /// `inkrelay measure` scores this against what was really written.
+    public func read(sourceID: String, relativePath: String) throws -> [RecognizedPage] {
+        guard let source = config.allSources.first(where: { $0.id == sourceID }) else {
+            throw ReadError.unknownSource(sourceID, known: config.allSources.map(\.id))
+        }
+        let url = source.url.appendingPathComponent(relativePath)
+        guard fileManager.fileExists(atPath: url.path) else { throw ReadError.missingExport(url.path) }
+        let key = SyncState.key(sourceID: source.id, relativePath: relativePath)
+        let (_, forReading) = try readingURLs(for: url, relativePath: relativePath, key: key, source: source)
+        return try recognizePages(of: forReading, relativePath: relativePath, source: source)
+    }
+
+    public enum ReadError: Error, LocalizedError, Equatable {
+        case unknownSource(String, known: [String])
+        case missingExport(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .unknownSource(let id, let known): return "No source \"\(id)\" in the config; it has \(known.joined(separator: ", "))."
+            case .missingExport(let path): return "\(path) isn't there any more."
+            }
+        }
+    }
+
+    /// The export as destinations get it, and the file recognition reads. Native notebooks (Supernote .note)
+    /// become a PDF first. Viwoods Cloud keeps an ink-only copy beside the page, and Supernote notebooks can leave
+    /// their template layer out; reading those keeps the template's text out of the note.
+    private func readingURLs(for url: URL, relativePath: String, key: String, source: SourceConfig) throws -> (readable: URL, forReading: URL) {
+        let readable = try ExportConverter.readableURL(for: url, key: key, cache: convertedDirectory)
+        let supernoteInk = source.recognizeInkOnly ? try ExportConverter.inkOnlyURL(for: url, key: key, cache: convertedDirectory) : nil
+        return (readable, inkOnlyURL(relativePath: relativePath, source: source) ?? supernoteInk ?? readable)
+    }
+
     /// Claude for the folders the source sends there, otherwise Vision, with the template taken out first when
     /// the source names one.
     private func recognizePages(of url: URL, relativePath: String, source: SourceConfig) throws -> [RecognizedPage] {
@@ -400,9 +428,9 @@ public final class RelayEngine {
         }
     }
 
-    private func inkOnlyURL(for file: ScannedFile, source: SourceConfig) -> URL? {
+    private func inkOnlyURL(relativePath: String, source: SourceConfig) -> URL? {
         guard let cloud = config.viwoodsCloud, cloud.id == source.id, cloud.recognizeInkOnly else { return nil }
-        let url = cloud.inkURL(for: file.relativePath)
+        let url = cloud.inkURL(for: relativePath)
         return fileManager.fileExists(atPath: url.path) ? url : nil
     }
 

@@ -17,6 +17,9 @@ Usage:
   inkrelay viwoods list [APP]       What the cloud holds: paper, meeting, memo, learning, knowledgebase
   inkrelay vocabulary               Words Vision is told to expect: yours and the ones learned from your edits
   inkrelay vocabulary add WORD…     Add words; `remove WORD` takes one out
+  inkrelay measure [--show]         Word accuracy on your set of real pages, against the last run (--show prints each reading)
+  inkrelay measure add SOURCE/PATH [PAGE…]
+                                    Add an export's pages to the set as drafts of what's written, for you to correct
   inkrelay google login             Sign in to Google for the googleCalendar and googleDocs destinations
   inkrelay microsoft login          Sign in to Microsoft for the outlookCalendar and oneNote destinations
   inkrelay notion login             Save a Notion integration token in the Keychain
@@ -640,6 +643,80 @@ case "vocabulary":
         print("Learned from your edits: " + (learned.all.isEmpty ? "none yet" : learned.all.joined(separator: ", ")))
     default:
         fail("Usage: inkrelay vocabulary [add WORD… | remove WORD…]")
+    }
+
+case "measure":
+    // Reads pages exactly as sync does (vocabulary, ink-only copies, templates, AI where a source uses it),
+    // without filing anything, and scores them against what the person says is written.
+    let set = MeasureSet(supportDirectory: supportDirectory)
+    let engine: RelayEngine
+    do {
+        engine = try RelayEngine.live(config: loadConfig(), stateURL: stateURL)
+    } catch {
+        fail(error.localizedDescription)
+    }
+    switch arguments.first {
+    case "add":
+        guard arguments.count >= 2, let slash = arguments[1].firstIndex(of: "/") else {
+            fail("Usage: inkrelay measure add SOURCE/PATH [PAGE…], for example: inkrelay measure add viwoods/Daily/2025-11-10.pdf")
+        }
+        let sourceID = String(arguments[1][..<slash]), relativePath = String(arguments[1][arguments[1].index(after: slash)...])
+        let wanted = Set(arguments.dropFirst(2).compactMap { Int($0) })
+        do {
+            for page in try engine.read(sourceID: sourceID, relativePath: relativePath) where wanted.isEmpty || wanted.contains(page.number) {
+                let url = set.truthURL(sourceID: sourceID, relativePath: relativePath, page: page.number)
+                print(try set.addDraft(sourceID: sourceID, relativePath: relativePath, page: page.number, reading: page.text)
+                    ? "Draft: \(url.path)" : "Kept: \(url.path) (already there)")
+            }
+        } catch {
+            fail(error.localizedDescription)
+        }
+        print("Correct each draft to what the page really says and delete its first line. Drafts aren't scored.")
+    case nil, "--show":
+        let pages = set.pages()
+        guard !pages.isEmpty else {
+            fail("No pages to measure yet. Add some with `inkrelay measure add SOURCE/PATH`; they go in \(set.directory.path).")
+        }
+        let show = arguments.contains("--show")
+        var readings: [String: [RecognizedPage]] = [:]
+        var total = WordScore(), scored = 0, drafts = 0
+        for page in pages {
+            let name = "\(page.sourceID)/\(page.relativePath) p\(page.number)"
+            guard let truth = try? set.truth(of: page) else {
+                drafts += 1
+                continue
+            }
+            let exportKey = page.sourceID + "/" + page.relativePath
+            do {
+                let read = try readings[exportKey] ?? engine.read(sourceID: page.sourceID, relativePath: page.relativePath)
+                readings[exportKey] = read
+                guard let reading = read.first(where: { $0.number == page.number }) else {
+                    print("✗ \(name): the export has \(read.count) pages now")
+                    continue
+                }
+                let score = WordScore.score(recognized: reading.text, truth: truth)
+                total = total + score
+                scored += 1
+                print("\(name)  \(String(format: "%.1f%%", score.accuracy * 100))  (\(score.errors) errors in \(score.words) words)")
+                if show { print(reading.text.split(separator: "\n").map { "    " + $0 }.joined(separator: "\n")) }
+            } catch {
+                print("✗ \(name): \(error.localizedDescription)")
+            }
+        }
+        if drafts > 0 { print("\(drafts) draft\(drafts == 1 ? "" : "s") left out until corrected.") }
+        guard scored > 0 else { fail("Nothing scored yet.") }
+        print("Word accuracy \(String(format: "%.1f%%", total.accuracy * 100)) on \(scored) page\(scored == 1 ? "" : "s") (\(total.errors) errors in \(total.words) words).")
+        if let last = set.history().last {
+            let change = (total.accuracy - last.score.accuracy) * 100
+            print("Last run, \(last.date.formatted(date: .abbreviated, time: .shortened)) with \(last.version) on \(last.pages) pages: \(String(format: "%.1f%%", last.score.accuracy * 100)) (\(String(format: "%+.1f", change)) points).")
+        }
+        do {
+            try set.record(MeasureSet.Run(date: Date(), version: InkRelayCore.version, pages: scored, score: total))
+        } catch {
+            fail("Couldn't record the run: \(error.localizedDescription)")
+        }
+    default:
+        fail("Usage: inkrelay measure [--show] | inkrelay measure add SOURCE/PATH [PAGE…]")
     }
 
 case "update":
