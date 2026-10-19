@@ -1,6 +1,6 @@
 # Releasing InkRelay
 
-A release is a signed, notarized `InkRelay.app` (with the `inkrelay` command inside) attached to a GitHub Release. Pushing a version tag does all of it through `.github/workflows/release.yml`.
+A release is a signed, notarized `InkRelay.app` (with the `inkrelay` command inside) attached to a GitHub Release in the public repository [urazalievf/inkrelay-releases](https://github.com/urazalievf/inkrelay-releases). This repository is private, so its own releases answer 404 to customers; the site's Download button, the user guide and the app's update check (`UpdateChecker.releasesRepository`) all read the public one. It holds a README and the releases, never code. Pushing a version tag does all of it through `.github/workflows/release.yml`.
 
 ## Versions
 
@@ -35,6 +35,15 @@ Apple never lets an API key create a Developer ID certificate, even an Admin one
 
 For this repository that's done: the certificate expires November 17, 2027, and the six secrets are set.
 
+3. Create the token that publishes to the public repository. Only its owner can make one, on github.com, and the script stops before tagging until it exists:
+   - github.com → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → **Generate new token**.
+   - Resource owner: `urazalievf`. Expiration: your choice; when it lapses, the release stops at its first check and says so.
+   - Repository access: **Only select repositories** → `urazalievf/inkrelay-releases`.
+   - Permissions → Repository permissions → **Contents: Read and write**. GitHub adds Metadata: Read-only by itself. Nothing else.
+   - Store it: `gh secret set RELEASES_TOKEN --repo urazalievf/inkrelay` (it asks for the value, so it stays out of your shell history).
+
+   A classic token would need the `public_repo` scope, which reaches every public repository you own; the fine-grained one reaches only the releases repository.
+
 ### By hand
 
 The workflow reads these secrets (Settings → Secrets and variables → Actions):
@@ -46,19 +55,23 @@ gh secret set DEVELOPER_ID_NAME --body "Developer ID Application: Your Name (TEA
 gh secret set NOTARY_KEY_P8_BASE64 < <(base64 -i AuthKey_XXXXXXXXXX.p8)
 gh secret set NOTARY_KEY_ID --body "XXXXXXXXXX"
 gh secret set NOTARY_ISSUER_ID --body "00000000-0000-0000-0000-000000000000"
+gh secret set RELEASES_TOKEN   # the fine-grained token from step 3
 ```
 
 None of these ever go in the repository. If any is missing the workflow stops before building, so nothing unsigned is published.
 
 ## Cutting a release
 
+Write the customer-facing notes first, in `docs/release-notes/<version>.md`: what changed for someone using InkRelay, in plain words. They're the release page's text and the app's update alert shows their first 600 characters. Generated notes would list this repository's pull requests, which customers can't open, so the workflow refuses to start without the file.
+
 ```bash
-scripts/check-version.sh v0.10.0   # the tag must match InkRelayCore.version
-git tag v0.10.0
-git push origin v0.10.0
+scripts/check-version.sh v0.10.1          # the tag must match InkRelayCore.version
+scripts/publish-release.sh --check v0.10.1  # notes written, releases repository reachable, tag not used yet
+git tag v0.10.1
+git push origin v0.10.1
 ```
 
-The workflow tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release with `InkRelay-0.10.0.zip` and generated notes.
+The workflow checks the notes and the token, tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the release in `urazalievf/inkrelay-releases` with `InkRelay-0.10.1.zip`, the same file as `InkRelay.zip` (so `releases/latest/download/InkRelay.zip` is always the newest), and the notes. The tag in the releases repository points at its README commit; the tag here marks the source. A published version is never replaced: a rebuilt app gets a new version.
 
 ### When Apple takes longer than 30 minutes
 
@@ -71,7 +84,7 @@ xcrun notarytool info <submission-id> --key AuthKey_XXXXXXXXXX.p8 --key-id XXXXX
 gh workflow run release.yml -f run_id=<the tag's run id> -f tag=v0.10.0
 ```
 
-That run checks the tag's run built that tag, staples the same app Apple accepted, and publishes the release. Nothing is rebuilt or re-signed. If Apple says Invalid instead, the failed run prints Apple's log.
+That run checks the tag's run built that tag, staples the same app Apple accepted, and publishes the release to the releases repository the same way. Nothing is rebuilt or re-signed. If Apple says Invalid instead, the failed run prints Apple's log.
 
 ## Local builds
 

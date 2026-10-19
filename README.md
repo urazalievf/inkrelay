@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.10.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones).
+Version 0.10.1: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones). Signed builds are published to the public [inkrelay-releases](https://github.com/urazalievf/inkrelay-releases/releases) repository, since this one is private ([RELEASING.md](RELEASING.md)).
 
 ### Compatibility
 
