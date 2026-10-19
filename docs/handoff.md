@@ -1,17 +1,10 @@
 # Handoff: where things stand
 
-As of October 18, 2026, 9:50 AM CT. Everything through 0.10.0 "Polish" (#69) is on `main`. The plan all rounds follow is [plan-1.0.md](plan-1.0.md).
+As of October 19, 2026, 5:15 PM CT. Everything through 0.10.0 "Polish" (#69) is on `main`, and so is the release workflow fix (#71). The plan all rounds follow is [plan-1.0.md](plan-1.0.md).
 
-**v0.10.0 isn't published yet.** The tag's first run (39134287085) tested, built and signed the app, then failed at 9:35 AM CT. Apple held the notarization (submission `2375454b-b42c-4aa9-8794-5105c155c395`) "In Progress" for the whole 30 minutes the step waits. Apple often holds a new team's first submissions for hours. The signed build was lost with the runner. Draft PR #71 keeps it from now on and adds a finish path (see [RELEASING.md](../RELEASING.md)).
+**v0.10.0 is the first signed release.** It was published October 19 at 5:06 PM CT: [InkRelay-0.10.0.zip](https://github.com/urazalievf/inkrelay/releases/tag/v0.10.0), universal, Developer ID signed, notarized and stapled. Downloaded and checked on the Mac: Gatekeeper says "accepted, Notarized Developer ID". The tag's first run (39134287085) timed out on October 18 because Apple held the team's first notarization for hours. Apple accepted it with no issues, and a re-run of the failed job went through in minutes. #71 now keeps the signed app as an artifact and adds a finish path for the next slow notarization ([RELEASING.md](../RELEASING.md)).
 
-**First thing next session:** check whether Apple has finished:
-
-```bash
-cd ~/Library/Application\ Support/InkRelay/release-signing
-xcrun notarytool info 2375454b-b42c-4aa9-8794-5105c155c395 --key AuthKey_NTZGY42J5H.p8 --key-id NTZGY42J5H --issuer 1b49541c-4e95-48ab-a121-3d040d720b0a
-```
-
-If it says Accepted, `gh run rerun 39134287085 --failed` rebuilds from the tag, and the new submission should go through quickly. If it says Invalid, `xcrun notarytool log <id> …` says why. Check `gh release view v0.10.0` before re-running: if the release exists, it's done.
+**Customers can't download it yet.** The repository is private, so the release page, the site's Download button (`site/index.html`) and the app's update feed (`UpdateChecker.feed`, the GitHub releases API) all answer 404 to anyone but the owner. The app says the feed couldn't be read (404) rather than calling itself up to date. The owner chooses where public builds live; see "Waiting on the owner".
 
 ## What's shipped
 
@@ -71,18 +64,24 @@ Merging is the owner's call. `main` has no branch protection (that needs GitHub 
 
 Pull requests stay drafts until the owner marks them ready and merges them. Something has been merging green PRs under the owner's account within minutes of CI passing (#31, #36, #37), and GitHub can't merge a draft.
 
-Done on October 18 with the owner's approval, so not waiting any more: App Store Connect API access, a Team API key "InkRelay Releases" (Admin, key ID NTZGY42J5H), a Developer ID Application certificate (G2, expires November 17, 2027), the six release secrets, and the `v0.10.0` tag. The key, the certificate and its private key are in `~/Library/Application Support/InkRelay/release-signing/` (owner-only); keep a private backup. The API can't create Developer ID certificates, so the certificate was made on developer.apple.com ([RELEASING.md](../RELEASING.md)).
+Done on October 18 with the owner's approval, so not waiting any more: App Store Connect API access, a Team API key "InkRelay Releases" (Admin, key ID NTZGY42J5H), a Developer ID Application certificate (G2, expires November 17, 2027), the six release secrets, and the `v0.10.0` tag (released October 19). The key, the certificate and its private key are in `~/Library/Application Support/InkRelay/release-signing/` (owner-only); keep a private backup. The API can't create Developer ID certificates, so the certificate was made on developer.apple.com ([RELEASING.md](../RELEASING.md)).
 
-1. Phone review:
+1. **A public home for releases.** Options:
+   - a public releases-only repository (for example `urazalievf/inkrelay-releases`), with the workflow publishing there and `UpdateChecker.feed`/`downloads` and the site pointing at it;
+   - the site's host serving the zip and a small JSON feed.
+
+   The code change is small once the owner picks. Until then the update check can't see releases.
+2. **Installing the notarized build on this Mac (optional).** The installed app is the ad-hoc build of the same 0.10.0. Swapping in the notarized one changes the code signature, so macOS will probably ask again for Calendar automation.
+3. Phone review:
    - install the iOS app from Xcode (Run on device; automatic signing with team DT9JP293AM);
    - pick iCloud Drive/InkRelay in the app;
    - set `"shareWithPhone": true` on the Mac's `reviewStack`.
 
    The app needs iOS 17; the owner's iPhone 7 is stuck on iOS 15.
-2. Cloud accounts, before those destinations can be checked for real: a Google desktop OAuth client, a Microsoft Entra app registration and a Notion integration token (#53 would make the first two unnecessary for customers). The README explains each.
-3. #19: a waitlist form service for `WAITLIST_ENDPOINT`, hosting for `site/` (Netlify or Cloudflare Pages; GitHub Pages needs a public repo or Pro), and the posts. The download button points at GitHub Releases, which customers can't see while the repository is private, so the zip needs a public home too.
-4. Selling (#52): a Lemon Squeezy store and product, then `LEMONSQUEEZY_API_KEY=… swift scripts/issue-licenses.swift --store ID --product ID --send`. Until then keys are issued by hand with `scripts/make-license.swift`.
-5. TestFlight (#54): an app record for io.github.urazalievf.InkRelay.mobile in App Store Connect, then the repository variable `TESTFLIGHT=on`; the release workflow uploads the next tag's iPhone build.
+4. Cloud accounts, before those destinations can be checked for real: a Google desktop OAuth client, a Microsoft Entra app registration and a Notion integration token (#53 would make the first two unnecessary for customers). The README explains each.
+5. #19: a waitlist form service for `WAITLIST_ENDPOINT`, hosting for `site/` (Netlify or Cloudflare Pages; GitHub Pages needs a public repo or Pro), and the posts. The download button points at GitHub Releases, which customers can't see while the repository is private, so the zip needs a public home too.
+6. Selling (#52): a Lemon Squeezy store and product, then `LEMONSQUEEZY_API_KEY=… swift scripts/issue-licenses.swift --store ID --product ID --send`. Until then keys are issued by hand with `scripts/make-license.swift`.
+7. TestFlight (#54): an app record for io.github.urazalievf.InkRelay.mobile in App Store Connect, then the repository variable `TESTFLIGHT=on`; the release workflow uploads the next tag's iPhone build.
 
 ## Never checked for real
 
@@ -91,7 +90,7 @@ Done on October 18 with the owner's approval, so not waiting any more: App Store
 - Kindle Scribe email pickup.
 - The shared ledger across two real devices.
 - Phone review over iCloud on a real device. The simulator read a local folder, and the round trip is covered by tests.
-- The release workflow end to end, the TestFlight job (needs the app record in App Store Connect and the repository variable `TESTFLIGHT=on`), and `scripts/issue-licenses.swift` (needs a Lemon Squeezy store and `LEMONSQUEEZY_API_KEY`).
+- The release workflow's finish path (`workflow_dispatch`, only needed when Apple is slow; the tag path was checked end to end with v0.10.0), the TestFlight job (needs the app record in App Store Connect and the repository variable `TESTFLIGHT=on`), and `scripts/issue-licenses.swift` (needs a Lemon Squeezy store and `LEMONSQUEEZY_API_KEY`).
 - Template subtraction on a real tablet export; it's checked on a drawn page with ruled lines and "Name / Date" labels.
 - reMarkable Cloud.
 
@@ -99,7 +98,7 @@ Done on October 18 with the owner's approval, so not waiting any more: App Store
 
 In rough order of value (the plan in [plan-1.0.md](plan-1.0.md) has the full list):
 
-1. **Finish the v0.10.0 release** (top of this page), then give the zip a public home. Customers can't see GitHub Releases while the repository is private. A public releases-only repository or the site's host would work; the choice is the owner's.
+1. **A public home for releases** (owner's choice, above), then point the workflow, `UpdateChecker` and `site/` at it.
 2. **Recognition quality on real pages.** Ink-only recognition (0.8.0) and planner-only AI (0.9.0) are built, and AI is off for the owner by choice. What's missing is a number: run `scripts/measure-pages.swift` on a fixed set of the owner's pages before and after each recognition change.
 3. **Viwoods apps not pulled yet:** Knowledge Base and Learning (#51). They're empty at the top level on the owner's account, so their format is still unknown.
 4. **Tidy the owner's existing data,** if they want: re-pull to fix the `modified` dates, and remove the three empty notes.
