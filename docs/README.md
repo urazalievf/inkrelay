@@ -13,6 +13,8 @@ Start with **[handoff.md](handoff.md)**: what's shipped, what's open, what the o
 | [testing.md](testing.md) | How to check each part, including against real data without touching real notes |
 | [viwoods-cloud.md](viwoods-cloud.md) | The unofficial Viwoods Cloud API as InkRelay uses it |
 | [supernote-format.md](supernote-format.md) | The Supernote `.note` file format as the decoder reads it |
+| [plan-1.0.md](plan-1.0.md) | The path from CLI to sellable: what "pro grade" meant and the rounds 0.8.0–0.10.0 |
+| [plan-2.0.md](plan-2.0.md) | Launch, pricing and the features still missing, in phases with a gate after each (1.0.0–2.0) |
 | [research/market-scan-2026-10.md](research/market-scan-2026-10.md) | Market scan, gaps, platform access and risks (from issue #22) |
 | [launch/pricing.md](launch/pricing.md) | Pricing comparables, costs and the option to test (#19) |
 | [launch/community-posts.md](launch/community-posts.md) | Draft posts for the demand check (#19) |
