@@ -19,7 +19,7 @@ Swift 5.9 package, macOS 14 and iOS 17, no third-party dependencies, XCTest. One
    - `ViwoodsCloudPuller` mirrors notebooks, memos and planner days as PDFs into `viwoods/` and sends typed planner to-dos straight to plan destinations.
    - `KindleMailPuller` saves Kindle Scribe notebook emails from Mail into `kindle/`.
 2. **Scans every source folder** (`FolderScanner`). Each file is skipped when its size and date match the record. Otherwise it's hashed: same hash means touched but unchanged, and a hash matching a missing file means a rename or move.
-3. **Recognizes** changed exports with `VisionTextRecognizer`, or `ClaudeTextRecognizer` for sources set to `"recognizer": "claude"`, which falls back to Vision. Supernote `.note` files are first converted to PDF (`ExportConverter`).
+3. **Recognizes** changed exports with `VisionTextRecognizer`, or `ClaudeTextRecognizer` for sources set to `"recognizer": "claude"`, which falls back to Vision. Supernote `.note` files are first converted to PDF (`ExportConverter`). Which file is read (the export, its ink-only copy or a Supernote notebook without its template layer) is decided in one place, `readingURLs`, which `RelayEngine.read` also uses, so `inkrelay measure` scores exactly what a sync would file.
 4. **Builds an `InkNote`** (title from the file name, pages with text) and archives its text in `NoteArchive` for search.
 5. **Delivers** it to each destination still behind for that content hash. A failure only retries that destination.
 6. **Handles exports that disappeared:** renames move notes, and `onDelete` policies (`keep`, `archive`, `delete`) decide the rest. A source folder that is suddenly empty never deletes anything.
@@ -98,6 +98,7 @@ All the calendar destinations build their events from `PlannerEvent`, so titles 
 | `converted/` | PDFs made from Supernote `.note` files |
 | `review/` | `stack.json`, `images/`, `.lock`, `applied.json` |
 | `ai-usage.json` | This month's AI transcription spend |
+| `measure/` | The owner's pages for measuring recognition (`<source>/<export>.p<page>.txt`) and `history.tsv`; never in a repository |
 
 The Notion token and Anthropic API key are in the Keychain under the service "InkRelay". Logs from the launch agent and the app are in `~/Library/Logs/InkRelay`.
 

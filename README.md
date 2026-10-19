@@ -266,6 +266,8 @@ Google needs an OAuth client of your own while InkRelay is in development:
 
 Vision reads pages on the Mac, `recognition.concurrency` pages at a time (by core count, up to 4). `recognition.vocabulary` lists words Vision should expect, such as names, products and places; they win over the dictionary when the ink is close, which is the difference between "Erin" and "erin" or "Ensemble" and "Enseunble". `scripts/measure-pages.swift` shows what Vision reads from any PDF and how sure it is.
 
+- **How good is it on your pages?** `inkrelay measure add SOURCE/PATH` puts an export's pages in a set beside the config (`measure/`) as drafts of what InkRelay reads now. Correct each draft to what the page really says and delete its first line. `inkrelay measure` then reads every page exactly as a sync would (vocabulary, ink-only copies, templates, and AI where a source uses it), prints word accuracy per page and in total, compares it with the last run and records the run in `measure/history.tsv`. `--show` prints each reading. Drafts are never scored, and the set holds your handwriting, so it stays on the Mac.
+
 - **It learns from your corrections.** Fix a misread word inside InkRelay's block of an Obsidian note, and the next time that page changes on the tablet the word is learned before the block is rewritten: it goes into `vocabulary.json` beside the config and Vision expects it from then on. `inkrelay vocabulary` lists, adds and removes words.
 - **Templates stay out.** Viwoods Cloud and Supernote notebooks are read from their ink layer alone. For any folder source, `"template": "~/Templates/cornell.png"` names a picture (or one-page PDF) of the blank template, and its lines and labels are taken out of each page before recognition.
 
