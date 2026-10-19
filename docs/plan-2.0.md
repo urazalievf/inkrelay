@@ -182,6 +182,14 @@ Plan 1.0's list still holds (two-way sync, a server, DRM, Google Keep). Added to
 - **A vendor adds Apple or calendar sync.** No single vendor will cover other tablets, the review layer or the morning page, and that's the moat.
 - **The name.** Checked in Phase 0, before any money is spent on it.
 
-## Issues to open
+## Issues
 
-Once the owner accepts this plan, each table row becomes an issue under milestones 1.0.0 to 1.3.0 on the "InkRelay roadmap" board (user project #8), the same way plan 1.0 became issues #38–#54. #53 already sits in 1.0.0.
+Each table row is an issue on the "InkRelay roadmap" board (user project #8), opened October 19, 2026. Each milestone's description repeats its gate.
+
+| Milestone | Issues |
+|---|---|
+| 1.0.0 Sellable (Phase 0) | #75 public downloads (in progress in #74), #76 site, checkout and waitlist, #77 yearly keys, #78 verify routes, #53 built-in sign-in, #3 beta testers, #19 name check and posts |
+| 1.1.0 Every tablet (Phase 1) | #23 reMarkable Cloud, #79 Supernote Cloud, #80 Boox, #51 Viwoods Knowledge Base and Learning, #81 task apps, #82 more notes apps |
+| 1.2.0 Ink that thinks (Phase 2) | #83 key-idea cards, #84 recall cards, #85 search by meaning, #86 links and tags, #87 drawings, math and tables, #88 language per page |
+| 1.3.0 Daily ritual (Phase 3) | #89 morning page, #90 calendar into the planner, #91 widgets and streak, #92 share extension, #93 reading packs, #94 listen to your week |
+| Later: beyond the Mac (Phase 4) | #95 iPhone without a Mac, #96 Setapp, #97 InkRelay Cloud and Pro + AI, #98 teams and classrooms, #99 templates |
