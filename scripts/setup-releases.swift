@@ -5,9 +5,7 @@
 //    App Store Connect API with the same key notarization uses (falls back to Xcode if Apple refuses).
 // 2. Exports only that identity, with a random password, and stores everything the release workflow
 //    needs as repository secrets with `gh secret set`. Nothing is printed or written to the repo.
-// 3. Checks for RELEASES_TOKEN, the one secret it can't make: a fine-grained token for the public releases
-//    repository, created on github.com (RELEASING.md).
-// 4. With --tag, tags the current version and pushes the tag, which starts the release.
+// 3. With --tag, tags the current version and pushes the tag, which starts the release.
 //
 // Other modes: --dry-run (look, change nothing), --self-test (check the JWT signing).
 import CryptoKit
@@ -230,20 +228,7 @@ for (secret, value) in secrets {
 }
 say("Stored the six release secrets in urazalievf/inkrelay.")
 
-// Releases are published to the public repository with a token only its owner can create on github.com.
-let (listed, names) = run("/usr/bin/env", ["gh", "secret", "list", "--repo", "urazalievf/inkrelay", "--json", "name", "--jq", ".[].name"])
-let hasReleasesToken = listed == 0 && names.split(separator: "\n").contains("RELEASES_TOKEN")
-if !hasReleasesToken {
-    say("""
-    RELEASES_TOKEN is missing, so a release would stop before building. Create it once:
-      github.com → Settings → Developer settings → Fine-grained tokens → Generate new token;
-      Repository access: only urazalievf/inkrelay-releases; Permissions: Contents → Read and write.
-    Then: gh secret set RELEASES_TOKEN --repo urazalievf/inkrelay   (it asks for the value)
-    """)
-}
-
 if arguments.contains("--tag") {
-    guard hasReleasesToken else { fail("Not tagging until RELEASES_TOKEN is set (above).") }
     let source = (try? String(contentsOf: repository.appendingPathComponent("Sources/InkRelayCore/InkRelayCore.swift"), encoding: .utf8)) ?? ""
     guard let match = source.firstMatch(of: #/static let version = "([0-9.]+)"/#) else { fail("Couldn't read InkRelayCore.version.") }
     let tag = "v" + match.1

@@ -13,7 +13,7 @@ InkRelay costs its owner money every month: the Apple Developer Program, the too
   - Destinations: Obsidian, Apple Notes, Calendar and Reminders, Google Calendar and Docs, Outlook Calendar, OneNote, Notion and the review stack.
   - Also: sending articles to the tablet, Obsidian daily notes and a weekly digest, review on iPhone and iPad, an MCP server, and a Pro license with a trial.
 - **What's proven on real data:** one tablet (Viwoods) going into Obsidian, Apple Calendar and Apple Notes. Everything else passes tests against fixtures but has never run against a real account or a real export (see "Never checked for real" in [handoff.md](handoff.md)).
-- **Who has bought it:** nobody yet. v0.10.0's download, the site's button and the update feed point at the private repository, so anyone but the owner gets a 404. #74 moves them to the public `urazalievf/inkrelay-releases`; 0.10.1 is the first public build.
+- **Who has bought it:** nobody yet. v0.10.0's download, the site's button and the update feed point at the private repository, so anyone but the owner gets a 404. A separate public releases repository worked for a day (v0.10.1) and was retired on October 20 to keep everything in one repository, so downloads wait for item 1.
 
 InkRelay is wide but thin. The breadth is real, but only one tablet has been proven.
 
@@ -53,7 +53,7 @@ InkRelay is shaped like Readwise: many sources, many destinations and a daily re
 |---|---|
 | Apple Developer Program | $99 a year |
 | Payment fees (Lemon Squeezy) | about 5% + 50¢ an order (check the current rate) |
-| Site and downloads | $0 (Cloudflare Pages and a public releases repository) |
+| Site and downloads | $0 (Cloudflare Pages, or GitHub if the repository goes public) |
 | Domain | about $15 a year for a `.app` domain, once registered |
 | Tools it's built with (Claude, Canva Pro) | the owner's own plans |
 
@@ -69,7 +69,7 @@ Nothing new gets built until a stranger can download InkRelay, try it and buy it
 
 | # | Item | Why | Scope |
 |---|---|---|---|
-| 1 | Public downloads and update feed | Everything else depends on it | A public releases repository: `urazalievf/inkrelay-releases`, created October 19, wired up in #74. The release workflow publishes there, and `UpdateChecker.feed` and the site point at it |
+| 1 | Public downloads and update feed | Everything else depends on it | Releases live in `urazalievf/inkrelay`, which is private, so customers and the update feed get a 404. Make the repository public, or publish builds from the site's host |
 | 2 | Site live with a checkout and a waitlist | The page exists, but nobody can reach it | `site/` on Cloudflare Pages. A Lemon Squeezy store selling Pro yearly and Founder. A form service for `WAITLIST_ENDPOINT` that records tablet, destination and computer (Mac, Windows, or phone only) |
 | 3 | Yearly keys and renewals | The issuer only handles one-time orders | `scripts/issue-licenses.swift` gives subscription orders a key with `expiresOn` one year out, and a new key at each renewal. The trial-ended panel also covers "Pro expired, renew" |
 | 4 | Verified routes, labeled in the matrix | Buyers judge their own route | Run Google Calendar and Docs, Outlook, OneNote, Notion, Reminders and Kindle email against real accounts. The site's matrix labels each route verified or beta |
