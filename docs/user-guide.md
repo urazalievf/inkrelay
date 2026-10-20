@@ -50,6 +50,8 @@ Free: export folders from any tablet, Obsidian, Apple Notes, Apple Calendar and 
 
 Every install starts with a 14-day Pro trial. The menu shows how many days are left. When it ends without a key, the Pro parts pause: the sync report says so in one line, nothing is deleted, and entering a key resumes them from where they stopped at the next sync, with no restart. **Enter License…** is in the menu; `inkrelay license enter INK1.…` from the terminal. Keys are checked on your Mac; InkRelay has no server.
 
+A yearly key works through the date in its email. Two weeks before, the menu says so; your renewal emails the next key, and entering it the same way keeps everything running. If a key runs out, the Pro parts pause until the new one is entered, and nothing is lost.
+
 ## 5. The review stack
 
 Every page InkRelay relays becomes a card: the page as written, the recognized text, and for planner to-dos the to-do itself. While the app runs, the stack is at <http://127.0.0.1:7788> (click **Review stack** in the menu).

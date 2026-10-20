@@ -76,6 +76,9 @@ public final class RelayEngine {
         guard !entitlement.isPro else { return nil }
         let parts = ProFeatures.used(in: config)
         guard !parts.isEmpty else { return nil }
+        if let expired = entitlement.expiredLicense {
+            return "\(Self.pausedPrefix) since the Pro year ended \(expired.expiryText(style: .abbreviated) ?? ""): \(parts.joined(separator: ", ")). Renew at \(LicensePublisher.purchaseText); the renewal emails a new key, which you enter in the InkRelay menu or with `inkrelay license enter KEY`. Nothing is lost, syncing resumes from here."
+        }
         if let rejection = entitlement.rejection {
             return "\(Self.pausedPrefix): \(parts.joined(separator: ", ")). The key on file wasn't accepted (\(rejection)); enter a new one with `inkrelay license enter KEY` or remove it with `inkrelay license remove`. Nothing is lost."
         }

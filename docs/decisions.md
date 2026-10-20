@@ -49,4 +49,5 @@ Settled choices and the reasons for them. Change one only when the reason no lon
   - Versions only move forward, and the bump is committed with the change.
   - The Mac app's build number packs all four parts: `MAJOR*1000000 + MINOR*10000 + PATCH*100 + FIX`.
   - iOS shows `MAJOR.MINOR.PATCH`, with FIX in the build number.
+- **Yearly keys last the paid year plus 14 days.** Keys are checked offline, so each renewal is a new key rather than a server check. The grace covers a renewal payment that's retried and an issuer run that's a day late, so a paying customer never sees Pro pause. Only the newest paid invoice of a subscription gets a key (a catch-up run doesn't send a stack), mid-year plan changes get none, and a refund can't take back a key already sent; it simply isn't renewed.
 - **Releases are signed and notarized or not published.** The release workflow stops before building if any signing secret is missing.

@@ -36,6 +36,17 @@ public struct License: Codable, Equatable {
         return true
     }
 
+    /// Whole days from today to the last day: 0 on the last day, negative once it's over, nil for keeps.
+    public func daysLeft(at date: Date, calendar: Calendar = .current) -> Int? {
+        if let expiresOn {
+            let parts = expiresOn.split(separator: "-").compactMap { Int($0) }
+            guard parts.count == 3, let last = calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2])) else { return nil }
+            return calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: last).day
+        }
+        guard let expiresAt else { return nil }
+        return Int((expiresAt.timeIntervalSince(date) / 86_400).rounded(.down))
+    }
+
     /// The expiry for people: "December 31, 2027", or nil for keeps.
     public func expiryText(style: Date.FormatStyle.DateStyle = .long, calendar: Calendar = .current) -> String? {
         if let expiresOn {

@@ -61,6 +61,9 @@ public struct Doctor {
 
     func planCheck() -> DoctorCheck {
         let entitlement = EntitlementStore(supportDirectory: supportDirectory).current()
+        if let expired = entitlement.expiredLicense, !entitlement.isPro {
+            return DoctorCheck(.problem, "Plan", "Pro ended \(expired.expiryText(style: .abbreviated) ?? ""). Renew at \(LicensePublisher.purchaseText), then enter the new key with `inkrelay license enter KEY`.")
+        }
         if let rejection = entitlement.rejection {
             return DoctorCheck(.problem, "Plan", "the key on file wasn't accepted: \(rejection). Replace it with `inkrelay license enter KEY`, or run `inkrelay license remove`.")
         }

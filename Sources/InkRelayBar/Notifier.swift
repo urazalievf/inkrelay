@@ -77,6 +77,25 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         deliver(id: "trial", title: "Your InkRelay Pro trial \(when)", body: "After that \(list) pause until a license is entered. Everything else keeps syncing.")
     }
 
+    /// For a key with an end date: a week before, on the last day, and once when it has ended, each once per key.
+    func proYear(current: License?, ended: License?, parts: [String], now: Date = Date()) {
+        guard !parts.isEmpty else { return }
+        let list = parts.joined(separator: ", ")
+        if let ended {
+            let key = "notifiedProEnded-\(ended.id)"
+            guard !defaults.bool(forKey: key) else { return }
+            defaults.set(true, forKey: key)
+            deliver(id: "pro-year", title: "Your InkRelay Pro year ended", body: "\(list) paused. Your notes are safe; renew and enter the new key, and syncing picks up where it stopped.")
+            return
+        }
+        guard let current, let daysLeft = current.daysLeft(at: now), daysLeft == 7 || daysLeft == 0 else { return }
+        let key = "notifiedProEnds\(daysLeft)-\(current.id)"
+        guard !defaults.bool(forKey: key) else { return }
+        defaults.set(true, forKey: key)
+        let when = daysLeft == 0 ? "ends today" : "ends in a week"
+        deliver(id: "pro-year", title: "Your InkRelay Pro year \(when)", body: "Renewing emails a new key; enter it from the InkRelay menu and \(list) keep running.")
+    }
+
     /// Once per version.
     func updateAvailable(_ release: ReleaseInfo) {
         guard defaults.string(forKey: "notifiedUpdate") != release.version else { return }

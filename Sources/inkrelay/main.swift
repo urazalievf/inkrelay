@@ -623,8 +623,12 @@ case "license":
         let entitlement = store.current()
         print(entitlement.summary())
         if let outlook = ProFeatures.outlook(for: try? ConfigStore.load(from: configURL), entitlement: entitlement) { print(outlook) }
-        if case .license = entitlement.basis {} else { print("Buy a license at \(LicensePublisher.purchaseText), then: inkrelay license enter INK1.…") }
-        if let problem = store.licenseProblem() { print("The key on file wasn't accepted: \(problem)") }
+        if entitlement.expiredLicense != nil, !entitlement.isPro {
+            print("Renew at \(LicensePublisher.purchaseText); the renewal emails a new key: inkrelay license enter INK1.…")
+        } else {
+            if case .license = entitlement.basis {} else { print("Buy a license at \(LicensePublisher.purchaseText), then: inkrelay license enter INK1.…") }
+            if let problem = store.licenseProblem() { print("The key on file wasn't accepted: \(problem)") }
+        }
     default:
         fail("Usage: inkrelay license [enter KEY | remove]")
     }

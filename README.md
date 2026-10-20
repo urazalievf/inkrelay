@@ -28,7 +28,7 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
 
 ## Status
 
-Version 0.10.2: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones). Signed builds are on the [releases page](../../releases) ([RELEASING.md](RELEASING.md)).
+Version 0.11.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones). Signed builds are on the [releases page](../../releases) ([RELEASING.md](RELEASING.md)).
 
 ### Compatibility
 
@@ -96,6 +96,8 @@ Tips:
 Everything a Mac can do on its own is free: export folders from any tablet, Obsidian, Apple Notes, Apple Calendar and Apple Reminders. Pro adds Viwoods Cloud, Kindle Scribe by email, Google Calendar and Docs, Outlook Calendar and OneNote, Notion, AI transcription, and the review stack on the Mac and the phone. Every install starts with a 14-day Pro trial.
 
 When the trial ends without a license, the Pro parts pause: each sync says so in one line, nothing is deleted, and once a key is entered they catch up from where they stopped at the next sync (every pass reads the plan again, so the app or the agent needs no restart). Enter a key with **Enter License…** in the InkRelay menu or `inkrelay license enter INK1.…`; `inkrelay license` shows the plan. Keys are checked on the Mac against the publisher's public key, so InkRelay never contacts a server about them.
+
+A key can carry an end date (yearly Pro). Two weeks before it, the menu says the renewal key is on its way; each paid renewal emails a new key, and entering it keeps everything running. A key that runs out pauses the Pro parts the same way, and the menu, the sync report and `inkrelay doctor` ask for the renewal rather than calling the key refused. `scripts/issue-licenses.swift` issues keys from a Lemon Squeezy store: Founder orders for keeps, the yearly subscription through the paid year plus 14 days' grace, and a new key at each renewal.
 
 ## Supernote
 

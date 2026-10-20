@@ -36,6 +36,7 @@ swift build --product inkrelay && .build/debug/inkrelay sync --config "$S/config
 - `state.json` shows which exports were judged `blank`, and `$S/shared/Review/stack.json` shows what a phone would get.
 - On the owner's data at 0.7.0: 21 synced, 3 blank, 50 cards (43 pages, 7 suggested events).
 - `swift scripts/measure-pages.swift FILE.pdf …` prints ink coverage and Vision's lines with confidence for any PDF.
+- `scripts/issue-licenses.swift` can run against a stub of the Lemon Squeezy API: set `LEMONSQUEEZY_API_URL=http://127.0.0.1:PORT/v1/` and any `LEMONSQUEEZY_API_KEY`, serve `orders`, `subscription-invoices` and `subscriptions/<id>` as JSON, and leave out `--send`. A dry run lists who would get a key and through which date, and writes nothing.
 - `inkrelay measure` scores recognition on the owner's set of corrected pages (`measure/` beside the config) and compares it with the last run. Run it before and after a recognition change; `inkrelay measure add viwoods-cloud/Daily/2025-11-03.pdf` adds pages as drafts to correct.
 
 ## The iPhone and iPad app

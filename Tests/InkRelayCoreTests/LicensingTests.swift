@@ -158,13 +158,16 @@ final class LicensingTests: XCTestCase {
         let expired = store.current(now: later)
         XCTAssertFalse(expired.isPro)
         XCTAssertTrue(expired.rejection?.contains("expired on") == true, expired.rejection ?? "")
-        XCTAssertTrue(expired.summary(now: later).hasPrefix("Free; the key on file wasn't accepted"))
+        XCTAssertEqual(expired.expiredLicense?.id, "e", "a genuine key whose time is up asks for the renewal")
+        XCTAssertTrue(expired.summary(now: later).hasPrefix("Free; Pro for Ada ended"), expired.summary(now: later))
 
         // Changed by hand.
         var parts = try key().split(separator: ".").map(String.init)
         parts[1] = LicenseKey.base64URL(Data(#"{"name":"Mallory"}"#.utf8))
         try JSONEncoder().encode(EntitlementStore.LicenseFile(key: parts.joined(separator: "."))).write(to: licenseURL)
         XCTAssertEqual(store.current(now: later).rejection, LicenseError.badSignature.errorDescription)
+        XCTAssertNil(store.current(now: later).expiredLicense, "a changed key isn't an expired one")
+        XCTAssertTrue(store.current(now: later).summary(now: later).hasPrefix("Free; the key on file wasn't accepted"))
 
         // Not JSON at all.
         try Data("garbage".utf8).write(to: licenseURL)
@@ -178,6 +181,45 @@ final class LicensingTests: XCTestCase {
 
         let doctor = Doctor(config: RelayConfig(sources: [SourceConfig(id: "d", device: "d", path: folder.url.path)], destinations: [.obsidian(.init(id: "v", vaultPath: folder.url.path))]), supportDirectory: folder.url).planCheck()
         XCTAssertEqual(doctor.status, .problem)
+    }
+
+    /// Yearly keys: the last weeks say a renewal key is coming, and the day after the end asks for it.
+    func testAYearlyKeyAsksForItsRenewal() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        let day = { (m: Int, d: Int) in calendar.date(from: DateComponents(year: 2027, month: m, day: d, hour: 9))! }
+        let yearly = License(id: "y1", name: "Ada", email: "a@x", issuedAt: now, expiresOn: "2027-11-17")
+        XCTAssertEqual(yearly.daysLeft(at: day(11, 3), calendar: calendar), 14)
+        XCTAssertEqual(yearly.daysLeft(at: day(11, 17), calendar: calendar), 0, "the last day")
+        XCTAssertEqual(yearly.daysLeft(at: day(11, 18), calendar: calendar), -1)
+        XCTAssertNil(License(name: "F", email: "f@x", issuedAt: now).daysLeft(at: now), "a Founder key never ends")
+
+        let withPro = RelayConfig(sources: [], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v")), .reviewStack(.init(id: "review"))], viwoodsCloud: ViwoodsCloudConfig())
+        let freeOnly = RelayConfig(sources: [SourceConfig(id: "drive", device: "Tablet", path: "/tmp/x")], destinations: [.obsidian(.init(id: "vault", vaultPath: "/tmp/v"))])
+        let licensed = Entitlement(plan: .pro, basis: .license(yearly))
+        XCTAssertNil(ProFeatures.outlook(for: withPro, entitlement: licensed, now: day(10, 1)), "quiet until two weeks before")
+        XCTAssertTrue(ProFeatures.outlook(for: withPro, entitlement: licensed, now: day(11, 10))?.hasPrefix("Pro ends on") == true)
+        XCTAssertTrue(ProFeatures.outlook(for: withPro, entitlement: licensed, now: day(11, 17))?.hasPrefix("Pro ends today") == true)
+        XCTAssertNil(ProFeatures.outlook(for: freeOnly, entitlement: licensed, now: day(11, 10)), "nothing would pause, so nothing to say")
+
+        // Run out: entering it is refused, and a key already on file asks for the renewal everywhere.
+        let store = store
+        _ = store.trialStart(now: now)
+        let key = try LicenseKey.sign(yearly, with: signingKey)
+        try store.enter(key, now: day(11, 1))
+        let after = calendar.date(byAdding: .day, value: 1, to: day(11, 18))!
+        XCTAssertThrowsError(try store.enter(key, now: after))
+        let ended = store.current(now: after)
+        XCTAssertFalse(ended.isPro)
+        XCTAssertEqual(ended.expiredLicense?.id, "y1")
+        let doctor = Doctor(config: withPro, supportDirectory: folder.url).planCheck()
+        XCTAssertEqual(doctor.status, .problem)
+
+        // The renewal key brings Pro back.
+        let renewal = License(id: "y2", name: "Ada", email: "a@x", issuedAt: now, expiresOn: "2028-12-01")
+        try store.enter(try LicenseKey.sign(renewal, with: signingKey), now: after)
+        XCTAssertTrue(store.current(now: after).isPro)
+        XCTAssertNil(store.current(now: after).expiredLicense)
     }
 
     func testTheBundledPublicKeyIsSetBeforeRelease() throws {

@@ -42,6 +42,20 @@ final class ProGatingTests: XCTestCase {
         XCTAssertEqual(LicensePublisher.purchaseText, "hello@inkrelay.app")
     }
 
+    func testAnEndedProYearAsksForTheRenewal() throws {
+        let vault = FakeDestination(id: "vault"), review = FakeDestination(id: "review")
+        let lapsed = License(id: "y1", name: "Ada", email: "a@x", issuedAt: Date(timeIntervalSince1970: 1_800_000_000), expiresOn: "2027-11-17")
+        let ended = Entitlement(plan: .free, basis: .trialEnded(Date(timeIntervalSince1970: 1_700_000_000)),
+                                rejection: LicenseError.expired("November 17, 2027").errorDescription, expiredLicense: lapsed)
+
+        let report = try engine(ended, vault: vault, review: review).syncOnce()
+
+        XCTAssertEqual(review.upserts.count, 0)
+        XCTAssertTrue(report.warnings[0].hasPrefix("Pro features paused since the Pro year ended"), report.warnings[0])
+        XCTAssertTrue(report.warnings[0].contains("Renew at \(LicensePublisher.purchaseText)"))
+        XCTAssertFalse(report.warnings[0].contains("trial"), "not the trial, which ended long ago")
+    }
+
     func testEnteringALicenseLaterDeliversWhatWasPaused() throws {
         let vault = FakeDestination(id: "vault"), review = FakeDestination(id: "review")
         _ = try engine(.free, vault: vault, review: review).syncOnce()

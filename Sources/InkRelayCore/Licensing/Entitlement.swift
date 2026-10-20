@@ -21,14 +21,21 @@ public struct Entitlement: Equatable {
     /// Why a key on file doesn't count (expired, changed, unreadable), when there is one. The plan is then the
     /// trial or free, and this says why instead of asking for a key the person already entered.
     public var rejection: String?
+    /// A genuine key on file whose time is up, usually a yearly key not yet followed by its renewal key. People
+    /// are asked to renew rather than told their key was refused. `rejection` still says it expired.
+    public var expiredLicense: License?
+
+    /// How many days before a key's last day the menu starts saying a renewal key is due.
+    public static let renewalNoticeDays = 14
 
     public static let pro = Entitlement(plan: .pro, basis: .none)
     public static let free = Entitlement(plan: .free, basis: .none)
 
-    public init(plan: Plan, basis: Basis, rejection: String? = nil) {
+    public init(plan: Plan, basis: Basis, rejection: String? = nil, expiredLicense: License? = nil) {
         self.plan = plan
         self.basis = basis
         self.rejection = rejection
+        self.expiredLicense = expiredLicense
     }
 
     public var isPro: Bool { plan == .pro }
@@ -47,6 +54,7 @@ public struct Entitlement: Equatable {
 
     /// One line for the menu and `inkrelay license`.
     public func summary(now: Date = Date()) -> String {
+        if let expiredLicense, !isPro { return "Free; Pro for \(expiredLicense.name) ended \(expiredLicense.expiryText(style: .abbreviated) ?? "")" }
         if let rejection, !isPro { return "Free; the key on file wasn't accepted (\(rejection))" }
         switch basis {
         case .license(let license):
@@ -70,11 +78,15 @@ public struct Entitlement: Equatable {
 /// Which parts need Pro. Free covers what a Mac can do alone: export folders, Obsidian and the Apple apps.
 public enum ProFeatures {
     /// What the plan means for this config, in one line: what pauses when the trial ends, or that nothing does.
-    public static func outlook(for config: RelayConfig?, entitlement: Entitlement) -> String? {
+    public static func outlook(for config: RelayConfig?, entitlement: Entitlement, now: Date = Date()) -> String? {
         guard let config else { return nil }
         let used = used(in: config)
         switch entitlement.basis {
-        case .license: return nil
+        case .license(let license):
+            // A yearly key near its end: the renewal emails the next key, and entering it keeps everything running.
+            guard let days = license.daysLeft(at: now), days <= Entitlement.renewalNoticeDays, !used.isEmpty else { return nil }
+            let when = days <= 0 ? "today" : "on \(license.expiryText(style: .abbreviated) ?? "")"
+            return "Pro ends \(when). Renewing emails a new key; enter it and nothing pauses."
         case .trial:
             return used.isEmpty ? "Everything you use is in Free; nothing stops when the trial ends." : "After the trial: " + used.joined(separator: ", ") + " pause."
         case .trialEnded, .none:
@@ -172,6 +184,13 @@ public struct EntitlementStore {
         try? FileManager.default.removeItem(at: licenseURL)
     }
 
+    /// The key on file when it's genuine but past its last day, or nil.
+    public func expiredLicense(now: Date = Date()) -> License? {
+        guard let data = try? Data(contentsOf: licenseURL), let file = try? JSONDecoder().decode(LicenseFile.self, from: data),
+              let license = try? verify(file.key), !license.isValid(at: now) else { return nil }
+        return license
+    }
+
     /// Why a key on file doesn't count, or nil when there's none or it's fine.
     public func licenseProblem(now: Date = Date()) -> String? {
         guard FileManager.default.fileExists(atPath: licenseURL.path) else { return nil }
@@ -206,8 +225,9 @@ public struct EntitlementStore {
             return Entitlement(plan: .pro, basis: .license(license))
         }
         let rejection = licenseProblem(now: now)
+        let expired = expiredLicense(now: now)
         let endsAt = Calendar.current.date(byAdding: .day, value: Self.trialDays, to: start) ?? start
-        if now < endsAt { return Entitlement(plan: .pro, basis: .trial(endsAt: endsAt), rejection: rejection) }
-        return Entitlement(plan: .free, basis: .trialEnded(endsAt), rejection: rejection)
+        if now < endsAt { return Entitlement(plan: .pro, basis: .trial(endsAt: endsAt), rejection: rejection, expiredLicense: expired) }
+        return Entitlement(plan: .free, basis: .trialEnded(endsAt), rejection: rejection, expiredLicense: expired)
     }
 }

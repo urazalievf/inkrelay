@@ -84,7 +84,15 @@ final class BarModel: ObservableObject {
             Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: stackPaused ? 0 : fresh.reviewDue)
         }
         if fresh.lastSync != previous.lastSync, let config {
-            Notifier.shared.trial(daysLeft: plan.trialDaysLeft(), endedOn: plan.isPro ? nil : plan.trialEndedOn, parts: ProFeatures.used(in: config))
+            let parts = ProFeatures.used(in: config)
+            if case .license(let license) = plan.basis, license.expires {
+                // A yearly key: renewal reminders, never "trial ended" for a trial that ended long ago.
+                Notifier.shared.proYear(current: license, ended: nil, parts: parts)
+            } else if let expired = plan.expiredLicense, !plan.isPro {
+                Notifier.shared.proYear(current: nil, ended: expired, parts: parts)
+            } else {
+                Notifier.shared.trial(daysLeft: plan.trialDaysLeft(), endedOn: plan.isPro ? nil : plan.trialEndedOn, parts: parts)
+            }
         }
     }
 
@@ -95,6 +103,9 @@ final class BarModel: ObservableObject {
         let parts = ProFeatures.used(in: config)
         guard !parts.isEmpty else { return nil }
         let list = parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
+        if let expired = plan.expiredLicense {
+            return "Your Pro year ended on \(expired.expiryText() ?? "its last day"). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe. Renew at \(LicensePublisher.purchaseText) and enter the new key from the email, and syncing picks up where it stopped."
+        }
         if let rejection = plan.rejection {
             return "Your license key wasn't accepted (\(rejection)). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe."
         }
