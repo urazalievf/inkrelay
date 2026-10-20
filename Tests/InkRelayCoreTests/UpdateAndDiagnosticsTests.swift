@@ -39,16 +39,15 @@ final class UpdateAndDiagnosticsTests: XCTestCase {
         XCTAssertThrowsError(try checker.latest())
     }
 
-    /// The source repository is private, so the app, the site, the guide and the publish script must all name
-    /// the public releases repository; a link back to the private one is a 404 for every customer.
-    func testReleasesComeFromThePublicRepositoryEverywhere() throws {
-        XCTAssertEqual(UpdateChecker.feed.absoluteString, "https://api.github.com/repos/urazalievf/inkrelay-releases/releases?per_page=5")
-        XCTAssertEqual(UpdateChecker.downloads.absoluteString, "https://github.com/urazalievf/inkrelay-releases/releases")
+    /// The app, the site and the guide all send people to the same releases, in the InkRelay repository.
+    func testReleasesComeFromOneRepositoryEverywhere() throws {
+        XCTAssertEqual(UpdateChecker.feed.absoluteString, "https://api.github.com/repos/urazalievf/inkrelay/releases?per_page=5")
+        XCTAssertEqual(UpdateChecker.downloads.absoluteString, "https://github.com/urazalievf/inkrelay/releases")
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        for file in ["scripts/publish-release.sh", "site/index.html", "docs/user-guide.md", ".github/workflows/release.yml"] {
+        for file in ["site/index.html", "docs/user-guide.md"] {
             let text = try String(contentsOf: root.appendingPathComponent(file), encoding: .utf8)
-            XCTAssertTrue(text.contains(UpdateChecker.releasesRepository), "\(file) doesn't name \(UpdateChecker.releasesRepository)")
-            XCTAssertFalse(text.contains("urazalievf/inkrelay/releases"), "\(file) still links the private repository's releases")
+            XCTAssertTrue(text.contains("github.com/\(UpdateChecker.releasesRepository)/releases"), "\(file) doesn't link the releases")
+            XCTAssertFalse(text.contains("inkrelay-releases"), "\(file) still links the old downloads repository")
         }
         let notes = root.appendingPathComponent("docs/release-notes/\(InkRelayCore.version).md")
         XCTAssertFalse(((try? String(contentsOf: notes, encoding: .utf8)) ?? "").isEmpty, "the release workflow needs \(notes.lastPathComponent) before tagging")
