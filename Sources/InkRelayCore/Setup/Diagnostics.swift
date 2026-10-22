@@ -10,16 +10,13 @@ public enum Diagnostics {
         var zip = ZipWriter()
         let loaded = Result { try ConfigStore.load(from: configURL) }
         let config = try? loaded.get()
-        let entitlement = EntitlementStore(supportDirectory: supportDirectory).current(now: now)
-        var scrubber = Scrubber(home: InkRelayCore.home.path)
-        if case .license(let license) = entitlement.basis { scrubber.licensee = license.name }
+        let scrubber = Scrubber(home: InkRelayCore.home.path)
         func add(_ name: String, _ text: String) { zip.add(name, Data(scrubber.scrub(text).utf8)) }
 
         var about = [
             "InkRelay \(InkRelayCore.version)",
             "macOS \(ProcessInfo.processInfo.operatingSystemVersionString)",
             "Date \(ISO8601DateFormatter().string(from: now))",
-            "Plan: \(entitlement.summary(now: now))",
             "Config: \(configURL.path)",
         ]
         if case .failure(let error) = loaded { about.append("The config didn't load: \(error.localizedDescription)") }
@@ -50,15 +47,13 @@ public enum Diagnostics {
     }
 
     /// Takes what identifies the person out of free text: the home folder (which carries the macOS username, and
-    /// cloud folders that carry an account email), email addresses, and the licensee's name.
+    /// cloud folders that carry an account email), and email addresses.
     struct Scrubber {
         var home: String
-        var licensee: String?
 
         func scrub(_ text: String) -> String {
             var output = text
             if !home.isEmpty { output = output.replacingOccurrences(of: home, with: "~") }
-            if let licensee, licensee.count >= 2 { output = output.replacingOccurrences(of: licensee, with: "<licensee>") }
             // Cloud folders are named after the account (GoogleDrive-name@gmail.com); the provider stays, which helps support.
             let cloud = try! NSRegularExpression(pattern: #"CloudStorage/([A-Za-z]+)-[^/\s]+"#)
             output = cloud.stringByReplacingMatches(in: output, range: NSRange(output.startIndex..., in: output), withTemplate: "CloudStorage/$1-<account>")

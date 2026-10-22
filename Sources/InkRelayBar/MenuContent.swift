@@ -73,21 +73,7 @@ struct MenuContent: View {
             .padding(12)
             Divider()
         }
-        if let paused = model.pausedPanel {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(paused)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Button("Enter License…") { model.enterLicense() }
-                        .buttonStyle(.borderedProminent)
-                    Button("Buy Pro…") { model.buyPro() }
-                }
-            }
-            .padding(12)
-            Divider()
-        }
-        let problems = model.snapshot.problems.filter { !RelayEngine.isPausedNotice($0) }
+        let problems = model.snapshot.problems
         if !problems.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(problems.prefix(3), id: \.self) { problem in
@@ -160,31 +146,6 @@ struct MenuContent: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             Divider()
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(model.entitlement.summary())
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer()
-                    if model.offersLicense {
-                        Button("Buy Pro…") { model.buyPro() }
-                            .font(.caption)
-                        Button("Enter License…") { model.enterLicense() }
-                            .font(.caption)
-                    }
-                }
-                if let outlook = model.planOutlook {
-                    Text(outlook)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            Divider()
             HStack {
                 Button("Settings…") {
                     NSApp.activate(ignoringOtherApps: true)
@@ -192,7 +153,6 @@ struct MenuContent: View {
                 }
                 Menu("More") {
                     Button("Check for Updates…") { model.checkForUpdates() }
-                    Button("Enter License…") { model.enterLicense() }
                     Button("Export Diagnostics…") { model.exportDiagnostics() }
                     Divider()
                     Button("Open Config") { model.openConfig() }

@@ -69,98 +69,19 @@ final class BarModel: ObservableObject {
         snapshot = fresh
         let config = self.config
         let settings = config?.notifications ?? NotificationsConfig()
-        // The paused notice gets its own panel and its own notifications, so it isn't a "needs you" problem.
-        let problems = fresh.problems.filter { !RelayEngine.isPausedNotice($0) }
-        if settings.problems, problems != previous.problems.filter({ !RelayEngine.isPausedNotice($0) }) {
-            Notifier.shared.problems(problems)
+        if settings.problems, fresh.problems != previous.problems {
+            Notifier.shared.problems(fresh.problems)
         }
         if settings.newNotes, fresh.lastSync != previous.lastSync, fresh.lastSynced > 0 {
             Notifier.shared.newNotes(Array(fresh.recent.prefix(fresh.lastSynced).map(\.title)))
         }
-        let plan = entitlement
         if let time = settings.reminderTime, fresh.lastSync != previous.lastSync {
-            // While the review stack is paused nothing new reaches it, so there's nothing to be reminded of.
-            let stackPaused = !plan.isPro && config?.destinations.contains { if case .reviewStack = $0 { return true } else { return false } } == true
-            Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: stackPaused ? 0 : fresh.reviewDue)
+            Notifier.shared.reviewReminder(hour: time.hour, minute: time.minute, count: fresh.reviewDue)
         }
-        if fresh.lastSync != previous.lastSync, let config {
-            Notifier.shared.trial(daysLeft: plan.trialDaysLeft(), endedOn: plan.isPro ? nil : plan.trialEndedOn, parts: ProFeatures.used(in: config))
-        }
-    }
-
-    /// The panel shown while Pro parts are paused: what's paused and why, or nil.
-    var pausedPanel: String? {
-        let plan = entitlement
-        guard !plan.isPro, let config else { return nil }
-        let parts = ProFeatures.used(in: config)
-        guard !parts.isEmpty else { return nil }
-        let list = parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
-        if let rejection = plan.rejection {
-            return "Your license key wasn't accepted (\(rejection)). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe."
-        }
-        let when = plan.trialEndedOn.map { " ended \($0.formatted(date: .abbreviated, time: .omitted))" } ?? " is over"
-        return "Your Pro trial\(when). \(list.prefix(1).uppercased() + list.dropFirst()) \(parts.count == 1 ? "is" : "are") paused; your notes are safe and syncing resumes where it stopped."
     }
 
     var config: RelayConfig? { try? ConfigStore.load(from: runner.configURL) }
     var supportDirectory: URL { runner.configURL.deletingLastPathComponent() }
-
-    // MARK: Plan
-
-    var entitlement: Entitlement { EntitlementStore(supportDirectory: supportDirectory).current() }
-
-    /// Asks for a key in a sheet-less alert, saves it, and restarts the engine so paused parts resume now.
-    func enterLicense(prefill: String = "", problem: String? = nil) {
-        let alert = NSAlert()
-        alert.messageText = "Enter your InkRelay Pro license"
-        alert.informativeText = (problem.map { $0 + "\n\n" } ?? "") + "Paste the key from your purchase email. It starts with INK1."
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
-        field.placeholderString = "INK1.…"
-        field.stringValue = prefill
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Enter")
-        alert.addButton(withTitle: "Cancel")
-        alert.addButton(withTitle: "Buy Pro…")
-        NSApp.activate(ignoringOtherApps: true)
-        alert.window.initialFirstResponder = field
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: break
-        case .alertThirdButtonReturn:
-            buyPro()
-            return
-        default:
-            return
-        }
-        do {
-            let license = try EntitlementStore(supportDirectory: supportDirectory).enter(field.stringValue)
-            objectWillChange.send()
-            // Every pass reads the plan again, so a sync now is enough; the agent, if it's the one syncing, catches up on its next pass.
-            if !agentRunning { runner.syncNow() }
-            let thanks = NSAlert()
-            thanks.messageText = "Thanks, \(license.name)."
-            thanks.informativeText = "InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + "."
-            thanks.runModal()
-        } catch {
-            // Back to the same alert with the pasted text, so a typo isn't a start-over.
-            enterLicense(prefill: field.stringValue, problem: error.localizedDescription)
-        }
-    }
-
-    func buyPro() {
-        NSWorkspace.shared.open(LicensePublisher.purchaseURL)
-    }
-
-    /// One line under the plan: what stops when the trial ends, or that nothing does.
-    var planOutlook: String? { ProFeatures.outlook(for: config, entitlement: entitlement) }
-
-    /// The Enter License button matters only when something the config uses needs Pro, or the trial is over.
-    var offersLicense: Bool {
-        switch entitlement.basis {
-        case .license: return false
-        case .trial: return !(config.map(ProFeatures.used(in:)) ?? []).isEmpty
-        case .trialEnded, .none: return true
-        }
-    }
 
     // MARK: Updates
 

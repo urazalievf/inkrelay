@@ -81,7 +81,6 @@ final class UpdateAndDiagnosticsTests: XCTestCase {
         XCTAssertTrue(text.contains("abc.apps"), "ids stay, so support can tell configs apart")
         XCTAssertTrue(text.contains("line 500") && !text.contains("line 99 "), "only the tail of the log")
         XCTAssertFalse(text.contains("Dear diary"), "note text never leaves the Mac")
-        XCTAssertTrue(text.contains("Plan: Pro trial"))
     }
 
     func testDiagnosticsSayWhyConfigAndStateDidntLoadAndCarryNoPersonalDetails() throws {

@@ -25,9 +25,6 @@ Usage:
   inkrelay notion login             Save a Notion integration token in the Keychain
   inkrelay ai login                 Save an Anthropic API key for AI transcription
   inkrelay ai status                This month's AI transcription spend
-  inkrelay license                  Show the plan: Pro, trial or free
-  inkrelay license enter KEY        Save a Pro license key
-  inkrelay license remove           Go back to the free plan (or the trial)
   inkrelay update check             Look for a newer InkRelay
   inkrelay diagnostics [PATH] [--apps]  Write a zip for a bug report (no secrets, no note text); --apps also checks Notes, Calendar, Reminders
   inkrelay send LINK|FILE [--to ID] Send an article or document to the tablet (EPUB or PDF)
@@ -308,7 +305,7 @@ case "status":
     print("Config: \(configURL.path)")
     if case .failure(let error) = readable { print("! state.json can't be read: \(error.localizedDescription). Every sync fails until it's fixed or deleted (deleting re-sends everything).") }
     if let last = LastSync.load(besideState: stateURL) {
-        print("Last sync: \(last.at.formatted(date: .abbreviated, time: .shortened)) — \(last.summary)")
+        print("Last sync: \(last.at.formatted(date: .abbreviated, time: .shortened)), \(last.summary)")
     }
     print("Sources:")
     for source in config.allSources {
@@ -321,7 +318,6 @@ case "status":
         let delivered = state.files.values.filter { $0.destinations[destination.id]?.contentHash == $0.contentHash }.count
         print("  \(destination.id) (\(destination.kind)): \(delivered) up to date")
     }
-    print("Plan: " + EntitlementStore(supportDirectory: supportDirectory).current().summary())
 
 case "viwoods":
     let subcommand = arguments.first ?? ""
@@ -603,30 +599,6 @@ case "review":
 
     default:
         fail("Usage: inkrelay review [list | open | serve | done ID | later ID]")
-    }
-
-case "license":
-    let store = EntitlementStore(supportDirectory: supportDirectory)
-    switch arguments.first {
-    case "enter":
-        guard arguments.count >= 2 else { fail("Usage: inkrelay license enter INK1.…") }
-        do {
-            let license = try store.enter(arguments.dropFirst().joined())
-            print("Thanks, \(license.name). InkRelay is Pro on this Mac" + (license.expiryText().map { " until \($0)" } ?? "") + ".")
-        } catch {
-            fail(error.localizedDescription)
-        }
-    case "remove":
-        store.remove()
-        print(store.current().summary())
-    case nil, "status":
-        let entitlement = store.current()
-        print(entitlement.summary())
-        if let outlook = ProFeatures.outlook(for: try? ConfigStore.load(from: configURL), entitlement: entitlement) { print(outlook) }
-        if case .license = entitlement.basis {} else { print("Buy a license at \(LicensePublisher.purchaseText), then: inkrelay license enter INK1.…") }
-        if let problem = store.licenseProblem() { print("The key on file wasn't accepted: \(problem)") }
-    default:
-        fail("Usage: inkrelay license [enter KEY | remove]")
     }
 
 case "vocabulary":

@@ -54,21 +54,8 @@ public struct Doctor {
         var results = sourceChecks() + destinationChecks() + sendTargetChecks()
         if includeApps { results += appChecks() }
         if accounts { results += accountChecks() }
-        results.append(planCheck())
         results += agentChecks()
         return results
-    }
-
-    func planCheck() -> DoctorCheck {
-        let entitlement = EntitlementStore(supportDirectory: supportDirectory).current()
-        if let rejection = entitlement.rejection {
-            return DoctorCheck(.problem, "Plan", "the key on file wasn't accepted: \(rejection). Replace it with `inkrelay license enter KEY`, or run `inkrelay license remove`.")
-        }
-        if entitlement.isPro { return DoctorCheck(.ok, "Plan", entitlement.summary()) }
-        let used = ProFeatures.used(in: config)
-        return used.isEmpty
-            ? DoctorCheck(.ok, "Plan", entitlement.summary())
-            : DoctorCheck(.warning, "Plan", entitlement.summary() + "; paused: " + used.joined(separator: ", ") + ". Buy a license at \(LicensePublisher.purchaseText), then `inkrelay license enter KEY`")
     }
 
     func sourceChecks() -> [DoctorCheck] {
