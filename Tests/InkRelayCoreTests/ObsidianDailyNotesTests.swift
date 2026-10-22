@@ -167,7 +167,7 @@ final class ObsidianDailyNotesTests: XCTestCase {
         XCTAssertTrue(block.contains("**6 pages across 3 notes**, 1 planner day, 1 open task."), block)
         XCTAssertTrue(block.contains("- Tue Oct 13: [[Ink/viwoods-cloud/Paper/Temp|Temp]] (3 pages)"))
         XCTAssertTrue(block.contains("- Sun Oct 18: [[Ink/viwoods-cloud/Paper/Sketch|Sketch]] (2 pages)"))
-        XCTAssertTrue(block.contains("- Wed Oct 14: [[Ink/viwoods-cloud/Daily/2026-10-14|2026-10-14]] — Dentist"))
+        XCTAssertTrue(block.contains("- Wed Oct 14: [[Ink/viwoods-cloud/Daily/2026-10-14|2026-10-14]]: Dentist"))
         XCTAssertFalse(block.contains("Later"))
     }
 

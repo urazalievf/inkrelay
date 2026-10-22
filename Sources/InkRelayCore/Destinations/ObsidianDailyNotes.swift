@@ -2,9 +2,15 @@ import Foundation
 
 /// A block in a Markdown file that InkRelay owns, between two markers. Everything outside it is the user's.
 enum ManagedBlock {
+    /// Notes written before 1.0.0 have a long dash in InkRelay's start markers. Read as today's markers, so
+    /// their blocks are still found, and rewritten with today's on the next write.
+    static func upgradingMarkers(_ text: String) -> String {
+        text.replacingOccurrences(of: " \u{2014} written by InkRelay", with: " - written by InkRelay")
+    }
+
     /// `existing` with the block replaced, or the block appended; a missing file becomes just the block.
     static func replace(in existing: String?, with block: String, start: String, end: String) -> String {
-        guard let existing, !existing.isEmpty else { return block + "\n" }
+        guard let existing = existing.map(upgradingMarkers), !existing.isEmpty else { return block + "\n" }
         if let from = existing.range(of: start) {
             if let to = existing.range(of: end, range: from.upperBound..<existing.endIndex) {
                 return String(existing[..<from.lowerBound]) + block + String(existing[to.upperBound...])
@@ -183,9 +189,9 @@ struct InkDigest {
         return calendar.startOfDay(for: entry.note.modified)
     }
 
-    static let dailyStart = "%% inkrelay:daily:start — written by InkRelay from your tablet; edits inside are replaced %%"
+    static let dailyStart = "%% inkrelay:daily:start - written by InkRelay from your tablet; edits inside are replaced %%"
     static let dailyEnd = "%% inkrelay:daily:end %%"
-    static let weeklyStart = "%% inkrelay:weekly:start — written by InkRelay from your tablet; edits inside are replaced %%"
+    static let weeklyStart = "%% inkrelay:weekly:start - written by InkRelay from your tablet; edits inside are replaced %%"
     static let weeklyEnd = "%% inkrelay:weekly:end %%"
 
     /// The block for one day: the planner page, the notes written that day, and their open tasks.
@@ -248,7 +254,7 @@ struct InkDigest {
             lines.append("## Planner")
             for item in planners {
                 let first = item.note.text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
-                lines.append("- \(dayFormatter.string(from: day(of: item))): [[\(item.link)|\(item.note.title)]]" + (first.isEmpty ? "" : " — \(first.prefix(80))"))
+                lines.append("- \(dayFormatter.string(from: day(of: item))): [[\(item.link)|\(item.note.title)]]" + (first.isEmpty ? "" : ": \(first.prefix(80))"))
             }
             lines.append("")
         }

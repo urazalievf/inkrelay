@@ -132,6 +132,7 @@ public enum VocabularyLearner {
 
     /// The text between InkRelay's markers in a note, or nil when the note has none.
     public static func managedText(of markdown: String) -> String? {
+        let markdown = ManagedBlock.upgradingMarkers(markdown)
         guard let start = markdown.range(of: MarkdownRenderer.startMarker),
               let end = markdown.range(of: MarkdownRenderer.endMarker, range: start.upperBound..<markdown.endIndex) else { return nil }
         return String(markdown[start.upperBound..<end.lowerBound])

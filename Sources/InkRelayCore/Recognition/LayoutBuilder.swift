@@ -121,7 +121,7 @@ public enum LayoutBuilder {
 
     // MARK: Paragraphs
 
-    static let bulletMarks: Set<Character> = ["•", "·", "-", "–", "—", "*", "○", "◦", "▪", "‣", "→"]
+    static let bulletMarks: Set<Character> = ["•", "·", "-", "\u{2013}", "\u{2014}", "*", "○", "◦", "▪", "‣", "→"]
 
     /// Normalizes bullet glyphs to `- `. Checkboxes and numbers are left alone for task detection.
     static func listItem(_ text: String) -> String? {

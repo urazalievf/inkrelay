@@ -71,7 +71,7 @@ public enum TaskExtractor {
     }
 
     static func clean<S: StringProtocol>(_ text: S) -> String {
-        text.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ":-–")))
+        text.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ":-\u{2013}")))
     }
 
     /// The Obsidian block id for a task line: `ink-<key>`, with `-2`, `-3` for a repeat within the same note, in the

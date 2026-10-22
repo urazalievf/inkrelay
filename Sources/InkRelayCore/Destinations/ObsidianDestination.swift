@@ -84,14 +84,14 @@ public struct ObsidianDestination: NoteDestination {
         }
     }
 
-    /// "Oct 12 – Oct 18"
+    /// "Oct 12 to Oct 18"
     static func span(_ week: DateInterval, calendar: Calendar) -> String {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "MMM d"
-        return formatter.string(from: week.start) + " – " + formatter.string(from: week.end.addingTimeInterval(-1))
+        return formatter.string(from: week.start) + " to " + formatter.string(from: week.end.addingTimeInterval(-1))
     }
 
     /// Archive moves the note and its PDF under `<folder>/Archive/`; delete sends them to the Trash.
@@ -147,7 +147,7 @@ public struct ObsidianDestination: NoteDestination {
 /// Writes the Markdown for a note. InkRelay owns only the part between the markers and a handful of
 /// frontmatter keys; everything else in the file is the user's and survives every re-sync.
 public enum MarkdownRenderer {
-    public static let startMarker = "%% inkrelay:start — written by InkRelay; edits between these markers are replaced on the next sync %%"
+    public static let startMarker = "%% inkrelay:start - written by InkRelay; edits between these markers are replaced on the next sync %%"
     public static let endMarker = "%% inkrelay:end %%"
     /// Frontmatter keys InkRelay rewrites. `tags` is written once, then belongs to the user.
     static let managedKeys = ["source", "device", "original", "pages", "modified", "synced", "suggested_title", "suggested_tags"]
@@ -173,7 +173,7 @@ public enum MarkdownRenderer {
             return frontmatter(managed.map { "\($0.0): \($0.1)" }) + "\n" + block + "\n"
         }
 
-        let (existingFrontmatter, body) = splitFrontmatter(existing)
+        let (existingFrontmatter, body) = splitFrontmatter(ManagedBlock.upgradingMarkers(existing))
         var lines = mergeFrontmatter(existingFrontmatter, managed: managed)
         if let tagsValue, !(existingFrontmatter ?? []).contains(where: { key(of: $0) == "tags" }) {
             lines.append("tags: \(tagsValue)")
