@@ -32,7 +32,7 @@ The web login has a slider captcha, so InkRelay never handles passwords. The por
 - **Items** have `resourceId`, `name` and `resourceType`: 0 is a folder, 1 a file, 5 a template folder. They also have `childSize`, `lastModifiedTime`, `isDelete` and `encrypt`.
   - Skip template folders, empty ids and `isDelete == 1`.
   - `encrypt == 1` is a note with a cloud password (AES and SHA-256 on the client side); InkRelay reports it and moves on.
-- The counts the home screen shows include folders and templates. The owner's "Paper 8" is 3 notebooks.
+- The counts the home screen shows include folders and templates. On one real account, "Paper 8" was 3 notebooks.
 
 ## Notebooks and memos
 

@@ -1,7 +1,7 @@
 import Foundation
 
-/// InkRelay as a Model Context Protocol server over stdio, so an AI assistant (Claude Desktop, Claude Code,
-/// or any MCP client) can find, read and act on the user's handwritten notes: search what was written,
+/// InkRelay as a Model Context Protocol server over stdio, so an AI assistant (any MCP client) can find,
+/// read and act on the user's handwritten notes: search what was written,
 /// pull out tasks, work through the review stack, sync, and send reading to the tablet.
 ///
 /// Newline-delimited JSON-RPC 2.0 on stdin and stdout; nothing else is ever written to stdout.

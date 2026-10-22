@@ -1,7 +1,7 @@
 name: CI
 
-# macOS runners bill at 10x on private repos, so CI runs on pull requests and on demand,
-# not on every push.
+# Every change reaches main through a pull request, so CI runs on pull requests and on demand,
+# not again on every push.
 on:
   pull_request:
   workflow_dispatch:

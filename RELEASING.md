@@ -62,8 +62,6 @@ git push origin v0.10.2
 
 The workflow checks the notes, tests, builds a universal (Apple silicon and Intel) app with the hardened runtime, signs it with the Developer ID, notarizes and staples it, checks it with Gatekeeper, and creates the GitHub Release here with `InkRelay-0.10.2.zip` and the notes.
 
-This repository is private, so its releases, and the app's update feed, answer 404 to anyone without access. Customers can download only once the repository is public or the builds get a public home.
-
 ### When Apple takes longer than 30 minutes
 
 Apple usually notarizes in a few minutes, but it can hold a submission for hours, especially a new team's first ones. v0.10.0's first run timed out that way after 30 minutes. The workflow waits 30 minutes, then stops with the submission id and keeps the signed app as the run's `signed-app` artifact for 14 days. To finish:

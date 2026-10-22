@@ -398,7 +398,7 @@ public struct ViwoodsCloudConfig: Codable, Equatable {
     public var cachePath: String?
     /// `vision` (default) or `claude`, as for folder sources.
     public var recognizer: RecognizerKind = .vision
-    /// With `claude`: only these folders of the cache go to Claude, such as `["Daily"]` for the planner alone.
+    /// With `claude`: only these folders of the cache go to the AI model, such as `["Daily"]` for the planner alone.
     public var aiFolders: [String] = []
     /// With `claude`: this source's own monthly cap, inside `ai.monthlyBudgetUSD`.
     public var aiMonthlyBudgetUSD: Double?

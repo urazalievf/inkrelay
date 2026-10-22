@@ -148,7 +148,7 @@ public struct SourceConfig: Codable, Equatable {
     public var waitsForSettle = true
     /// `vision` (default, on the Mac) or `claude` (page images are sent to Anthropic; see the `ai` section).
     public var recognizer: RecognizerKind
-    /// With `claude`: only exports under these folders (relative to the source, such as `Daily`) go to Claude;
+    /// With `claude`: only exports under these folders (relative to the source, such as `Daily`) go to the AI model;
     /// Vision reads the rest. Empty means everything.
     public var aiFolders: [String] = []
     /// With `claude`: this source's own monthly cap in US dollars, inside the overall `ai.monthlyBudgetUSD`.
@@ -238,7 +238,7 @@ public struct SourceConfig: Codable, Equatable {
         return folders.contains { Self.isUnder(relativePath, folder: $0) || Self.isUnder($0.trimmingCharacters(in: CharacterSet(charactersIn: "/")), folder: relativePath) }
     }
 
-    /// Whether an export at this relative path goes to Claude, given `recognizer` and `aiFolders`.
+    /// Whether an export at this relative path goes to the AI model, given `recognizer` and `aiFolders`.
     public func usesAI(for relativePath: String) -> Bool {
         guard recognizer == .claude else { return false }
         guard !aiFolders.isEmpty else { return true }

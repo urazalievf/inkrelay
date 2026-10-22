@@ -17,8 +17,7 @@ public struct ReleaseInfo: Equatable {
 /// Asks the release feed for the newest version. Nothing about this Mac is sent: it's one GET with no body,
 /// no identifier and no cookies, once a day at most.
 public struct UpdateChecker {
-    /// Releases live in the InkRelay repository itself. While it's private, the feed answers 404 to anyone
-    /// without access, and the app says so rather than calling itself up to date.
+    /// Releases live in the InkRelay repository itself, where anyone can download them.
     public static let releasesRepository = "urazalievf/inkrelay"
     public static let feed = URL(string: "https://api.github.com/repos/\(releasesRepository)/releases?per_page=5")!
     /// Where people download by hand, when the feed has no release yet.
