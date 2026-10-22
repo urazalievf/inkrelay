@@ -26,9 +26,15 @@ Viwoods Cloud ──pull──▶ local cache of PDFs (one per notebook, memo an
                  (planner day pages and to-dos only)
 ```
 
+## Download
+
+InkRelay is free and open source under the [MIT license](LICENSE). Every feature is included, with no InkRelay account, no license key and no subscription.
+
+Download the latest `InkRelay-<version>.zip` from the [releases page](../../releases): macOS 14 or later, Apple silicon and Intel, signed with a Developer ID and notarized by Apple. Unzip it, move `InkRelay.app` to Applications and open it; it lives in the menu bar. The app checks the releases page once a day and tells you when a newer version is out.
+
 ## Status
 
-Version 0.10.2: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. Free for folder exports, Obsidian and the Apple apps; Pro ($29 once, 14-day trial) for the cloud sources, Google, Microsoft, Notion, AI transcription and the review stack. See the [issues](../../issues) and [milestones](../../milestones). Signed builds are on the [releases page](../../releases) ([RELEASING.md](RELEASING.md)).
+Version 1.0.0: a menu bar app, a command-line tool with a background agent, and an iPhone and iPad app, all for one engine. See the [issues](../../issues) and [milestones](../../milestones) for what's next.
 
 ### Compatibility
 
@@ -58,11 +64,11 @@ Any tablet reaches every destination: sources and destinations are independent, 
 | Also | State |
 |---|---|
 | On-device recognition (Vision) with paragraph, list and column rebuilding | Working on printed and handwriting-style text; real tablet pages still to check (#3) |
-| AI transcription (Claude), opt-in per source | Tested against the API's request and response shapes; not yet run with a key |
+| AI transcription (Anthropic API, your own key), opt-in per source | Tested against the API's request and response shapes; not yet run with a key |
 | Send to tablet (EPUB from links, PDF, Markdown) | Folder target run for real on a live article; Viwoods import and Kindle mail not yet run |
 | Menu bar app | Builds, launches and serves the review stack; not yet looked at in the menu bar |
 | Background agent (`scripts/install-agent.sh`) | Not yet run (#4); `inkrelay doctor` checks it |
-| Signed, notarized releases | Workflow written; needs the Developer ID secrets (see RELEASING.md) |
+| Signed, notarized releases | Published by the release workflow since v0.10.0 ([RELEASING.md](RELEASING.md)) |
 
 ## Requirements
 
@@ -90,12 +96,6 @@ Tips:
 
 - In the cloud app, mark the export folder **Available offline**. Otherwise every new export downloads on first read.
 - Set the tablet to export **PDF**, not its own notebook format.
-
-## Free and Pro
-
-Everything a Mac can do on its own is free: export folders from any tablet, Obsidian, Apple Notes, Apple Calendar and Apple Reminders. Pro adds Viwoods Cloud, Kindle Scribe by email, Google Calendar and Docs, Outlook Calendar and OneNote, Notion, AI transcription, and the review stack on the Mac and the phone. Every install starts with a 14-day Pro trial.
-
-When the trial ends without a license, the Pro parts pause: each sync says so in one line, nothing is deleted, and once a key is entered they catch up from where they stopped at the next sync (every pass reads the plan again, so the app or the agent needs no restart). Enter a key with **Enter License…** in the InkRelay menu or `inkrelay license enter INK1.…`; `inkrelay license` shows the plan. Keys are checked on the Mac against the publisher's public key, so InkRelay never contacts a server about them.
 
 ## Supernote
 
@@ -273,16 +273,16 @@ Vision reads pages on the Mac, `recognition.concurrency` pages at a time (by cor
 
 ## AI transcription (optional)
 
-Three ways to keep it cheap: `"aiFolders": ["Daily"]` on a source sends only those folders to Claude (the planner, where titles matter) and lets Vision read the rest; `"aiMonthlyBudgetUSD": 2` caps one source inside the overall `ai.monthlyBudgetUSD`; `ai.batchSize` (default 4) sends several pages per request.
+Three ways to keep it cheap: `"aiFolders": ["Daily"]` on a source sends only those folders to the AI model (the planner, where titles matter) and lets Vision read the rest; `"aiMonthlyBudgetUSD": 2` caps one source inside the overall `ai.monthlyBudgetUSD`; `ai.batchSize` (default 4) sends several pages per request.
 
-Vision is free and never sends anything anywhere, but it struggles with cursive and dense pages. For a source that needs better reading, set `"recognizer": "claude"` on it (or on `viwoodsCloud`). **Its page images are then sent to Anthropic's API**, one request per page, and Claude returns the text with paragraphs, lists and checkboxes rebuilt, plus a suggested title and tags that land in Obsidian's frontmatter as `suggested_title` and `suggested_tags`. Every other source stays on Vision.
+Vision is free and never sends anything anywhere, but it struggles with cursive and dense pages. For a source that needs better reading, set `"recognizer": "claude"` on it (or on `viwoodsCloud`). **Its page images are then sent to Anthropic's API**, one request per page, and the model returns the text with paragraphs, lists and checkboxes rebuilt, plus a suggested title and tags that land in Obsidian's frontmatter as `suggested_title` and `suggested_tags`. Every other source stays on Vision.
 
 ```json
 "ai": { "model": "claude-opus-5-5", "effort": "medium", "monthlyBudgetUSD": 5, "serverFallback": true }
 ```
 
 - **Budget:** each answer's token usage is priced and added up in `ai-usage.json`. A page is only sent if a worst-case page still fits under `monthlyBudgetUSD`; after that, Vision reads the rest of the month for free. At the default model a page costs roughly two to four cents.
-- **Fallbacks:** a page Claude can't do (no key, budget reached, an API error, a declined or cut-off answer) is read by Vision instead, and the sync log says which pages and why. `serverFallback` lets the API retry a declined page on Anthropic's recommended fallback model first.
+- **Fallbacks:** a page the model can't read (no key, budget reached, an API error, a declined or cut-off answer) is read by Vision instead, and the sync log says which pages and why. `serverFallback` lets the API retry a declined page on Anthropic's recommended fallback model first.
 - **Key:** `inkrelay ai login` saves an Anthropic API key in the login Keychain (`ANTHROPIC_API_KEY` in the environment works too). `inkrelay ai status` shows the month's spend.
 
 ## Menu bar app
@@ -317,7 +317,7 @@ The project signs with the team set in `iOS/project.yml`; run it on a device fro
 
 ## Use with AI assistants (MCP)
 
-`inkrelay mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude and other AI assistants can work with your handwritten notes: "what did I write about the bank last week?", "list my open tasks", "go through today's review stack with me", "send this article to my tablet".
+`inkrelay mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so AI assistants can work with your handwritten notes: "what did I write about the bank last week?", "list my open tasks", "go through today's review stack with me", "send this article to my tablet".
 
 InkRelay keeps the recognized text of every note it relays in `archive/` next to the config (notes synced before 0.5.0 are read once more with Vision on the next sync to fill it). The server reads that archive and InkRelay's state; it runs on your Mac and talks to the assistant over stdio, so nothing goes anywhere the assistant doesn't take it.
 
@@ -332,7 +332,7 @@ InkRelay keeps the recognized text of every note it relays in `archive/` next to
 | `inkrelay_sync_now` | Runs one sync pass (waits for one the app or agent is running) |
 | `inkrelay_send_to_tablet` | Sends a link or a file to the tablet through a send target |
 
-**Claude Desktop**: Settings → Developer → Edit Config, then add (use the path where your `inkrelay` is; inside the app it's `InkRelay.app/Contents/Resources/inkrelay`):
+Add it to your assistant's MCP settings. Most clients take an entry like this (use the path where your `inkrelay` is; inside the app it's `InkRelay.app/Contents/Resources/inkrelay`):
 
 ```json
 {
@@ -340,12 +340,6 @@ InkRelay keeps the recognized text of every note it relays in `archive/` next to
     "inkrelay": { "command": "/Applications/InkRelay.app/Contents/Resources/inkrelay", "args": ["mcp"] }
   }
 }
-```
-
-**Claude Code**:
-
-```bash
-claude mcp add inkrelay -- /Applications/InkRelay.app/Contents/Resources/inkrelay mcp
 ```
 
 Add `--config PATH` after `mcp` to use another config. Sync passes from the server, the menu bar app, `watch` and `sync` take turns through a lock, each starting from the state the last one saved.
@@ -390,4 +384,8 @@ swift test
 
 Versions follow `MAJOR.MINOR.PATCH`, with a fourth number for bug-fix releases (`0.1.0.1`). The current version is `InkRelayCore.version`.
 
-Notes for whoever works on InkRelay next (current state, architecture, decisions, measurements on real data, how to test each part, the Viwoods Cloud API and the market research) are in [docs/](docs/README.md). Start with [docs/handoff.md](docs/handoff.md).
+Architecture, decisions, how to test each part, and the Viwoods Cloud and Supernote formats are in [docs/](docs/README.md). Releases are described in [RELEASING.md](RELEASING.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE). InkRelay is written and maintained by Feruz Urazaliev. Bug reports and pull requests are welcome in the [issues](../../issues).

@@ -20,18 +20,11 @@ public final class RelayEngine {
     private let reviewShare: ReviewPublisher?
     private let fileManager: FileManager
     private let now: () -> Date
-    /// Pro or free, read again at the start of every pass so a key entered while the engine runs, or a trial
-    /// that ends while it runs, takes effect at the next sync. Free passes skip the Pro parts and say so once.
-    private let entitlementProvider: () -> Entitlement
-    private var entitlement: Entitlement
-    /// Destination ids left out of this pass because they need Pro.
-    private var pausedDestinationIDs: Set<String> = []
     /// Words learned from corrections in Obsidian, shared with the Vision recognizer.
     private let learned: LearnedVocabulary?
     /// Rendered templates and their masks, by template path and page size, for the life of the engine.
     private var templates: [String: CGImage] = [:]
     private var templateMasks: [String: TemplateSubtractor.Mask] = [:]
-    private var activeDestinations: [NoteDestination] { destinations.filter { !pausedDestinationIDs.contains($0.id) } }
 
     public init(
         config: RelayConfig,
@@ -43,8 +36,6 @@ public final class RelayEngine {
         ledger: SharedLedger? = nil,
         kindle: KindleMailPuller? = nil,
         reviewShare: ReviewPublisher? = nil,
-        entitlement: Entitlement = .pro,
-        entitlementProvider: (() -> Entitlement)? = nil,
         learned: LearnedVocabulary? = nil,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
@@ -58,36 +49,10 @@ public final class RelayEngine {
         self.ledger = ledger
         self.kindle = kindle
         self.reviewShare = reviewShare
-        self.entitlement = entitlement
-        self.entitlementProvider = entitlementProvider ?? { entitlement }
         self.learned = learned
         self.fileManager = fileManager
         self.now = now
-        refreshEntitlement()
     }
-
-    private func refreshEntitlement() {
-        entitlement = entitlementProvider()
-        pausedDestinationIDs = entitlement.isPro ? [] : Set(config.destinations.filter(ProFeatures.isPro).map(\.id))
-    }
-
-    /// What this pass left out for want of a license, or nil.
-    var pausedNotice: String? {
-        guard !entitlement.isPro else { return nil }
-        let parts = ProFeatures.used(in: config)
-        guard !parts.isEmpty else { return nil }
-        if let rejection = entitlement.rejection {
-            return "\(Self.pausedPrefix): \(parts.joined(separator: ", ")). The key on file wasn't accepted (\(rejection)); enter a new one with `inkrelay license enter KEY` or remove it with `inkrelay license remove`. Nothing is lost."
-        }
-        let when: String
-        if case .trialEnded(let date) = entitlement.basis { when = " since the trial ended \(date.formatted(date: .abbreviated, time: .omitted))" } else { when = "" }
-        return "\(Self.pausedPrefix)\(when): \(parts.joined(separator: ", ")). Buy a license at \(LicensePublisher.purchaseText), then enter it in the InkRelay menu or with `inkrelay license enter KEY`; nothing is lost, syncing resumes from here."
-    }
-
-    /// The start of the paused notice, so the app can show it as a panel rather than a problem.
-    public static let pausedPrefix = "Pro features paused"
-
-    public static func isPausedNotice(_ line: String) -> Bool { line.hasPrefix(pausedPrefix) }
 
     /// The production wiring: Vision for recognition, the destinations named in the config,
     /// and the Viwoods Cloud puller when the config has a `viwoodsCloud` section.
@@ -116,7 +81,6 @@ public final class RelayEngine {
             ledger: config.sharedLedger.flatMap { shared in shared.folderURL.map { SharedLedger(folder: $0, device: shared.device) } },
             kindle: config.kindleMail.map { KindleMailPuller(config: $0) },
             reviewShare: reviewPublisher(config: config, destinations: destinations, supportDirectory: stateURL.deletingLastPathComponent()),
-            entitlementProvider: { EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current() },
             learned: learned
         )
     }
@@ -153,7 +117,6 @@ public final class RelayEngine {
             }
         }
         try? store.reload()
-        refreshEntitlement()
         let report = pass()
         LastSync(report: report, at: now()).save(besideState: store.url)
         return report
@@ -161,15 +124,14 @@ public final class RelayEngine {
 
     private func pass() -> SyncReport {
         var report = SyncReport()
-        if let pausedNotice { report.warnings.append(pausedNotice) }
-        if let puller, entitlement.isPro {
+        if let puller {
             let pull = puller.pull()
             report.pull = pull
             for failure in pull.failures {
                 report.failures.append(.init(item: puller.config.id, destinationID: nil, message: failure))
             }
         }
-        if let kindle, entitlement.isPro {
+        if let kindle {
             let (_, failures) = kindle.pull()
             for failure in failures { report.failures.append(.init(item: kindle.config.id, destinationID: nil, message: failure)) }
         }
@@ -206,7 +168,7 @@ public final class RelayEngine {
             }
         }
         // Last, so phones see this pass's cards and the Mac applies what they decided since the previous one.
-        if let reviewShare, entitlement.isPro {
+        if let reviewShare {
             let shared = reviewShare.sync()
             report.warnings += shared.failures
         }
@@ -263,7 +225,7 @@ public final class RelayEngine {
             learnCorrections(for: key, record: record, into: &report)
             // A rename goes to every destination that holds the note, so it moves instead of staying behind.
             let pendingNow = pending(for: hash, in: record)
-            let targets = renamedFrom == nil ? pendingNow : activeDestinations.filter { destination in
+            let targets = renamedFrom == nil ? pendingNow : destinations.filter { destination in
                 record.destinations[destination.id] != nil || pendingNow.contains { $0.id == destination.id }
             }
             guard !targets.isEmpty else {
@@ -383,10 +345,10 @@ public final class RelayEngine {
         return (readable, inkOnlyURL(relativePath: relativePath, source: source) ?? supernoteInk ?? readable)
     }
 
-    /// Claude for the folders the source sends there, otherwise Vision, with the template taken out first when
+    /// The AI model for the folders the source sends there, otherwise Vision, with the template taken out first when
     /// the source names one.
     private func recognizePages(of url: URL, relativePath: String, source: SourceConfig) throws -> [RecognizedPage] {
-        if entitlement.isPro, source.usesAI(for: relativePath), let ai = aiRecognizer {
+        if source.usesAI(for: relativePath), let ai = aiRecognizer {
             (ai as? ClaudeTextRecognizer)?.currentSource = (source.id, source.aiMonthlyBudgetUSD)
             return try ai.recognize(fileAt: url)
         }
@@ -479,7 +441,7 @@ public final class RelayEngine {
 
     /// Destinations that haven't received the export with this hash.
     private func pending(for hash: String, in record: FileRecord) -> [NoteDestination] {
-        activeDestinations.filter { record.destinations[$0.id]?.contentHash != hash }
+        destinations.filter { record.destinations[$0.id]?.contentHash != hash }
     }
 }
 

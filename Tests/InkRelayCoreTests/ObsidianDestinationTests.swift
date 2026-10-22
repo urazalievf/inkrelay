@@ -2,6 +2,23 @@ import XCTest
 @testable import InkRelayCore
 
 final class ObsidianDestinationTests: XCTestCase {
+    /// Notes written before 1.0.0 carry a long dash in the start marker; their block is still found and replaced.
+    func testNotesWithTheOldMarkerKeepOneBlock() {
+        let note = InkNote(title: "T", sourceID: "s", device: "d", originalURL: URL(fileURLWithPath: "/x/T.pdf"), relativePath: "T.pdf",
+                           modified: Date(timeIntervalSince1970: 1_800_000_000), contentHash: "h", pages: [RecognizedPage(number: 1, text: "new text")])
+        let oldStart = MarkdownRenderer.startMarker.replacingOccurrences(of: " - written", with: " \u{2014} written")
+        XCTAssertNotEqual(oldStart, MarkdownRenderer.startMarker)
+        let existing = "---\nsource: s\n---\nMine above.\n\n" + oldStart + "\n# T\n\nold text\n" + MarkdownRenderer.endMarker + "\n\nMine below.\n"
+
+        let markdown = MarkdownRenderer.render(note, embedPath: nil, tags: [], merging: existing)
+
+        XCTAssertTrue(markdown.contains("new text"))
+        XCTAssertFalse(markdown.contains("old text"), "the old block is replaced, not kept beside the new one")
+        XCTAssertFalse(markdown.contains("\u{2014}"))
+        XCTAssertTrue(markdown.contains("Mine above.") && markdown.contains("Mine below."))
+        XCTAssertEqual(VocabularyLearner.managedText(of: existing)?.contains("old text"), true, "corrections are still read from old notes")
+    }
+
     private var vault: TemporaryFolder!
     private var exports: TemporaryFolder!
 

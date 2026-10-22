@@ -92,13 +92,13 @@ All the calendar destinations build their events from `PlannerEvent`, so titles 
 | `.sync.lock` | One pass at a time across processes |
 | `viwoods/` | Viwoods Cloud cache (PDFs) and `.manifest.json` |
 | `viwoods-token.json` | Viwoods token, refreshed automatically |
-| `google-token.json`, `microsoft-token.json`, `google-ids.json` | OAuth tokens (owner-only files) and created calendar or folder ids |
+| `google-token.json`, `microsoft-token.json`, `google-ids.json` | OAuth tokens (readable only by you) and created calendar or folder ids |
 | `kindle/` | Saved Kindle notebooks and `.handled.json` |
 | `archive/` | Recognized text of every note, for search and MCP |
 | `converted/` | PDFs made from Supernote `.note` files |
 | `review/` | `stack.json`, `images/`, `.lock`, `applied.json` |
 | `ai-usage.json` | This month's AI transcription spend |
-| `measure/` | The owner's pages for measuring recognition (`<source>/<export>.p<page>.txt`) and `history.tsv`; never in a repository |
+| `measure/` | Your pages for measuring recognition (`<source>/<export>.p<page>.txt`) and `history.tsv`; never in a repository |
 
 The Notion token and Anthropic API key are in the Keychain under the service "InkRelay". Logs from the launch agent and the app are in `~/Library/Logs/InkRelay`.
 

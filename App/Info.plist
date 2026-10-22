@@ -29,6 +29,6 @@
     <key>NSAppleEventsUsageDescription</key>
     <string>InkRelay files your handwritten notes into Notes, and planner pages, to-dos and tasks into Calendar and Reminders.</string>
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026 Feruz Urazaliev. All rights reserved.</string>
+    <string>© 2026 Feruz Urazaliev. MIT License.</string>
 </dict>
 </plist>

@@ -61,20 +61,8 @@ tr:last-child td{border-bottom:0}
 .rcard .ink{height:84px;border-radius:8px;background:repeating-linear-gradient(0deg,transparent 0 22px,var(--line) 22px 23px),var(--bg)}
 .rcard .acts{display:flex;gap:8px;margin-top:12px}.rcard .acts span{flex:1;text-align:center;font-size:.85rem;padding:6px;border-radius:8px;border:1px solid var(--line)}
 .rcard .acts span.done{background:var(--accent);color:var(--accent-ink);border-color:transparent}
-.plans{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:760px}
-@media (max-width:640px){.plans{grid-template-columns:1fr}}
-.plan{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px}
-.plan.pro{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}
-.plan h3{font:600 1.2rem var(--serif);margin:0}.price{font:600 2rem var(--serif);margin:.2em 0 .1em}.price small{font:400 .95rem var(--sans);color:var(--muted)}
-.plan ul{margin:.8rem 0 0;padding-left:1.1em;color:var(--muted);font-size:.95rem}.plan li{margin:.25em 0}
 details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px 16px;margin-bottom:10px}
 summary{cursor:pointer;font-weight:600;padding:10px 0}details p{margin:0 0 12px;color:var(--muted)}
-form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;max-width:560px}
-form h3{font:600 1.2rem var(--serif);margin:0 0 .3rem}form p{margin:0 0 1rem;color:var(--muted);font-size:.95rem}
-label{display:block;font-size:.9rem;font-weight:600;margin:.8rem 0 .3rem}
-input,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:560px){.row{grid-template-columns:1fr}}
-form .btn{width:100%;margin-top:1.2rem}
 .small{font-size:.85rem;color:var(--muted)}
 code{font:.9em var(--mono);background:var(--soft);padding:1px 5px;border-radius:5px}
 footer{color:var(--muted);font-size:.85rem;padding:28px 16px;border-top:1px solid var(--line)}
@@ -89,7 +77,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
       <a href="#how">How it works</a>
       <a href="#compat">Compatibility</a>
       <a href="#review">Review</a>
-      <a href="#pricing">Pricing</a>
+      <a href="#free">Open source</a>
       <a href="#faq">FAQ</a>
     </nav>
     <a class="btn" href="#download">Download for Mac</a>
@@ -104,7 +92,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
       <div class="cta">
         <a class="btn" href="#download">Download for Mac</a>
         <a class="btn quiet" href="#how">See how it works</a>
-        <span class="note">macOS 14 or later. Free for export folders, Obsidian and the Apple apps; 14-day trial of everything else.</span>
+        <span class="note">macOS 14 or later. Free and open source, with every feature included.</span>
       </div>
     </div>
     <img src="assets/hero.png" alt="An e-ink tablet whose handwriting flows into typed notes, a calendar entry and a checklist" width="1600" height="900">
@@ -159,44 +147,18 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
   <section id="privacy">
     <h2>Read on your Mac. Kept on your Mac.</h2>
     <div class="grid">
-      <div class="card"><h3>No server</h3><p>Recognition runs on your Mac. The license is checked on your Mac. Phones share through your own iCloud Drive. There is nothing to sign up for.</p></div>
+      <div class="card"><h3>No server</h3><p>Recognition runs on your Mac. Phones share through your own iCloud Drive. There is nothing to sign up for and nothing to buy.</p></div>
       <div class="card"><h3>You choose what leaves</h3><p>AI transcription is off until you turn it on, per source, with your own key and a monthly cap. Google, Microsoft and Notion see only what you send them.</p></div>
       <div class="card"><h3>Your edits stay</h3><p>In Obsidian, InkRelay rewrites only its own block. Write around it, tag it, link it; re-syncs leave your words alone.</p></div>
       <div class="card"><h3>Nothing is erased for good</h3><p>Deletions, if you turn them on, go to the Trash or Recently Deleted. A folder that turns up empty deletes nothing.</p></div>
     </div>
   </section>
 
-  <section id="pricing">
-    <h2>Pricing</h2>
-    <p class="sub">Free for what a Mac can do alone. One payment for the rest. Every install starts with 14 days of everything.</p>
-    <div class="plans">
-      <div class="plan">
-        <h3>Free</h3>
-        <p class="price">$0</p>
-        <ul>
-          <li>Export folders from any tablet</li>
-          <li>Obsidian, with daily notes and the weekly digest</li>
-          <li>Apple Notes, Apple Calendar, Apple Reminders</li>
-          <li>On-device recognition with your vocabulary</li>
-          <li>Send articles to the tablet</li>
-        </ul>
-      </div>
-      <div class="plan pro">
-        <h3>Pro</h3>
-        <p class="price">$29 <small>once, for one person's Macs</small></p>
-        <ul>
-          <li>Everything in Free</li>
-          <li>Viwoods Cloud, read directly, ink layer and planner included</li>
-          <li>Kindle Scribe by email</li>
-          <li>Google Calendar and Docs, Outlook Calendar, OneNote, Notion</li>
-          <li>The review stack, on the Mac and on iPhone and iPad</li>
-          <li>AI transcription with your own key</li>
-        </ul>
-        <p style="margin:1rem 0 0"><a class="btn" href="mailto:hello@inkrelay.app?subject=InkRelay%20Pro%20license">Buy Pro, $29</a></p>
-        <p class="small" style="margin-top:.6rem">Keys are sent by email and work offline on all your Macs.</p>
-      </div>
-    </div>
-    <p class="small" style="margin-top:14px">When the trial ends, Pro parts pause and say so; nothing is deleted, and they pick up where they stopped once a key is entered.</p>
+  <section id="free">
+    <h2>Free and open source</h2>
+    <p class="sub">Every feature, for everyone: export folders and Viwoods Cloud, Obsidian and the Apple apps, Google, Microsoft and Notion, the review stack on Mac, iPhone and iPad, and sending articles to the tablet. No account, no license key, no subscription.</p>
+    <p>The code is on GitHub under the MIT license. Read it, build it yourself, or open an issue.</p>
+    <p><a class="btn quiet" href="https://github.com/urazalievf/inkrelay">View the code on GitHub</a></p>
   </section>
 
   <section id="faq">
@@ -205,50 +167,20 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
     <details><summary>How good is the recognition?</summary><p>Clear handwriting comes out right. Messy lines don't, on any system; InkRelay keeps the page image beside the text so you always have the original, and lets you add names and words it should expect. For hard pages, AI transcription reads better and suggests a title.</p></details>
     <details><summary>Which tablet do I need?</summary><p>Any that can export PDFs to a cloud folder, which is all of them. A Viwoods AiPaper with Viwoods Cloud needs no export at all. Supernote notebooks are read in their own format.</p></details>
     <details><summary>Does it need the Mac to be on?</summary><p>Yes; InkRelay syncs while it runs. Open it at login and forget it. The iPhone app reads exports and the review stack on its own, through iCloud Drive and the Files app.</p></details>
-    <details><summary>What happens to my notes if I stop paying?</summary><p>Nothing. There's no subscription. A Pro key is yours; the free parts never pause.</p></details>
-    <details><summary>Can I use it from the terminal or with an AI assistant?</summary><p>Yes. <code>inkrelay</code> ships inside the app with every command, and <code>inkrelay mcp</code> serves your notes to Claude and other MCP clients: search what you wrote, list tasks, work through the stack.</p></details>
+    <details><summary>Is it really free?</summary><p>Yes. InkRelay is open source under the MIT license, with every feature included. The only cost is optional: AI transcription uses your own Anthropic key, with a monthly cap you set.</p></details>
+    <details><summary>Can I use it from the terminal or with an AI assistant?</summary><p>Yes. <code>inkrelay</code> ships inside the app with every command, and <code>inkrelay mcp</code> serves your notes to AI assistants that support MCP: search what you wrote, list tasks, work through the stack.</p></details>
   </section>
 
   <section id="download">
     <h2>Download</h2>
     <p class="sub">InkRelay for Mac, macOS 14 or later, Apple silicon and Intel, signed with a Developer ID and notarized by Apple. The iPhone and iPad app follows on TestFlight.</p>
     <p><a class="btn" href="https://github.com/urazalievf/inkrelay/releases/latest">Download InkRelay for Mac</a></p>
-    <form id="waitlist" action="WAITLIST_ENDPOINT" method="POST" style="margin-top:28px">
-      <h3>Hear when the iPhone app and new tablets land</h3>
-      <p>One email per release. Nothing else, and no tracking on this page.</p>
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" autocomplete="email" required>
-      <div class="row">
-        <div>
-          <label for="tablet">Your tablet</label>
-          <select id="tablet" name="tablet" required>
-            <option value="">Choose…</option>
-            <option>Viwoods</option><option>reMarkable</option><option>Supernote</option><option>Boox</option><option>Kindle Scribe</option><option>Other</option>
-          </select>
-        </div>
-        <div>
-          <label for="destination">Where notes should go</label>
-          <select id="destination" name="destination" required>
-            <option value="">Choose…</option>
-            <option>Obsidian</option><option>Apple Notes</option><option>OneNote</option><option>Notion</option><option>Google Docs</option><option>Other</option>
-          </select>
-        </div>
-      </div>
-      <button class="btn" type="submit">Keep me posted</button>
-    </form>
   </section>
 </main>
-<script>
-  // The waitlist form stays hidden until it has a real address to post to.
-  (function () {
-    var form = document.getElementById('waitlist');
-    if (form && form.getAttribute('action') === 'WAITLIST_ENDPOINT') form.hidden = true;
-  })();
-</script>
 <footer>
   <div class="wrap">
-    <span>© 2026 InkRelay</span>
-    <span><a href="https://github.com/urazalievf/inkrelay/releases">Releases</a> · <a href="mailto:hello@inkrelay.app">Contact</a></span>
+    <span>© 2026 Feruz Urazaliev · MIT License</span>
+    <span><a href="https://github.com/urazalievf/inkrelay/releases">Releases</a> · <a href="https://github.com/urazalievf/inkrelay">Source</a> · <a href="https://github.com/urazalievf/inkrelay/issues">Issues</a></span>
   </div>
 </footer>
 </body>

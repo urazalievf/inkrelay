@@ -1,6 +1,6 @@
 # Supernote `.note` format
 
-How `Sources/InkRelayCore/Supernote/SupernoteNote.swift` reads Supernote notebooks. There is no official specification. This follows the format as community tools document it, and was checked against the Apache-2.0 sample notebooks in philips/supernote-typescript and against Supernote's own PDF exports of the same notebooks: 73–97% ink overlap, mean pixel difference 1–2.4 of 255. To rerun those comparisons, point `INKRELAY_SUPERNOTE_SAMPLES` at a folder of samples and run `swift test`.
+How `Sources/InkRelayCore/Supernote/SupernoteNote.swift` reads Supernote notebooks. There is no official specification. This follows the format as community tools document it, and was checked against the Apache-2.0 sample notebooks in philips/supernote-typescript and against Supernote's own PDF exports of the same notebooks: 73 to 97% ink overlap, mean pixel difference 1 to 2.4 of 255. To rerun those comparisons, point `INKRELAY_SUPERNOTE_SAMPLES` at a folder of samples and run `swift test`.
 
 ## Container
 
@@ -11,7 +11,7 @@ How `Sources/InkRelayCore/Supernote/SupernoteNote.swift` reads Supernote noteboo
 
 ## Pages and layers
 
-- **A page's metadata names its layers:** `MAINLAYER`, `LAYER1`–`LAYER3` and `BGLAYER` (the template).
+- **A page's metadata names its layers:** `MAINLAYER`, `LAYER1` to `LAYER3` and `BGLAYER` (the template).
 - **Draw order and visibility:**
   - `LAYERSEQ` gives the order.
   - `LAYERINFO` is JSON with `#` written in place of `:`; it says which layers are hidden.

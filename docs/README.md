@@ -1,24 +1,14 @@
-# InkRelay project notes
+# InkRelay docs
 
-Working notes for whoever picks the project up next. The top-level [README](../README.md) is for people who use InkRelay; these are for people who build it.
-
-Start with **[handoff.md](handoff.md)**: what's shipped, what's open, what the owner's Mac runs today, and what to do next.
+Notes for people who build InkRelay. The top-level [README](../README.md) is for people who use it, and the [user guide](user-guide.md) walks through it in the order a new user meets things.
 
 | File | What's in it |
 |---|---|
-| [handoff.md](handoff.md) | Current state, open work, the live setup, what waits on the owner, suggested next steps |
 | [architecture.md](architecture.md) | How the pieces fit: targets, the sync pass, sources, destinations, files on disk |
-| [decisions.md](decisions.md) | Choices already made and why, so they aren't argued again |
-| [field-notes.md](field-notes.md) | Measurements on real tablet data, and platform gotchas found along the way |
+| [decisions.md](decisions.md) | Choices already made and why |
 | [testing.md](testing.md) | How to check each part, including against real data without touching real notes |
 | [viwoods-cloud.md](viwoods-cloud.md) | The unofficial Viwoods Cloud API as InkRelay uses it |
 | [supernote-format.md](supernote-format.md) | The Supernote `.note` file format as the decoder reads it |
-| [plan-1.0.md](plan-1.0.md) | The path from CLI to sellable: what "pro grade" meant and the rounds 0.8.0–0.10.0 |
-| [plan-2.0.md](plan-2.0.md) | Launch, pricing and the features still missing, in phases with a gate after each (1.0.0–2.0) |
-| [research/market-scan-2026-10.md](research/market-scan-2026-10.md) | Market scan, gaps, platform access and risks (from issue #22) |
-| [launch/pricing.md](launch/pricing.md) | Pricing comparables, costs and the option to test (#19) |
-| [launch/community-posts.md](launch/community-posts.md) | Draft posts for the demand check (#19) |
+| [release-notes/](release-notes/) | What changed in each release, as shown on the releases page and in the app's update alert |
 
 Release steps are in [RELEASING.md](../RELEASING.md). The landing page is [site/index.html](../site/index.html).
-
-Keep these current: update `handoff.md` at the end of each round of work, and add to `field-notes.md` and `decisions.md` when something is learned or settled.

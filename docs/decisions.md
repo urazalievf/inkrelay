@@ -10,7 +10,7 @@ Settled choices and the reasons for them. Change one only when the reason no lon
 - **The review stack is for a person's own ink.** It shows notebook pages, planner to-dos and suggested events as cards, Imprint style. It doesn't touch third-party content.
 - **Google Keep is out.** Its API is for Workspace administrators only.
 - **reMarkable Cloud is deferred.** Its sync API is unofficial and has changed versions several times, and there's no account or device to test with. PDF export covers reMarkable.
-- **Pricing to test:** a free core (folder sources, Obsidian, Apple Notes) and a one-time $29 Pro unlock for cloud sources, the Google, Microsoft and Notion destinations, AI transcription and the review stack. See [launch/pricing.md](launch/pricing.md). Not decided until the waitlist answers.
+- **Free and open source.** Every feature is free under the MIT license: no InkRelay account, no license key, no subscription. AI transcription uses the person's own Anthropic key, so InkRelay runs no servers and has nothing to charge for.
 
 ## Behaviour
 
@@ -20,12 +20,10 @@ Settled choices and the reasons for them. Change one only when the reason no lon
 - **Blank detection is conservative.** A page counts as blank only with no recognized text and next to no ink. Templates and ruled lines count as ink, so the rule can only keep a page, never drop a written one. A note already filed keeps following its export even if it's erased.
 - **Open at login is asked, not assumed.** The app asks once on its first launch from Applications. Registering a login item without the person's click is not acceptable.
 
-- **Pro is a license key checked offline; the trial is a date in a file.** Ed25519 keys signed by the owner's private key (never in the repo), verified against the public key in the app. No server, nothing phones home. Free is what a Mac does alone (folders, Obsidian, Apple apps); Pro is the cloud sources, the cloud destinations, AI transcription and the review stack. When Pro pauses, nothing is deleted and syncing resumes from where it stopped: the pending mechanism already does that for free.
 - **Quiet on success, loud on failure.** Notifications default to problems only; new-note and review-reminder notifications are opt-in.
 - **Recognition reads the ink layer when there is one.** Viwoods Cloud serves it per page; the PDF keeps the full page so people still see the template. Measured on real notebooks: the template's "Name" and "Date …" lines disappear from the text.
-- **AI transcription is narrowed, not widened.** `aiFolders` and per-source caps exist so people can afford Claude where it matters (the planner, where titles are read) and keep Vision for the rest. The default stays Vision everywhere.
+- **AI transcription is narrowed, not widened.** `aiFolders` and per-source caps exist so people can afford AI transcription where it matters (the planner, where titles are read) and keep Vision for the rest. The default stays Vision everywhere.
 - **Corrections are learned at the last moment they'd be lost.** A word typed into InkRelay's block is learned when the page changes on the tablet, right before the block is rewritten. No periodic scan of the vault.
-- **A license expires on a date, not at an instant.** `expiresOn` holds through the end of that day wherever the person is, and shows as that date everywhere. An instant would end a day early west of the issuer and show the next day east of them.
 - **The review server's key travels in the URL fragment.** Browsers never send a fragment, so it doesn't land in server logs or referrers; the page keeps it for the tab. A new key every launch.
 - **Tablet tasks are Obsidian checkboxes the person can tick.** A tick made in Obsidian survives re-syncs, because the block id says which line it is; the tablet's own tick wins only by turning a box on, never off.
 - **Planner pages are a source setting, not a Viwoods special case.** `planner.folders` (Daily by default) and the file name decide; the date is resolved once and carried on the note.
@@ -42,8 +40,8 @@ Settled choices and the reasons for them. Change one only when the reason no lon
 
 - **No third-party packages.** Foundation, Vision, PDFKit, CryptoKit, AppKit and SwiftUI cover everything. EPUB zips are written by hand (`ZipWriter`).
 - **AppleScripts are tested by compiling them** with `osacompile` exactly as shipped, because escaping mistakes in Swift string literals otherwise only show up at run time.
-- **CI runs on pull requests and by hand only.** macOS runner minutes cost ten times as much on a private repo.
-- **Workflow:** one pull request per round of work, a commit per area, squash merges, branches deleted on merge. Only the owner merges. Commits are authored by the owner, with no co-author trailers or tool credits in commits, PRs or docs.
+- **CI runs on pull requests and by hand only.** Every change reaches `main` through a pull request, so a run on push would repeat the same check.
+- **Workflow:** one pull request per change set, a commit per area, squash merges, branches deleted on merge. The maintainer reviews and merges.
 - **Versions** are `MAJOR.MINOR.PATCH`, plus a fourth `.FIX` number only for bug fixes.
   - MINOR is a feature round, and PATCH a small change. MINOR and PATCH both drop FIX.
   - Versions only move forward, and the bump is committed with the change.

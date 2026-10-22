@@ -51,7 +51,7 @@ public enum ArticleExtractor {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? url?.host ?? "Article"
         // "Electronic paper - Wikipedia" → "Electronic paper".
         if let site = first(document, [all("meta") + "[@property='og:site_name']/@content"]) {
-            for separator in [" - ", " | ", " — ", " – "] where title.hasSuffix(separator + site) {
+            for separator in [" - ", " | ", " \u{2014} ", " \u{2013} "] where title.hasSuffix(separator + site) {
                 title = String(title.dropLast(separator.count + site.count))
             }
         }

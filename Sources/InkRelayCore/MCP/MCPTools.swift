@@ -240,10 +240,6 @@ extension MCPServer {
             "destinations": config.destinations.map { ["id": $0.id, "kind": $0.kind] },
             "notes_searchable": archive.all().count,
         ]
-        let entitlement = EntitlementStore(supportDirectory: stateURL.deletingLastPathComponent()).current(now: now())
-        output["plan"] = entitlement.summary(now: now())
-        let paused = ProFeatures.used(in: config)
-        if !entitlement.isPro, !paused.isEmpty { output["paused_pro_features"] = paused }
         if let lastSync { output["last_sync"] = Self.iso(lastSync) }
         if case .failure(let error) = readable { output["state_error"] = "state.json can't be read: \(error.localizedDescription)" }
         if let last = LastSync.load(besideState: stateURL) {
